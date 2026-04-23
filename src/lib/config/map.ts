@@ -143,6 +143,7 @@ const STATUS_ALIASES: Record<string, MapCheckpointStatus> = {
   "medium delay": "أزمة متوسطة",
   "medium traffic": "أزمة متوسطة",
   "crisis medium": "أزمة متوسطة",
+  أزمة: "أزمة متوسطة",
   "أزمة خانقة": "أزمة خانقة",
   severe: "أزمة خانقة",
   "heavy traffic": "أزمة خانقة",

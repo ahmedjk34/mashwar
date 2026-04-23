@@ -2,6 +2,7 @@ import { validateRoutePoint } from "@/lib/config/map";
 import type {
   LngLatCoordinate,
   NormalizedRoutes,
+  RoutingApiEnvelope,
   RoutePath,
   RoutePathDto,
   RoutingRequest,
@@ -80,11 +81,33 @@ function normalizeRoutePath(path: RoutePathDto): RoutePath | null {
   };
 }
 
+function extractRoutingData(payload: unknown): RoutingResponseDto {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid routing response.");
+  }
+
+  const envelope = payload as RoutingApiEnvelope & RoutingResponseDto;
+  if (envelope.success === true && envelope.data) {
+    return envelope.data;
+  }
+
+  if ("paths" in envelope || "info" in envelope) {
+    return envelope;
+  }
+
+  throw new Error("Invalid routing response.");
+}
+
 async function getErrorMessage(response: Response): Promise<string> {
   try {
-    const payload = (await response.json()) as { message?: string };
-    if (payload?.message) {
-      return payload.message;
+    const payload = (await response.json()) as {
+      error?: string;
+      message?: string;
+      detail?: string;
+    };
+    const message = payload.error ?? payload.message ?? payload.detail;
+    if (typeof message === "string" && message.trim()) {
+      return message;
     }
   } catch {
     return `Routing request failed with status ${response.status}.`;
@@ -116,12 +139,14 @@ export async function getRoute(
       throw new Error(await getErrorMessage(response));
     }
 
-    const payload = (await response.json()) as RoutingResponseDto;
-    if (!Array.isArray(payload.paths)) {
+    const payload: unknown = await response.json();
+    const data = extractRoutingData(payload);
+
+    if (!Array.isArray(data.paths)) {
       throw new Error("Routing API must return a paths array.");
     }
 
-    const normalizedPaths = payload.paths
+    const normalizedPaths = data.paths
       .map((path) => normalizeRoutePath(path))
       .filter((path): path is RoutePath => path !== null);
 

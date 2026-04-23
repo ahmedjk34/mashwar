@@ -1,16 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 
 import MapView from "@/components/map/MapView";
+import NaturalLanguageRouteModal from "@/components/map/NaturalLanguageRouteModal";
 import {
   DEMO_ROUTE_REQUEST,
   getStatusColor,
   getWorstStatus,
 } from "@/lib/config/map";
 import { getCheckpoints } from "@/lib/services/checkpoints";
+import { getCheckpointForecast } from "@/lib/services/forecast";
 import { getRoute } from "@/lib/services/routing";
-import type { MapCheckpoint, NormalizedRoutes } from "@/lib/types/map";
+import type {
+  CheckpointForecastStatusType,
+  MapCheckpoint,
+  NormalizedCheckpointForecast,
+  NormalizedRoutes,
+} from "@/lib/types/map";
 
 const EMPTY_ROUTES: NormalizedRoutes = {
   mainRoute: null,
@@ -66,16 +80,81 @@ function getDirectionalStatusLabel(direction: "entering" | "leaving") {
   return direction === "entering" ? "Entering" : "Leaving";
 }
 
+function replaceCheckpointInCollection(
+  checkpoints: MapCheckpoint[],
+  nextCheckpoint: MapCheckpoint,
+): MapCheckpoint[] {
+  let replaced = false;
+
+  const nextCheckpoints = checkpoints.map((checkpoint) => {
+    if (checkpoint.id !== nextCheckpoint.id) {
+      return checkpoint;
+    }
+
+    replaced = true;
+    return nextCheckpoint;
+  });
+
+  return replaced ? nextCheckpoints : [...nextCheckpoints, nextCheckpoint];
+}
+
+function getForecastHorizonLabel(horizon: string): string {
+  switch (horizon) {
+    case "plus_30m":
+      return "+30m";
+    case "plus_1h":
+      return "+1h";
+    case "plus_2h":
+      return "+2h";
+    case "next_day_8am":
+      return "Next day 08:00 UTC";
+    default:
+      return horizon;
+  }
+}
+
+function formatForecastDateTime(value: string | null): string {
+  if (!value) {
+    return "Pending";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(parsed);
+}
+
+function formatForecastConfidence(value: number | null): string {
+  if (value === null) {
+    return "n/a";
+  }
+
+  return `${Math.round(value * 100)}%`;
+}
+
 export default function MapHome() {
   const [checkpoints, setCheckpoints] = useState<MapCheckpoint[]>([]);
   const [selectedCheckpoint, setSelectedCheckpoint] =
     useState<MapCheckpoint | null>(null);
+  const [selectedCheckpointForecast, setSelectedCheckpointForecast] =
+    useState<NormalizedCheckpointForecast | null>(null);
+  const [isNaturalRouteModalOpen, setIsNaturalRouteModalOpen] = useState(false);
   const [checkpointError, setCheckpointError] = useState<string | null>(null);
+  const [forecastError, setForecastError] = useState<string | null>(null);
+  const [isForecastLoading, setIsForecastLoading] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [isLoadingCheckpoints, setIsLoadingCheckpoints] = useState(true);
   const [routes, setRoutes] = useState<NormalizedRoutes>(EMPTY_ROUTES);
   const [isRoutePending, startRouteTransition] = useTransition();
   const [checkpointReloadNonce, setCheckpointReloadNonce] = useState(0);
+  const checkpointForecastRequestNonce = useRef(0);
+  const selectedCheckpointIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,12 +260,78 @@ export default function MapHome() {
     setCheckpointReloadNonce((current) => current + 1);
   }
 
+  const handleCheckpointSelect = useCallback(
+    (nextCheckpoint: MapCheckpoint | null) => {
+      selectedCheckpointIdRef.current = nextCheckpoint?.id ?? null;
+      setSelectedCheckpoint(nextCheckpoint);
+      setSelectedCheckpointForecast(null);
+      setForecastError(null);
+
+      if (!nextCheckpoint) {
+        checkpointForecastRequestNonce.current += 1;
+        setIsForecastLoading(false);
+        return;
+      }
+
+      const requestId = ++checkpointForecastRequestNonce.current;
+      const statusType: CheckpointForecastStatusType = "entering";
+
+      setIsForecastLoading(true);
+
+      void (async () => {
+        try {
+          const nextForecast = await getCheckpointForecast(
+            nextCheckpoint.id,
+            statusType,
+          );
+
+          if (
+            checkpointForecastRequestNonce.current !== requestId ||
+            selectedCheckpointIdRef.current !== nextCheckpoint.id
+          ) {
+            return;
+          }
+
+          setCheckpoints((currentCheckpoints) =>
+            replaceCheckpointInCollection(
+              currentCheckpoints,
+              nextForecast.checkpoint,
+            ),
+          );
+          setSelectedCheckpoint(nextForecast.checkpoint);
+          setSelectedCheckpointForecast(nextForecast);
+        } catch (error) {
+          if (
+            checkpointForecastRequestNonce.current !== requestId ||
+            selectedCheckpointIdRef.current !== nextCheckpoint.id
+          ) {
+            return;
+          }
+
+          setForecastError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load checkpoint forecast.",
+          );
+        } finally {
+          if (
+            checkpointForecastRequestNonce.current === requestId &&
+            selectedCheckpointIdRef.current === nextCheckpoint.id
+          ) {
+            setIsForecastLoading(false);
+          }
+        }
+      })();
+    },
+    [],
+  );
+
   return (
     <main className="relative flex min-h-screen flex-1 overflow-hidden bg-[#f3f5ef]">
       <MapView
         checkpoints={checkpoints}
         routes={routes}
-        onCheckpointSelect={setSelectedCheckpoint}
+        onCheckpointSelect={handleCheckpointSelect}
       />
 
       <div className="pointer-events-none absolute inset-x-4 top-4 flex flex-col gap-3 md:max-w-md">
@@ -211,6 +356,13 @@ export default function MapHome() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setIsNaturalRouteModalOpen(true)}
+              className="rounded-full bg-[linear-gradient(135deg,#0f172a,#1d4ed8)] px-4 py-2 text-sm font-medium text-white shadow-[0_10px_30px_rgba(37,99,235,0.28)] transition hover:shadow-[0_12px_36px_rgba(37,99,235,0.36)]"
+            >
+              Natural route brief
+            </button>
             <button
               type="button"
               onClick={handleLoadDemoRoute}
@@ -289,6 +441,11 @@ export default function MapHome() {
           </div>
         </section>
       </div>
+
+      <NaturalLanguageRouteModal
+        open={isNaturalRouteModalOpen}
+        onClose={() => setIsNaturalRouteModalOpen(false)}
+      />
 
       {selectedCheckpoint &&
       selectedCheckpointStatus &&
@@ -430,6 +587,120 @@ export default function MapHome() {
                       </span>
                     </div>
                   </div>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-800/70">
+                        Forecast
+                      </p>
+                      <p className="mt-1 text-sm text-slate-700">
+                        {isForecastLoading
+                          ? "Loading the checkpoint forecast and preparing the live override..."
+                          : selectedCheckpointForecast
+                            ? `Forecast applied from ${selectedCheckpointForecast.request.statusType} status.`
+                            : "Click a checkpoint to load the forecast timeline."}
+                      </p>
+                    </div>
+
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm">
+                      {isForecastLoading ? (
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border border-slate-300 border-t-slate-700" />
+                      ) : (
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{
+                            backgroundColor: selectedCheckpointForecast
+                              ? "#0f766e"
+                              : "#cbd5e1",
+                          }}
+                        />
+                      )}
+                      <span>
+                        {isForecastLoading
+                          ? "Loading"
+                          : selectedCheckpointForecast
+                            ? "Updated"
+                            : "Waiting"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {forecastError ? (
+                    <p className="mt-3 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-sm text-[#b91c1c]">
+                      {forecastError}
+                    </p>
+                  ) : null}
+
+                  {isForecastLoading ? (
+                    <div className="mt-3 rounded-xl border border-sky-100 bg-white px-3 py-3 text-sm text-slate-600">
+                      Forecasting the current checkpoint state now.
+                    </div>
+                  ) : null}
+
+                  {selectedCheckpointForecast ? (
+                    <div className="mt-3 space-y-3">
+                      {selectedCheckpointForecast.predictions.length > 0 ? (
+                        selectedCheckpointForecast.predictions.map((item) => {
+                          const forecastStatusUi = getStatusUi(
+                            item.prediction.predictedStatus,
+                          );
+
+                          return (
+                            <div
+                              key={`${item.horizon}-${item.targetDateTime ?? "pending"}`}
+                              className="rounded-2xl border border-white/80 bg-white px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.04)]"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-black/40">
+                                    {getForecastHorizonLabel(item.horizon)}
+                                  </p>
+                                  <p className="mt-1 text-sm font-medium text-black">
+                                    {formatForecastDateTime(item.targetDateTime)}
+                                  </p>
+                                </div>
+
+                                <div
+                                  className="rounded-full px-2.5 py-1 text-xs font-medium"
+                                  style={{
+                                    backgroundColor: forecastStatusUi.softBg,
+                                    color: forecastStatusUi.softText,
+                                  }}
+                                >
+                                  {forecastStatusUi.chipLabel}
+                                </div>
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap items-center gap-2">
+                                <span
+                                  className="h-2.5 w-2.5 rounded-full"
+                                  style={{
+                                    backgroundColor: getStatusColor(
+                                      item.prediction.predictedStatus,
+                                    ),
+                                  }}
+                                />
+                                <p className="text-sm font-semibold text-black">
+                                  {item.prediction.predictedStatus}
+                                </p>
+                                <p className="text-xs text-black/45">
+                                  {formatForecastConfidence(
+                                    item.prediction.confidence,
+                                  )} confidence
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="rounded-xl border border-sky-100 bg-white px-3 py-3 text-sm text-slate-600">
+                          The forecast response did not include timeline items.
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>

@@ -46,6 +46,14 @@ export interface CheckpointApiEnvelope {
   data?: CheckpointApiRecord[] | null;
 }
 
+export type CheckpointForecastStatusType = "entering" | "leaving";
+
+export type CheckpointForecastHorizon =
+  | "plus_30m"
+  | "plus_1h"
+  | "plus_2h"
+  | "next_day_8am";
+
 export interface MapCheckpoint {
   id: string;
   name: string;
@@ -57,6 +65,63 @@ export interface MapCheckpoint {
   enteringStatusLastUpdated: string | null;
   leavingStatusLastUpdated: string | null;
   alertText: string | null;
+}
+
+export interface CheckpointForecastPredictionDto {
+  target_datetime?: string | null;
+  status_type?: string | null;
+  predicted_status?: string | null;
+  confidence?: number | string | null;
+  class_probabilities?: Record<string, number | string> | null;
+}
+
+export interface CheckpointForecastPredictionItemDto {
+  horizon?: string | null;
+  target_datetime?: string | null;
+  prediction?: CheckpointForecastPredictionDto | null;
+}
+
+export interface CheckpointForecastRequestDto {
+  checkpoint_id?: number | string | null;
+  status_type?: string | null;
+  as_of?: string | null;
+}
+
+export interface CheckpointForecastResponseDataDto {
+  checkpoint?: CheckpointApiRecord | null;
+  request?: CheckpointForecastRequestDto | null;
+  predictions?: CheckpointForecastPredictionItemDto[] | null;
+}
+
+export interface CheckpointForecastApiEnvelope {
+  success?: boolean;
+  data?: CheckpointForecastResponseDataDto | null;
+}
+
+export interface NormalizedCheckpointForecastPrediction {
+  horizon: CheckpointForecastHorizon | string;
+  targetDateTime: string | null;
+  statusType: CheckpointForecastStatusType | string;
+  predictedStatus: MapCheckpointStatus;
+  rawPredictedStatus: string | null;
+  confidence: number | null;
+  classProbabilities: Record<string, number>;
+}
+
+export interface NormalizedCheckpointForecastTimelineItem {
+  horizon: CheckpointForecastHorizon | string;
+  targetDateTime: string | null;
+  prediction: NormalizedCheckpointForecastPrediction;
+}
+
+export interface NormalizedCheckpointForecast {
+  checkpoint: MapCheckpoint;
+  request: {
+    checkpointId: string;
+    statusType: CheckpointForecastStatusType | string;
+    asOf: string | null;
+  };
+  predictions: NormalizedCheckpointForecastTimelineItem[];
 }
 
 export interface RoutePoint {
@@ -83,6 +148,11 @@ export interface RoutingResponseDto {
     copyrights?: string[];
     took?: number;
   } | null;
+}
+
+export interface RoutingApiEnvelope {
+  success?: boolean;
+  data?: RoutingResponseDto | null;
 }
 
 export interface RoutePath {

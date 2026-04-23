@@ -48,7 +48,7 @@ function firstNonEmptyString(
   return null;
 }
 
-function normalizeCheckpointRecord(
+export function normalizeCheckpointRecord(
   record: CheckpointApiRecord,
   index: number,
 ): MapCheckpoint {
@@ -97,8 +97,14 @@ function normalizeCheckpointRecord(
 
 async function getErrorMessage(response: Response): Promise<string> {
   try {
-    const payload = (await response.json()) as { detail?: string };
-    if (typeof payload?.detail === "string" && payload.detail.trim()) {
+    const payload = (await response.json()) as {
+      error?: string;
+      detail?: string;
+      message?: string;
+    };
+    const message = payload.error ?? payload.detail ?? payload.message;
+
+    if (typeof message === "string" && message.trim()) {
       if (response.status === 503) {
         return "Checkpoint service is currently unavailable.";
       }
@@ -107,7 +113,7 @@ async function getErrorMessage(response: Response): Promise<string> {
         return "Unable to fetch current checkpoints right now.";
       }
 
-      return payload.detail;
+      return message;
     }
   } catch {
     return `Checkpoint request failed with status ${response.status}.`;
