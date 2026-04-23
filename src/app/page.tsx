@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import MapHome from "@/components/map/MapHome";
+import MashwarHome from "@/components/map/MashwarHome";
 
 export const metadata: Metadata = {
   title: "Mashwar Map Base",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
-  return <MapHome />;
+  return <MashwarHome />;
 }
