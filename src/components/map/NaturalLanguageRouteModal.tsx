@@ -451,7 +451,7 @@ export default function NaturalLanguageRouteModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="natural-route-title"
-        className={`relative z-10 flex h-[min(92vh,56rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(245,247,252,0.96))] shadow-[0_30px_90px_rgba(15,23,42,0.22)] transition-all duration-300 ease-out ${
+        className={`relative z-10 flex h-[min(92vh,56rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-white/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.62),rgba(255,255,255,0.38))] shadow-[0_30px_90px_rgba(15,23,42,0.22)] backdrop-blur-2xl transition-all duration-300 ease-out ${
           isVisible
             ? "translate-y-0 scale-100 opacity-100"
             : "translate-y-4 scale-[0.985] opacity-0"
@@ -459,7 +459,7 @@ export default function NaturalLanguageRouteModal({
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(37,99,235,0.12),transparent_26%),radial-gradient(circle_at_20%_0%,rgba(16,185,129,0.08),transparent_24%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.08),transparent_28%)]" />
 
-        <header className="relative border-b border-slate-200/70 bg-white/70 px-4 py-4 backdrop-blur-sm sm:px-5">
+        <header className="relative border-b border-white/45 bg-white/40 px-4 py-4 backdrop-blur-xl sm:px-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.34em] text-slate-500">
@@ -478,13 +478,13 @@ export default function NaturalLanguageRouteModal({
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
-              <span className="hidden rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-500 sm:inline-flex">
+              <span className="hidden rounded-full border border-white/50 bg-white/50 px-3 py-1 text-[11px] font-medium text-slate-600 sm:inline-flex backdrop-blur-md">
                 Mock only
               </span>
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/50 bg-white/55 text-slate-600 transition hover:border-white/70 hover:text-slate-900 backdrop-blur-md"
                 aria-label="Close modal"
               >
                 <span className="text-xl leading-none">×</span>
@@ -493,10 +493,10 @@ export default function NaturalLanguageRouteModal({
           </div>
         </header>
 
-        <div className="relative flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.92),transparent_45%)] p-4 sm:p-5">
+        <div className="relative flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.35),transparent_45%)] p-4 sm:p-5">
           <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
             <aside className="space-y-4">
-              <section className="rounded-[24px] border border-slate-200/80 bg-white/88 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.06)] backdrop-blur">
+              <section className="rounded-[24px] border border-white/55 bg-white/45 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
                 <div className="flex items-center justify-between gap-3">
                   <label
                     htmlFor="natural-route-input"
@@ -505,7 +505,7 @@ export default function NaturalLanguageRouteModal({
                     Prompt
                   </label>
 
-                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700">
+                  <span className="rounded-full border border-white/45 bg-white/55 px-2.5 py-1 text-[11px] font-medium text-blue-700 backdrop-blur-md">
                     Text or voice
                   </span>
                 </div>
@@ -518,7 +518,7 @@ export default function NaturalLanguageRouteModal({
                   onChange={(event) => setPrompt(event.target.value)}
                   rows={4}
                   placeholder="لو بدي اطلع من جنين لنابلس بكرة 8"
-                  className="mt-3 min-h-[118px] w-full resize-none rounded-[22px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.94))] px-4 py-3 text-[15px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                  className="mt-3 min-h-[118px] w-full resize-none rounded-[22px] border border-white/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(255,255,255,0.46))] px-4 py-3 text-[15px] leading-6 text-slate-950 outline-none transition placeholder:text-slate-400 backdrop-blur-md focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
                 />
 
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -526,7 +526,7 @@ export default function NaturalLanguageRouteModal({
                     type="button"
                     onClick={() => handleGenerateReport()}
                     disabled={isParsing || isListening}
-                    className="inline-flex items-center rounded-full bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60"
+                    className="inline-flex items-center rounded-full border border-white/20 bg-slate-950/85 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-900 disabled:cursor-wait disabled:opacity-60"
                   >
                     {isParsing ? "Parsing..." : "Generate"}
                   </button>
@@ -535,7 +535,7 @@ export default function NaturalLanguageRouteModal({
                     type="button"
                     onClick={handleUseVoice}
                     disabled={isListening || isParsing}
-                    className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-60"
+                    className="inline-flex items-center gap-2 rounded-full border border-white/45 bg-white/55 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-white/75 disabled:cursor-wait disabled:opacity-60 backdrop-blur-md"
                   >
                     <span
                       className={`h-2.5 w-2.5 rounded-full bg-blue-600 ${
@@ -554,7 +554,7 @@ export default function NaturalLanguageRouteModal({
                 </p>
               </section>
 
-              <section className="rounded-[24px] border border-slate-900/90 bg-slate-950 p-4 text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)]">
+              <section className="rounded-[24px] border border-white/10 bg-slate-950/80 p-4 text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)] backdrop-blur-xl">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/42">
@@ -567,7 +567,7 @@ export default function NaturalLanguageRouteModal({
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-right">
+                  <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-right backdrop-blur-md">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/45">
                       Confidence
                     </p>
@@ -578,7 +578,7 @@ export default function NaturalLanguageRouteModal({
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  <div className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2.5">
+                  <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2.5 backdrop-blur-md">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
                       Origin
                     </p>
@@ -586,7 +586,7 @@ export default function NaturalLanguageRouteModal({
                       {report?.origin ?? "Jenin"}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2.5">
+                  <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2.5 backdrop-blur-md">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
                       Destination
                     </p>
@@ -594,7 +594,7 @@ export default function NaturalLanguageRouteModal({
                       {report?.destination ?? "Nablus"}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2.5">
+                  <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2.5 backdrop-blur-md">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
                       Departure
                     </p>
@@ -602,7 +602,7 @@ export default function NaturalLanguageRouteModal({
                       {report?.departureLabel ?? "Tomorrow, 08:00 AM"}
                     </p>
                   </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/6 px-3 py-2.5">
+                  <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2.5 backdrop-blur-md">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
                       Mode
                     </p>
@@ -619,7 +619,7 @@ export default function NaturalLanguageRouteModal({
               </section>
             </aside>
 
-            <section className="min-h-0 overflow-hidden rounded-[26px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(15,23,42,0.97),rgba(25,35,64,0.96))] text-white shadow-[0_18px_50px_rgba(15,23,42,0.14)]">
+            <section className="min-h-0 overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.92),rgba(25,35,64,0.84))] text-white shadow-[0_18px_50px_rgba(15,23,42,0.14)] backdrop-blur-xl">
               <div className="h-full overflow-y-auto p-4 sm:p-5">
                 {isParsing ? (
                   <div className="space-y-4">
@@ -645,7 +645,7 @@ export default function NaturalLanguageRouteModal({
                       ].map((label) => (
                         <div
                           key={label}
-                          className="rounded-2xl border border-white/10 bg-white/5 p-3"
+                          className="rounded-2xl border border-white/10 bg-white/8 p-3 backdrop-blur-md"
                         >
                           <div className="h-2.5 w-16 rounded-full bg-white/18" />
                           <div className="mt-3 h-3 w-24 rounded-full bg-white/12" />
@@ -659,7 +659,7 @@ export default function NaturalLanguageRouteModal({
                   </div>
                 ) : report ? (
                   <div className="space-y-4">
-                    <div className="rounded-[24px] border border-white/10 bg-white/6 p-4">
+                    <div className="rounded-[24px] border border-white/10 bg-white/8 p-4 backdrop-blur-md">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.32em] text-white/45">
@@ -673,7 +673,7 @@ export default function NaturalLanguageRouteModal({
                           </p>
                         </div>
 
-                        <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-right">
+                        <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-right backdrop-blur-md">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/45">
                             Confidence
                           </p>
@@ -684,7 +684,7 @@ export default function NaturalLanguageRouteModal({
                       </div>
 
                       <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                        <div className="rounded-2xl border border-white/10 bg-white/6 px-3 py-3">
+                        <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-3 backdrop-blur-md">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
                             Departure
                           </p>
@@ -693,7 +693,7 @@ export default function NaturalLanguageRouteModal({
                           </p>
                         </div>
 
-                        <div className="rounded-2xl border border-white/10 bg-white/6 px-3 py-3">
+                        <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-3 backdrop-blur-md">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
                             Distance
                           </p>
@@ -702,7 +702,7 @@ export default function NaturalLanguageRouteModal({
                           </p>
                         </div>
 
-                        <div className="rounded-2xl border border-white/10 bg-white/6 px-3 py-3">
+                        <div className="rounded-2xl border border-white/10 bg-white/8 px-3 py-3 backdrop-blur-md">
                           <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
                             Duration
                           </p>
@@ -712,7 +712,7 @@ export default function NaturalLanguageRouteModal({
                         </div>
                       </div>
 
-                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-900/35 px-3 py-3">
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-900/25 px-3 py-3 backdrop-blur-md">
                         <div>
                           <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/45">
                             Prompt captured
@@ -731,10 +731,10 @@ export default function NaturalLanguageRouteModal({
                       {report.checkpoints.map((checkpoint, index) => (
                         <article
                           key={`${checkpoint.name}-${index}`}
-                          className="rounded-[22px] border border-white/10 bg-white/6 p-3.5 transition hover:bg-white/8"
+                          className="rounded-[22px] border border-white/10 bg-white/8 p-3.5 transition hover:bg-white/10 backdrop-blur-md"
                         >
                           <div className="flex items-start gap-3">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-sm font-semibold text-white/85">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-sm font-semibold text-white/85 backdrop-blur-md">
                               {index + 1}
                             </div>
 
@@ -757,7 +757,7 @@ export default function NaturalLanguageRouteModal({
                       ))}
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/6 px-3 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-white/8 px-3 py-3 backdrop-blur-md">
                       <div>
                         <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/45">
                           Future action
@@ -770,14 +770,14 @@ export default function NaturalLanguageRouteModal({
                       <button
                         type="button"
                         disabled
-                        className="inline-flex items-center rounded-full border border-white/10 bg-white/8 px-3 py-2 text-xs font-medium text-white/42"
+                        className="inline-flex items-center rounded-full border border-white/10 bg-white/10 px-3 py-2 text-xs font-medium text-white/42 backdrop-blur-md"
                       >
                         Apply on map
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex min-h-[18rem] items-center justify-center rounded-[24px] border border-dashed border-white/12 bg-white/5 px-5 text-center">
+                  <div className="flex min-h-[18rem] items-center justify-center rounded-[24px] border border-dashed border-white/12 bg-white/8 px-5 text-center backdrop-blur-md">
                     <div className="max-w-md">
                       <p className="text-lg font-semibold">No route generated yet</p>
                       <p className="mt-2 text-sm leading-6 text-white/65">

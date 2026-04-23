@@ -629,7 +629,7 @@ export default function MapHome() {
       />
 
       <div className="pointer-events-none absolute inset-x-4 top-4 flex flex-col gap-3">
-        <section className="pointer-events-auto w-full max-w-4xl rounded-[30px] border border-black/10 bg-white/94 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.14)] backdrop-blur-md">
+        <section className="pointer-events-auto w-full max-w-4xl rounded-[30px] border border-white/55 bg-white/72 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.16)] backdrop-blur-xl">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-black/45">
@@ -649,7 +649,7 @@ export default function MapHome() {
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-[1.2fr_1.2fr_auto]">
-            <div className="rounded-3xl border border-black/6 bg-[#f8fafc] p-4">
+            <div className="rounded-3xl border border-white/60 bg-white/55 p-4 backdrop-blur-md">
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-black/40">
@@ -685,7 +685,7 @@ export default function MapHome() {
                 <button
                   type="button"
                   onClick={handleUseCurrentLocationAsOrigin}
-                  className="rounded-full border border-sky-200 bg-white px-3 py-2 text-sm font-medium text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-full border border-sky-200/70 bg-white/65 px-3 py-2 text-sm font-medium text-sky-900 transition hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!userLocation}
                 >
                   الحالي
@@ -694,7 +694,7 @@ export default function MapHome() {
                   <button
                     type="button"
                     onClick={handleUseSelectedCheckpointAsOrigin}
-                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-black/[0.04]"
+                    className="rounded-full border border-white/60 bg-white/65 px-3 py-2 text-sm font-medium text-black transition hover:bg-white/80"
                   >
                     التحديد كمن
                   </button>
@@ -702,7 +702,7 @@ export default function MapHome() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-black/6 bg-[#f8fafc] p-4">
+            <div className="rounded-3xl border border-white/60 bg-white/55 p-4 backdrop-blur-md">
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-black/40">
@@ -729,7 +729,7 @@ export default function MapHome() {
                   <button
                     type="button"
                     onClick={handleUseSelectedCheckpointAsDestination}
-                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-black/[0.04]"
+                    className="rounded-full border border-white/60 bg-white/65 px-3 py-2 text-sm font-medium text-black transition hover:bg-white/80"
                   >
                     التحديد كإلى
                   </button>
@@ -752,14 +752,14 @@ export default function MapHome() {
                   type="button"
                   onClick={handleBuildRoute}
                   disabled={isRoutePending}
-                  className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#0f172a] transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60"
+                  className="rounded-full border border-white/60 bg-white/75 px-4 py-2 text-sm font-semibold text-[#0f172a] transition hover:bg-white/90 disabled:cursor-wait disabled:opacity-60"
                 >
                   {isRoutePending ? "Routing..." : "Route"}
                 </button>
                 <button
                   type="button"
                   onClick={handleClearRoute}
-                  className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15"
+                  className="rounded-full border border-white/25 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/18"
                 >
                   Clear
                 </button>
@@ -777,7 +777,7 @@ export default function MapHome() {
           </div>
         </section>
 
-        <section className="pointer-events-auto w-full max-w-md rounded-2xl border border-black/10 bg-white/92 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.14)] backdrop-blur-md">
+        <section className="pointer-events-auto w-full max-w-md rounded-2xl border border-white/55 bg-white/70 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.16)] backdrop-blur-xl">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-black/45">
@@ -816,7 +816,7 @@ export default function MapHome() {
             <button
               type="button"
               onClick={handleRetryCheckpoints}
-              className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-black/[0.04]"
+              className="rounded-full border border-white/60 bg-white/65 px-4 py-2 text-sm font-medium text-black transition hover:bg-white/80"
             >
               Retry checkpoints
             </button>
@@ -911,14 +911,14 @@ export default function MapHome() {
       enteringStatusUi &&
       leavingStatusUi ? (
         <div className="pointer-events-none absolute inset-x-4 bottom-4 flex justify-start">
-          <section className="pointer-events-auto w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/70 bg-white/96 shadow-[0_24px_80px_rgba(15,23,42,0.18)] backdrop-blur-xl">
-            <div className="border-b border-black/6 bg-[linear-gradient(135deg,rgba(14,165,233,0.08),rgba(37,99,235,0.02))] px-5 py-4">
+          <section className="pointer-events-auto w-full max-w-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[28px] border border-white/55 bg-white/58 shadow-[0_24px_80px_rgba(15,23,42,0.18)] backdrop-blur-2xl">
+            <div className="border-b border-white/40 bg-[linear-gradient(135deg,rgba(255,255,255,0.55),rgba(219,234,254,0.22))] px-5 py-3 backdrop-blur-xl">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-black/40">
                     Checkpoint
                   </p>
-                  <h2 className="mt-2 truncate text-lg font-semibold text-black">
+                  <h2 className="mt-1 truncate text-lg font-semibold text-black">
                     {selectedCheckpoint.name}
                   </h2>
                 </div>
@@ -941,8 +941,8 @@ export default function MapHome() {
               </div>
             </div>
 
-            <div className="px-5 py-5">
-              <div className="rounded-2xl border border-black/6 bg-[#f8fafc] p-4">
+            <div className="px-5 py-4">
+              <div className="rounded-2xl border border-white/60 bg-white/45 p-3 backdrop-blur-md">
                 <div className="flex items-center gap-3">
                   <div
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
@@ -979,8 +979,8 @@ export default function MapHome() {
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-2xl bg-white px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)]">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-white/55 bg-white/60 px-3 py-2.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)] backdrop-blur-md">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <span
@@ -1002,7 +1002,7 @@ export default function MapHome() {
                       </div>
 
                       <span
-                        className="rounded-full px-2.5 py-1 text-xs font-medium"
+                        className="rounded-full px-2.5 py-1 text-[11px] font-medium"
                         style={{
                           backgroundColor: enteringStatusUi.softBg,
                           color: enteringStatusUi.softText,
@@ -1013,7 +1013,7 @@ export default function MapHome() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl bg-white px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)]">
+                  <div className="rounded-2xl border border-white/55 bg-white/60 px-3 py-2.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)] backdrop-blur-md">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <span
@@ -1035,7 +1035,7 @@ export default function MapHome() {
                       </div>
 
                       <span
-                        className="rounded-full px-2.5 py-1 text-xs font-medium"
+                        className="rounded-full px-2.5 py-1 text-[11px] font-medium"
                         style={{
                           backgroundColor: leavingStatusUi.softBg,
                           color: leavingStatusUi.softText,
@@ -1047,24 +1047,24 @@ export default function MapHome() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={handleUseSelectedCheckpointAsOrigin}
-                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-black/[0.04]"
+                    className="rounded-full border border-white/60 bg-white/65 px-3 py-1.5 text-sm font-medium text-black transition hover:bg-white/80"
                   >
                     استخدم كمن
                   </button>
                   <button
                     type="button"
                     onClick={handleUseSelectedCheckpointAsDestination}
-                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-black/[0.04]"
+                    className="rounded-full border border-white/60 bg-white/65 px-3 py-1.5 text-sm font-medium text-black transition hover:bg-white/80"
                   >
                     استخدم كإلى
                   </button>
                 </div>
 
-                <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+                <div className="mt-3 rounded-2xl border border-white/55 bg-white/50 p-3 backdrop-blur-md">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-800/70">
@@ -1072,19 +1072,19 @@ export default function MapHome() {
                       </p>
                       <p className="mt-1 text-sm text-slate-700">
                         {isForecastLoading
-                          ? "Loading forecast horizons..."
+                          ? "Loading hourly forecast..."
                           : selectedCheckpointForecast
-                            ? "Forecast applied for both directions."
+                            ? "Forecast grouped by hour."
                             : "Click a checkpoint to load the forecast timeline."}
                       </p>
                       {selectedCheckpointForecast ? (
-                        <p className="mt-2 text-[11px] uppercase tracking-[0.18em] text-sky-800/55">
+                        <p className="mt-1.5 text-[11px] uppercase tracking-[0.18em] text-sky-800/55">
                           Captured {formatForecastDateTime(selectedCheckpointForecast.request.asOf)}
                         </p>
                       ) : null}
                     </div>
 
-                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-white/55 bg-white/70 px-3 py-1 text-xs font-medium text-slate-700 shadow-sm backdrop-blur-md">
                       {isForecastLoading ? (
                         <span className="h-3.5 w-3.5 animate-spin rounded-full border border-slate-300 border-t-slate-700" />
                       ) : (
@@ -1108,20 +1108,20 @@ export default function MapHome() {
                   </div>
 
                   {forecastError ? (
-                    <p className="mt-3 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3 py-2 text-sm text-[#b91c1c]">
+                    <p className="mt-2.5 rounded-xl border border-white/55 bg-white/55 px-3 py-2 text-sm text-[#b91c1c] backdrop-blur-md">
                       {forecastError}
                     </p>
                   ) : null}
 
                   {isForecastLoading ? (
-                    <div className="mt-3 rounded-xl border border-sky-100 bg-white px-3 py-3 text-sm text-slate-600">
+                    <div className="mt-2.5 rounded-xl border border-white/55 bg-white/60 px-3 py-2.5 text-sm text-slate-600 backdrop-blur-md">
                       Forecasting checkpoints by hour now.
                     </div>
                   ) : null}
 
                   {selectedCheckpointForecast ? (
-                    <div className="mt-3 space-y-3">
-                      <div className="rounded-2xl border border-sky-100 bg-white px-3 py-3 text-sm text-slate-600">
+                    <div className="mt-2.5 space-y-2">
+                      <div className="rounded-2xl border border-white/55 bg-white/55 px-3 py-2 text-sm text-slate-600 backdrop-blur-md">
                         {forecastRows.length > 0
                           ? `Forecast returned ${forecastRows.length} horizon${forecastRows.length === 1 ? "" : "s"} with entering and leaving predictions.`
                           : "The forecast response did not include timeline items."}
@@ -1140,19 +1140,19 @@ export default function MapHome() {
                             return (
                               <article
                                 key={row.horizon}
-                                className="rounded-[22px] border border-black/6 bg-white p-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.02)]"
+                                className="rounded-[18px] border border-white/55 bg-white/58 p-2.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18)] backdrop-blur-md"
                               >
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-800/55">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-800/55">
                                       {getForecastHorizonLabel(row.horizon)}
                                     </p>
-                                    <p className="mt-1 text-sm font-medium text-black">
+                                    <p className="mt-0.5 text-sm font-medium text-black">
                                       {formatForecastDateTime(row.targetDateTime)}
                                     </p>
                                   </div>
 
-                                  <div className="rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                                  <div className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600">
                                     {row.entering && row.leaving
                                       ? "Both"
                                       : row.entering
@@ -1163,7 +1163,7 @@ export default function MapHome() {
                                   </div>
                                 </div>
 
-                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                <div className="mt-2 grid gap-2 sm:grid-cols-2">
                                   {(["entering", "leaving"] as const).map((direction) => {
                                     const item = row[direction];
                                     const ui =
@@ -1174,18 +1174,18 @@ export default function MapHome() {
                                     return (
                                       <div
                                         key={direction}
-                                        className={`rounded-2xl border p-3 ${
+                                        className={`rounded-xl border p-2.5 backdrop-blur-md ${
                                           direction === "entering"
-                                            ? "border-emerald-100 bg-emerald-50/50"
-                                            : "border-amber-100 bg-amber-50/50"
+                                            ? "border-emerald-100/70 bg-emerald-50/35"
+                                            : "border-amber-100/70 bg-amber-50/35"
                                         } ${item ? "" : "opacity-55"}`}
                                       >
                                         <div className="flex items-center justify-between gap-2">
-                                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/40">
+                                          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-black/40">
                                             {getDirectionalStatusLabel(direction)}
                                           </p>
                                           <span
-                                            className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium shadow-sm"
+                                            className="rounded-full border border-white/50 bg-white/75 px-2 py-0.5 text-[10px] font-medium shadow-sm backdrop-blur-md"
                                             style={
                                               item && ui
                                                 ? {
@@ -1199,9 +1199,9 @@ export default function MapHome() {
                                         </div>
 
                                         {item ? (
-                                          <div className="mt-2 flex items-center gap-2">
+                                          <div className="mt-1.5 flex items-center gap-2">
                                             <span
-                                              className="h-2.5 w-2.5 rounded-full"
+                                              className="h-2 w-2 rounded-full"
                                               style={{
                                                 backgroundColor: getStatusColor(
                                                   item.prediction.predictedStatus,
@@ -1211,7 +1211,7 @@ export default function MapHome() {
                                             <p className="text-sm font-semibold text-black">
                                               {item.prediction.predictedStatus}
                                             </p>
-                                            <p className="text-xs text-black/45">
+                                            <p className="text-[11px] text-black/45">
                                               {formatForecastConfidence(
                                                 item.prediction.confidence,
                                               )} confidence
@@ -1230,7 +1230,7 @@ export default function MapHome() {
                             );
                           })
                         ) : (
-                          <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 px-3 py-3 text-sm text-slate-500">
+                          <div className="rounded-2xl border border-dashed border-white/55 bg-white/50 px-3 py-3 text-sm text-slate-500 backdrop-blur-md">
                             The forecast response did not include timeline items.
                           </div>
                         )}
