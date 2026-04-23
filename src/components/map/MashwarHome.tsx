@@ -255,7 +255,11 @@ function replaceCheckpointInCollection(
 }
 
 function formatSelectionLabel(
-  selection: { kind: "current-location" } | { kind: "checkpoint"; checkpointId: string } | null,
+  selection:
+    | { kind: "current-location" }
+    | { kind: "checkpoint"; checkpointId: string }
+    | { kind: "map-point"; lat: number; lng: number }
+    | null,
   checkpointsById: Map<string, MapCheckpoint>,
   userLocation: UserLocation | null,
 ): string {
@@ -265,6 +269,10 @@ function formatSelectionLabel(
 
   if (selection.kind === "current-location") {
     return userLocation ? "الحالي" : "غير محدد";
+  }
+
+  if (selection.kind === "map-point") {
+    return "مثبت على الخريطة";
   }
 
   return checkpointsById.get(selection.checkpointId)?.name ?? "غير محدد";
@@ -321,17 +329,37 @@ function ConfidenceBadge({
 function EndpointChip({
   label,
   value,
+  helper,
+  isActive,
   onClear,
+  onActivate,
 }: {
   label: string;
   value: string;
+  helper?: string;
+  isActive?: boolean;
   onClear: () => void;
+  onActivate: () => void;
 }) {
   return (
-    <div className="relative rounded-[8px] border border-[#2d3139] bg-transparent px-3 py-2.5 transition-all duration-150 hover:bg-white/5">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onActivate}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onActivate();
+        }
+      }}
+      className={`relative rounded-[8px] border px-3 py-2.5 transition-all duration-150 hover:bg-white/5 ${isActive ? "border-[#3b82f6] bg-white/5" : "border-[#2d3139] bg-transparent"}`}
+    >
       <button
         type="button"
-        onClick={onClear}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClear();
+        }}
         className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-transparent text-[#6b7280] transition hover:border-white/10 hover:bg-white/5 hover:text-[#f9fafb]"
         aria-label={`Clear ${label}`}
       >
@@ -343,6 +371,9 @@ function EndpointChip({
       <div className="mt-2 min-h-[26px] pr-6 text-[15px] font-medium text-[#f9fafb] mashwar-rtl">
         {value || "غير محدد"}
       </div>
+      {helper ? (
+        <p className="mt-1 text-[10px] text-[#60a5fa]">{helper}</p>
+      ) : null}
     </div>
   );
 }
@@ -463,10 +494,18 @@ export default function MashwarHome() {
   const [isRoutePending, startRouteTransition] = useTransition();
   const [checkpointReloadNonce, setCheckpointReloadNonce] = useState(0);
   const [routeFrom, setRouteFrom] = useState<
-    { kind: "current-location" } | { kind: "checkpoint"; checkpointId: string } | null
+    | { kind: "current-location" }
+    | { kind: "checkpoint"; checkpointId: string }
+    | { kind: "map-point"; lat: number; lng: number }
+    | null
   >(null);
   const [routeTo, setRouteTo] = useState<
-    { kind: "checkpoint"; checkpointId: string } | null
+    | { kind: "checkpoint"; checkpointId: string }
+    | { kind: "map-point"; lat: number; lng: number }
+    | null
+  >(null);
+  const [endpointPlacementMode, setEndpointPlacementMode] = useState<
+    "from" | "to" | null
   >(null);
   const checkpointForecastRequestNonce = useRef(0);
   const selectedCheckpointIdRef = useRef<string | null>(null);
@@ -544,6 +583,12 @@ export default function MashwarHome() {
   const leavingVisual = selectedCheckpoint
     ? STATUS_VISUALS[selectedCheckpoint.leavingStatus]
     : STATUS_VISUALS["غير معروف"];
+  const routeFromPoint = resolveRoutePoint(
+    routeFrom,
+    checkpointsById,
+    userLocation,
+  );
+  const routeToPoint = resolveRoutePoint(routeTo, checkpointsById, userLocation);
 
   function handleLoadDemoRoute(): void {
     setRouteError(null);
@@ -757,6 +802,7 @@ export default function MashwarHome() {
 
     setRouteError(null);
     setRouteFrom({ kind: "checkpoint", checkpointId: selectedCheckpoint.id });
+    setEndpointPlacementMode(null);
   }, [selectedCheckpoint]);
 
   const handleUseSelectedCheckpointAsDestination = useCallback(() => {
@@ -779,6 +825,7 @@ export default function MashwarHome() {
 
     setRouteError(null);
     setRouteTo({ kind: "checkpoint", checkpointId: selectedCheckpoint.id });
+    setEndpointPlacementMode(null);
   }, [selectedCheckpoint]);
 
   const handleUseCurrentLocationAsOrigin = useCallback(() => {
@@ -789,12 +836,44 @@ export default function MashwarHome() {
 
     setRouteError(null);
     setRouteFrom({ kind: "current-location" });
+    setEndpointPlacementMode(null);
   }, [userLocation]);
+
+  const handleActivateEndpointPlacement = useCallback(
+    (endpoint: "from" | "to") => {
+      setEndpointPlacementMode((current) => (current === endpoint ? null : endpoint));
+    },
+    [],
+  );
+
+  const handlePlaceEndpoint = useCallback(
+    (point: RoutePoint) => {
+      if (endpointPlacementMode === "from") {
+        setRouteFrom({ kind: "map-point", lat: point.lat, lng: point.lng });
+        setEndpointPlacementMode(null);
+        setRouteError(null);
+        return;
+      }
+
+      if (endpointPlacementMode === "to") {
+        setRouteTo({ kind: "map-point", lat: point.lat, lng: point.lng });
+        setEndpointPlacementMode(null);
+        setRouteError(null);
+      }
+    },
+    [endpointPlacementMode],
+  );
 
   const routeFromLabel = formatSelectionLabel(routeFrom, checkpointsById, userLocation);
   const routeToLabel = routeTo
     ? formatSelectionLabel(routeTo, checkpointsById, userLocation)
     : "غير محدد";
+  const placementBadgeLabel =
+    endpointPlacementMode === "from"
+      ? "Tap map to place FROM"
+      : endpointPlacementMode === "to"
+        ? "Tap map to place TO"
+        : "Ready";
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-transparent text-[#f9fafb]">
@@ -804,6 +883,12 @@ export default function MashwarHome() {
         checkpoints={checkpoints}
         routes={routes}
         userLocation={userLocation}
+        routeEndpoints={{
+          from: routeFromPoint,
+          to: routeToPoint,
+        }}
+        placementMode={endpointPlacementMode}
+        onMapPlacement={handlePlaceEndpoint}
         onCheckpointSelect={handleCheckpointSelect}
       />
 
@@ -830,9 +915,9 @@ export default function MashwarHome() {
                 </h2>
               </div>
 
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-transparent px-3 py-1 text-[11px] font-semibold text-[#d1fae5]">
-                <span className="h-2 w-2 rounded-full bg-[#22c55e] shadow-[0_0_0_0_rgba(34,197,94,0.45)] animate-pulse" />
-                <span className="mashwar-mono">Ready</span>
+              <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold ${endpointPlacementMode ? "border-[#3b82f6] bg-transparent text-[#bfdbfe]" : "border-white/10 bg-transparent text-[#d1fae5]"}`}>
+                <span className={`h-2 w-2 rounded-full ${endpointPlacementMode ? "bg-[#3b82f6]" : "bg-[#22c55e] shadow-[0_0_0_0_rgba(34,197,94,0.45)] animate-pulse"}`} />
+                <span className="mashwar-mono">{placementBadgeLabel}</span>
               </span>
             </div>
 
@@ -840,11 +925,17 @@ export default function MashwarHome() {
               <EndpointChip
                 label="من"
                 value={routeFromLabel}
+                helper={endpointPlacementMode === "from" ? "Tap anywhere on the map" : undefined}
+                isActive={endpointPlacementMode === "from"}
+                onActivate={() => handleActivateEndpointPlacement("from")}
                 onClear={() => setRouteFrom(null)}
               />
               <EndpointChip
                 label="إلى"
                 value={routeToLabel}
+                helper={endpointPlacementMode === "to" ? "Tap anywhere on the map" : undefined}
+                isActive={endpointPlacementMode === "to"}
+                onActivate={() => handleActivateEndpointPlacement("to")}
                 onClear={() => setRouteTo(null)}
               />
             </div>
@@ -1141,6 +1232,7 @@ function resolveRoutePoint(
   selection:
     | { kind: "current-location" }
     | { kind: "checkpoint"; checkpointId: string }
+    | { kind: "map-point"; lat: number; lng: number }
     | null,
   checkpointsById: Map<string, MapCheckpoint>,
   userLocation: UserLocation | null,
@@ -1157,6 +1249,13 @@ function resolveRoutePoint(
     return {
       lat: userLocation.lat,
       lng: userLocation.lng,
+    };
+  }
+
+  if (selection.kind === "map-point") {
+    return {
+      lat: selection.lat,
+      lng: selection.lng,
     };
   }
 

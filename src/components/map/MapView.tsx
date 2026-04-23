@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
+import type { FeatureCollection, Point } from "geojson";
 
 import {
   buildCheckpointFeatureCollection,
@@ -39,6 +40,7 @@ import {
 import type {
   MapCheckpoint,
   NormalizedRoutes,
+  RoutePoint,
   UserLocation,
 } from "@/lib/types/map";
 
@@ -46,16 +48,28 @@ interface MapViewProps {
   checkpoints: MapCheckpoint[];
   routes: NormalizedRoutes;
   userLocation?: UserLocation | null;
+  routeEndpoints?: {
+    from: RoutePoint | null;
+    to: RoutePoint | null;
+  };
+  placementMode?: "from" | "to" | null;
+  onMapPlacement?: (point: RoutePoint) => void;
   onCheckpointSelect?: (checkpoint: MapCheckpoint | null) => void;
 }
 
 type MapLibreModule = typeof import("maplibre-gl");
+
+const ROUTE_ENDPOINT_SOURCE_ID = "route-endpoints-source";
+const ROUTE_ENDPOINT_FROM_LAYER_ID = "route-endpoint-from-layer";
+const ROUTE_ENDPOINT_TO_LAYER_ID = "route-endpoint-to-layer";
 
 function cleanupRouteLayers(map: MapLibreMap): void {
   const layerIds = [
     ROUTE_MAIN_LAYER_ID,
     ROUTE_ALT_1_LAYER_ID,
     ROUTE_ALT_2_LAYER_ID,
+    ROUTE_ENDPOINT_FROM_LAYER_ID,
+    ROUTE_ENDPOINT_TO_LAYER_ID,
     USER_LOCATION_ACCURACY_LAYER_ID,
     USER_LOCATION_LAYER_ID,
   ];
@@ -63,6 +77,7 @@ function cleanupRouteLayers(map: MapLibreMap): void {
     ROUTE_MAIN_SOURCE_ID,
     ROUTE_ALT_1_SOURCE_ID,
     ROUTE_ALT_2_SOURCE_ID,
+    ROUTE_ENDPOINT_SOURCE_ID,
     USER_LOCATION_SOURCE_ID,
   ];
 
@@ -83,6 +98,9 @@ export default function MapView({
   checkpoints,
   routes,
   userLocation,
+  routeEndpoints,
+  placementMode,
+  onMapPlacement,
   onCheckpointSelect,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -97,6 +115,45 @@ export default function MapView({
   const checkpointFeatureCollection = useMemo(() => {
     return buildCheckpointFeatureCollection(checkpoints);
   }, [checkpoints]);
+
+  const routeEndpointsFeatureCollection = useMemo<
+    FeatureCollection<Point, { role: "from" | "to" }>
+  >(() => {
+    const features: Array<
+      FeatureCollection<Point, { role: "from" | "to" }>["features"][number]
+    > = [];
+
+    if (routeEndpoints?.from) {
+      features.push({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [routeEndpoints.from.lng, routeEndpoints.from.lat],
+        },
+        properties: {
+          role: "from",
+        },
+      });
+    }
+
+    if (routeEndpoints?.to) {
+      features.push({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [routeEndpoints.to.lng, routeEndpoints.to.lat],
+        },
+        properties: {
+          role: "to",
+        },
+      });
+    }
+
+    return {
+      type: "FeatureCollection",
+      features,
+    };
+  }, [routeEndpoints]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -315,6 +372,54 @@ export default function MapView({
   }, [mapLoaded, userLocation]);
 
   useEffect(() => {
+    if (!mapRef.current || !mapLoaded) {
+      return;
+    }
+
+    const map = mapRef.current;
+    const existingSource = map.getSource(
+      ROUTE_ENDPOINT_SOURCE_ID,
+    ) as GeoJSONSource | undefined;
+
+    if (!existingSource) {
+      map.addSource(ROUTE_ENDPOINT_SOURCE_ID, {
+        type: "geojson",
+        data: routeEndpointsFeatureCollection,
+      });
+
+      map.addLayer({
+        id: ROUTE_ENDPOINT_FROM_LAYER_ID,
+        type: "circle",
+        source: ROUTE_ENDPOINT_SOURCE_ID,
+        filter: ["==", ["get", "role"], "from"],
+        paint: {
+          "circle-radius": 10,
+          "circle-color": "#3b82f6",
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      });
+
+      map.addLayer({
+        id: ROUTE_ENDPOINT_TO_LAYER_ID,
+        type: "circle",
+        source: ROUTE_ENDPOINT_SOURCE_ID,
+        filter: ["==", ["get", "role"], "to"],
+        paint: {
+          "circle-radius": 10,
+          "circle-color": "#f59e0b",
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      });
+
+      return;
+    }
+
+    existingSource.setData(routeEndpointsFeatureCollection);
+  }, [mapLoaded, routeEndpointsFeatureCollection]);
+
+  useEffect(() => {
     if (!mapRef.current || !mapLoaded || !userLocation) {
       return;
     }
@@ -332,8 +437,17 @@ export default function MapView({
     }
 
     const map = mapRef.current;
+    map.getCanvas().style.cursor = placementMode ? "crosshair" : "";
 
     const handleClusterClick = async (event: any) => {
+      if (placementMode && onMapPlacement) {
+        onMapPlacement({
+          lat: event.lngLat.lat,
+          lng: event.lngLat.lng,
+        });
+        return;
+      }
+
       const clusterFeature = event.features?.[0];
       const clusterId = Number(clusterFeature?.properties?.cluster_id);
 
@@ -359,6 +473,14 @@ export default function MapView({
     };
 
     const handleCheckpointClick = (event: any) => {
+      if (placementMode && onMapPlacement) {
+        onMapPlacement({
+          lat: event.lngLat.lat,
+          lng: event.lngLat.lng,
+        });
+        return;
+      }
+
       const checkpointId = String(
         event.features?.[0]?.properties?.checkpointId ?? "",
       );
@@ -396,7 +518,7 @@ export default function MapView({
         map.off("mouseleave", layerId, handlePointerLeave);
       });
     };
-  }, [checkpointsById, mapLoaded, onCheckpointSelect]);
+  }, [checkpointsById, mapLoaded, onCheckpointSelect, onMapPlacement, placementMode]);
 
   useEffect(() => {
     if (!mapRef.current || !mapLoaded || !onCheckpointSelect) {
@@ -406,6 +528,14 @@ export default function MapView({
     const map = mapRef.current;
 
     const handleBackgroundClick = (event: any) => {
+      if (placementMode && onMapPlacement) {
+        onMapPlacement({
+          lat: event.lngLat.lat,
+          lng: event.lngLat.lng,
+        });
+        return;
+      }
+
       const interactiveFeatures = map.queryRenderedFeatures(event.point, {
         layers: [...CHECKPOINT_INTERACTIVE_LAYER_IDS],
       });
@@ -422,7 +552,7 @@ export default function MapView({
     return () => {
       map.off("click", handleBackgroundClick);
     };
-  }, [mapLoaded, onCheckpointSelect]);
+  }, [mapLoaded, onCheckpointSelect, onMapPlacement, placementMode]);
 
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) {
