@@ -365,7 +365,7 @@ function Tile({
           : "#f9fafb";
 
   return (
-    <div className="rounded-[8px] bg-[#0a0b0d] p-3">
+    <div className="rounded-[8px] border border-white/5 bg-transparent p-3">
       <p className="mashwar-mono text-[9px] uppercase tracking-[0.26em] text-[#6b7280]">
         {label}
       </p>
@@ -535,7 +535,7 @@ export default function MashwarNaturalLanguageRouteModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="natural-route-title"
-        className={`relative z-10 mx-auto flex h-[min(92vh,60rem)] w-[min(100vw-1.5rem,900px)] flex-col overflow-hidden rounded-[16px] border border-white/8 bg-[#111318] shadow-[0_30px_100px_rgba(0,0,0,0.7)] transition-all duration-300 ease-out sm:mt-6 ${
+        className={`relative z-10 mx-auto flex h-[min(92vh,60rem)] w-[min(100vw-1.5rem,1120px)] flex-col overflow-hidden rounded-[16px] border border-white/8 bg-transparent shadow-[0_30px_100px_rgba(0,0,0,0.7)] transition-all duration-300 ease-out sm:mt-6 ${
           isVisible ? "translate-y-0 scale-100 opacity-100" : "translate-y-3 scale-[0.985] opacity-0"
         }`}
         style={{ animation: "mashwar-modal-in 220ms ease-out" }}
@@ -558,13 +558,13 @@ export default function MashwarNaturalLanguageRouteModal({
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
-              <span className="mashwar-pill inline-flex items-center rounded-full border border-[#92400e] bg-[#78350f] px-3 py-1 text-[#fbbf24]">
+              <span className="mashwar-pill inline-flex items-center rounded-full border border-[#92400e] bg-transparent px-3 py-1 text-[#fbbf24]">
                 Mock only
               </span>
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-[#0a0b0d] text-[#cbd5e1] transition hover:bg-[#1a1d24] hover:text-[#f9fafb]"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-transparent text-[#cbd5e1] transition hover:bg-white/5 hover:text-[#f9fafb]"
                 aria-label="Close modal"
               >
                 <span className="text-xl leading-none">×</span>
@@ -573,14 +573,14 @@ export default function MashwarNaturalLanguageRouteModal({
           </div>
         </header>
 
-        <div className="relative grid flex-1 gap-4 overflow-y-auto p-4 md:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+        <div className="relative grid flex-1 gap-4 overflow-y-auto p-4 md:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)]">
           <aside className="space-y-4">
             <section className="mashwar-panel p-4">
               <div className="flex items-center justify-between gap-3">
                 <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
                   PROMPT
                 </p>
-                <div className="inline-flex rounded-full border border-[#2d3139] bg-[#0a0b0d] p-0.5">
+                <div className="inline-flex rounded-full border border-[#2d3139] bg-transparent p-0.5">
                   <button
                     type="button"
                     onClick={() => setMode("text")}
@@ -612,7 +612,7 @@ export default function MashwarNaturalLanguageRouteModal({
                 onChange={(event) => setPrompt(event.target.value)}
                 rows={5}
                 placeholder="لو بدي اطلع من جنين لنابلس بكرة 8"
-                className="mt-3 min-h-[128px] w-full resize-none rounded-[8px] border border-[#2d3139] bg-[#0a0b0d] px-4 py-3 text-[16px] leading-7 text-[#f9fafb] outline-none transition placeholder:text-[#64748b] focus:border-[#3b82f6] focus:ring-4 focus:ring-[#3b82f6]/12"
+                className="mt-3 min-h-[128px] w-full resize-none rounded-[8px] border border-[#2d3139] bg-transparent px-4 py-3 text-[16px] leading-7 text-[#f9fafb] outline-none transition placeholder:text-[#64748b] focus:border-[#3b82f6] focus:ring-4 focus:ring-[#3b82f6]/12"
                 style={{ fontFamily: "var(--font-ibm-arabic), ui-sans-serif, sans-serif" }}
               />
 
@@ -630,7 +630,7 @@ export default function MashwarNaturalLanguageRouteModal({
                   type="button"
                   onClick={handleUseVoice}
                   disabled={isListening || isParsing}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[#2d3139] bg-transparent px-4 text-sm text-[#e5e7eb] transition hover:bg-[#1a1d24] disabled:cursor-wait disabled:opacity-55"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[#2d3139] bg-transparent px-4 text-sm text-[#e5e7eb] transition hover:bg-white/5 disabled:cursor-wait disabled:opacity-55"
                 >
                   <IconMic />
                   Voice
@@ -653,7 +653,7 @@ export default function MashwarNaturalLanguageRouteModal({
                   </h3>
                 </div>
 
-                <div className="rounded-[10px] border border-white/8 bg-[#0a0b0d] px-3 py-2 text-right">
+                <div className="rounded-[10px] border border-white/8 bg-transparent px-3 py-2 text-right">
                   <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[#6b7280]">
                     CONFIDENCE
                   </p>
@@ -681,8 +681,8 @@ export default function MashwarNaturalLanguageRouteModal({
             <div className="mashwar-scroll flex-1 overflow-y-auto p-4">
               {isParsing ? (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3 rounded-[10px] bg-[#0a0b0d] p-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-[10px] border border-[#2d3139] bg-[#111318]">
+                  <div className="flex items-center gap-3 rounded-[10px] bg-transparent p-4">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-[10px] border border-[#2d3139] bg-transparent">
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-white/80" />
                     </div>
                     <div>
@@ -697,7 +697,7 @@ export default function MashwarNaturalLanguageRouteModal({
                 </div>
               ) : report ? (
                 <div className="space-y-4">
-                  <section className="rounded-[12px] border border-white/8 bg-[#0a0b0d] p-4">
+                  <section className="rounded-[12px] border border-white/8 bg-transparent p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.32em] text-[#6b7280]">
@@ -711,7 +711,7 @@ export default function MashwarNaturalLanguageRouteModal({
                         </p>
                       </div>
 
-                      <div className="rounded-[10px] border border-white/8 bg-[#111318] px-3 py-2">
+                      <div className="rounded-[10px] border border-white/8 bg-transparent px-3 py-2">
                         <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[#6b7280]">
                           CONFIDENCE
                         </p>
@@ -728,7 +728,7 @@ export default function MashwarNaturalLanguageRouteModal({
                       <Tile label="Duration" value={`${report.durationMinutes} min`} tone="default" />
                     </div>
 
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[#2d3139] bg-[#111318] px-3 py-3">
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[#2d3139] bg-transparent px-3 py-3">
                       <div className="min-w-0">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
                           PROMPT CAPTURED
@@ -737,7 +737,7 @@ export default function MashwarNaturalLanguageRouteModal({
                           {report.rawPrompt}
                         </p>
                       </div>
-                      <span className="mashwar-pill inline-flex items-center gap-2 border border-[#14532d] bg-[#0d1f15] px-3 py-1 text-[#86efac]">
+                      <span className="mashwar-pill inline-flex items-center gap-2 border border-[#14532d] bg-transparent px-3 py-1 text-[#86efac]">
                         <span className="h-2 w-2 rounded-full bg-[#22c55e]" />
                         Smart parsing active
                       </span>
@@ -748,10 +748,10 @@ export default function MashwarNaturalLanguageRouteModal({
                     {report.checkpoints.map((checkpoint, index) => (
                       <article
                         key={`${checkpoint.name}-${index}`}
-                        className="rounded-[10px] border border-white/5 bg-[#111318] px-3 py-3 transition hover:bg-[#15181e]"
+                        className="rounded-[10px] border border-white/5 bg-transparent px-3 py-3 transition hover:bg-white/5"
                       >
                         <div className="flex items-start gap-3">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0a0b0d] text-[12px] font-semibold text-[#cbd5e1]">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/5 bg-transparent text-[12px] font-semibold text-[#cbd5e1]">
                             {index + 1}
                           </div>
 
@@ -775,7 +775,7 @@ export default function MashwarNaturalLanguageRouteModal({
                   </div>
                 </div>
               ) : (
-                <div className="flex min-h-[18rem] items-center justify-center rounded-[12px] border border-dashed border-white/8 bg-[#0a0b0d] px-5 text-center">
+                <div className="flex min-h-[18rem] items-center justify-center rounded-[12px] border border-dashed border-white/8 bg-transparent px-5 text-center">
                   <div className="max-w-md">
                     <p className="text-[18px] font-bold text-[#f9fafb]">
                       No route generated yet

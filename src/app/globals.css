@@ -80,18 +80,18 @@ select {
 
 .mashwar-panel {
   backdrop-filter: blur(12px);
-  background: rgba(17, 19, 24, 0.92);
+  background: transparent;
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 
 .mashwar-panel-elevated {
-  background: rgba(26, 29, 36, 0.9);
+  background: transparent;
 }
 
 .mashwar-chip {
-  background: #1a1d24;
+  background: transparent;
   border: 1px solid #2d3139;
   border-radius: 8px;
 }
@@ -140,4 +140,8 @@ select {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+.mashwar-surface {
+  background: transparent;
 }
