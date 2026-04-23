@@ -13,6 +13,7 @@ import MapView from "@/components/map/MapView";
 import NaturalLanguageRouteModal from "@/components/map/NaturalLanguageRouteModal";
 import {
   DEMO_ROUTE_REQUEST,
+  hasValidCoordinates,
   getStatusColor,
   getWorstStatus,
 } from "@/lib/config/map";
@@ -22,6 +23,7 @@ import { getRoute } from "@/lib/services/routing";
 import type {
   CheckpointForecastStatusType,
   MapCheckpoint,
+  RoutePoint,
   NormalizedCheckpointForecast,
   NormalizedRoutes,
   UserLocation,
@@ -79,6 +81,69 @@ function getStatusUi(status: ReturnType<typeof getWorstStatus>) {
 
 function getDirectionalStatusLabel(direction: "entering" | "leaving") {
   return direction === "entering" ? "Entering" : "Leaving";
+}
+
+const FORECAST_HORIZON_ORDER = [
+  "plus_30m",
+  "plus_1h",
+  "plus_2h",
+  "next_day_8am",
+] as const;
+
+type ForecastDirection = "entering" | "leaving";
+
+interface ForecastRow {
+  horizon: string;
+  targetDateTime: string | null;
+  entering: NormalizedCheckpointForecast["predictions"]["entering"][number] | null;
+  leaving: NormalizedCheckpointForecast["predictions"]["leaving"][number] | null;
+}
+
+function buildForecastRows(
+  forecast: NormalizedCheckpointForecast | null,
+): ForecastRow[] {
+  if (!forecast) {
+    return [];
+  }
+
+  const rows = new Map<string, ForecastRow>();
+
+  const addItem = (
+    direction: ForecastDirection,
+    item: NormalizedCheckpointForecast["predictions"][ForecastDirection][number],
+  ) => {
+    const key = item.horizon;
+    const existing = rows.get(key) ?? {
+      horizon: key,
+      targetDateTime: item.targetDateTime,
+      entering: null,
+      leaving: null,
+    };
+
+    existing[direction] = item;
+    if (!existing.targetDateTime && item.targetDateTime) {
+      existing.targetDateTime = item.targetDateTime;
+    }
+
+    rows.set(key, existing);
+  };
+
+  for (const item of forecast.predictions.entering) {
+    addItem("entering", item);
+  }
+
+  for (const item of forecast.predictions.leaving) {
+    addItem("leaving", item);
+  }
+
+  const orderedKeys = [
+    ...FORECAST_HORIZON_ORDER.filter((key) => rows.has(key)),
+    ...Array.from(rows.keys()).filter(
+      (key) => !FORECAST_HORIZON_ORDER.includes(key as (typeof FORECAST_HORIZON_ORDER)[number]),
+    ),
+  ];
+
+  return orderedKeys.map((key) => rows.get(key) as ForecastRow);
 }
 
 function replaceCheckpointInCollection(
@@ -139,6 +204,66 @@ function formatForecastConfidence(value: number | null): string {
   return `${Math.round(value * 100)}%`;
 }
 
+type RouteEndpointSelection =
+  | { kind: "current-location" }
+  | { kind: "checkpoint"; checkpointId: string };
+
+function getRouteSelectionLabel(
+  selection: RouteEndpointSelection | null,
+  checkpointsById: Map<string, MapCheckpoint>,
+): string {
+  if (!selection) {
+    return "غير محدد";
+  }
+
+  if (selection.kind === "current-location") {
+    return "الحالي";
+  }
+
+  const checkpoint = checkpointsById.get(selection.checkpointId);
+  return checkpoint?.name ?? "Checkpoint";
+}
+
+function resolveRoutePoint(
+  selection: RouteEndpointSelection | null,
+  checkpointsById: Map<string, MapCheckpoint>,
+  userLocation: UserLocation | null,
+): RoutePoint | null {
+  if (!selection) {
+    return null;
+  }
+
+  if (selection.kind === "current-location") {
+    if (!userLocation) {
+      return null;
+    }
+
+    return {
+      lat: userLocation.lat,
+      lng: userLocation.lng,
+    };
+  }
+
+  const checkpoint = checkpointsById.get(selection.checkpointId);
+  if (
+    !checkpoint ||
+    !hasValidCoordinates(checkpoint.latitude, checkpoint.longitude)
+  ) {
+    return null;
+  }
+
+  const latitude = checkpoint.latitude;
+  const longitude = checkpoint.longitude;
+  if (latitude === null || longitude === null) {
+    return null;
+  }
+
+  return {
+    lat: latitude,
+    lng: longitude,
+  };
+}
+
 export default function MapHome() {
   const [checkpoints, setCheckpoints] = useState<MapCheckpoint[]>([]);
   const [selectedCheckpoint, setSelectedCheckpoint] =
@@ -157,6 +282,10 @@ export default function MapHome() {
   const [routes, setRoutes] = useState<NormalizedRoutes>(EMPTY_ROUTES);
   const [isRoutePending, startRouteTransition] = useTransition();
   const [checkpointReloadNonce, setCheckpointReloadNonce] = useState(0);
+  const [routeFrom, setRouteFrom] = useState<RouteEndpointSelection | null>(
+    null,
+  );
+  const [routeTo, setRouteTo] = useState<RouteEndpointSelection | null>(null);
   const checkpointForecastRequestNonce = useRef(0);
   const selectedCheckpointIdRef = useRef<string | null>(null);
 
@@ -217,6 +346,10 @@ export default function MapHome() {
       .join(" • ");
   }, [checkpointsWithoutCoordinates]);
 
+  const checkpointsById = useMemo(() => {
+    return new Map(checkpoints.map((checkpoint) => [checkpoint.id, checkpoint]));
+  }, [checkpoints]);
+
   const selectedCheckpointStatus = selectedCheckpoint
     ? getWorstStatus(
         selectedCheckpoint.enteringStatus,
@@ -232,6 +365,10 @@ export default function MapHome() {
   const leavingStatusUi = selectedCheckpoint
     ? getStatusUi(selectedCheckpoint.leavingStatus)
     : null;
+  const forecastRows = useMemo(
+    () => buildForecastRows(selectedCheckpointForecast),
+    [selectedCheckpointForecast],
+  );
 
   function handleLoadDemoRoute(): void {
     setRouteError(null);
@@ -254,6 +391,8 @@ export default function MapHome() {
 
   function handleClearRoute(): void {
     setRouteError(null);
+    setRouteFrom(null);
+    setRouteTo(null);
     setRoutes({
       mainRoute: null,
       alternativeRoutes: [],
@@ -281,6 +420,7 @@ export default function MapHome() {
           lng: position.coords.longitude,
           accuracy: position.coords.accuracy,
         });
+        setRouteFrom((current) => current ?? { kind: "current-location" });
         setIsSyncingLocation(false);
       },
       (error) => {
@@ -325,7 +465,7 @@ export default function MapHome() {
       }
 
       const requestId = ++checkpointForecastRequestNonce.current;
-      const statusType: CheckpointForecastStatusType = "entering";
+      const statusType: CheckpointForecastStatusType = "both";
 
       setIsForecastLoading(true);
 
@@ -377,6 +517,108 @@ export default function MapHome() {
     [],
   );
 
+  const handleUseSelectedCheckpointAsOrigin = useCallback(() => {
+    if (!selectedCheckpoint) {
+      setRouteError("Select a checkpoint first to use it as the route origin.");
+      return;
+    }
+
+    if (
+      !hasValidCoordinates(
+        selectedCheckpoint.latitude,
+        selectedCheckpoint.longitude,
+      )
+    ) {
+      setRouteError("Selected checkpoint does not have usable coordinates.");
+      return;
+    }
+
+    setRouteError(null);
+    setRouteFrom({ kind: "checkpoint", checkpointId: selectedCheckpoint.id });
+  }, [selectedCheckpoint]);
+
+  const handleUseSelectedCheckpointAsDestination = useCallback(() => {
+    if (!selectedCheckpoint) {
+      setRouteError(
+        "Select a checkpoint first to use it as the route destination.",
+      );
+      return;
+    }
+
+    if (
+      !hasValidCoordinates(
+        selectedCheckpoint.latitude,
+        selectedCheckpoint.longitude,
+      )
+    ) {
+      setRouteError("Selected checkpoint does not have usable coordinates.");
+      return;
+    }
+
+    setRouteError(null);
+    setRouteTo({ kind: "checkpoint", checkpointId: selectedCheckpoint.id });
+  }, [selectedCheckpoint]);
+
+  const handleUseCurrentLocationAsOrigin = useCallback(() => {
+    if (!userLocation) {
+      setRouteError("Sync your location first before using it as the origin.");
+      return;
+    }
+
+    setRouteError(null);
+    setRouteFrom({ kind: "current-location" });
+  }, [userLocation]);
+
+  const handleBuildRoute = useCallback(() => {
+    setRouteError(null);
+
+    const resolvedFrom = resolveRoutePoint(routeFrom, checkpointsById, userLocation);
+    const resolvedTo = resolveRoutePoint(routeTo, checkpointsById, userLocation);
+
+    if (!resolvedFrom) {
+      setRouteError(
+        routeFrom?.kind === "current-location"
+          ? "Sync your location first to route from the current position."
+          : "Choose a valid origin checkpoint.",
+      );
+      return;
+    }
+
+    if (!resolvedTo) {
+      setRouteError("Choose a valid destination checkpoint.");
+      return;
+    }
+
+    if (
+      resolvedFrom.lat === resolvedTo.lat &&
+      resolvedFrom.lng === resolvedTo.lng
+    ) {
+      setRouteError("Choose two different endpoints for the route.");
+      return;
+    }
+
+    startRouteTransition(() => {
+      void (async () => {
+        try {
+          const nextRoutes = await getRoute({
+            startPoint: resolvedFrom,
+            endPoint: resolvedTo,
+          });
+          setRoutes(nextRoutes);
+        } catch (error) {
+          setRouteError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load route data.",
+          );
+        }
+      })();
+    });
+  }, [checkpointsById, routeFrom, routeTo, startRouteTransition, userLocation]);
+
+  const routeFromLabel = getRouteSelectionLabel(routeFrom, checkpointsById);
+  const routeToLabel = getRouteSelectionLabel(routeTo, checkpointsById);
+
   return (
     <main className="relative flex min-h-screen flex-1 overflow-hidden bg-[#f3f5ef]">
       <MapView
@@ -386,8 +628,156 @@ export default function MapHome() {
         onCheckpointSelect={handleCheckpointSelect}
       />
 
-      <div className="pointer-events-none absolute inset-x-4 top-4 flex flex-col gap-3 md:max-w-md">
-        <section className="pointer-events-auto rounded-2xl border border-black/10 bg-white/92 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.14)] backdrop-blur-md">
+      <div className="pointer-events-none absolute inset-x-4 top-4 flex flex-col gap-3">
+        <section className="pointer-events-auto w-full max-w-4xl rounded-[30px] border border-black/10 bg-white/94 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.14)] backdrop-blur-md">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-black/45">
+                Routing
+              </p>
+              <h2 className="text-lg font-semibold text-black">من - إلى</h2>
+              <p className="text-sm text-black/60">
+                Route between checkpoints, or start from your current synced
+                location.
+              </p>
+            </div>
+
+            <div className="inline-flex items-center gap-2 rounded-full bg-[#eff6ff] px-3 py-1 text-xs font-medium text-[#1d4ed8]">
+              <span className="h-2 w-2 rounded-full bg-[#2563eb]" />
+              {isRoutePending ? "Building route" : "Ready"}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1.2fr_1.2fr_auto]">
+            <div className="rounded-3xl border border-black/6 bg-[#f8fafc] p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-black/40">
+                    من
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-black">
+                    {routeFromLabel}
+                  </p>
+                </div>
+
+                <span
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                  style={{
+                    backgroundColor:
+                      routeFrom?.kind === "current-location"
+                        ? "#dbeafe"
+                        : "#eef2ff",
+                    color:
+                      routeFrom?.kind === "current-location"
+                        ? "#1d4ed8"
+                        : "#4338ca",
+                  }}
+                >
+                  {routeFrom?.kind === "current-location"
+                    ? "الحالي"
+                    : routeFrom
+                      ? "Checkpoint"
+                      : "Unset"}
+                </span>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleUseCurrentLocationAsOrigin}
+                  className="rounded-full border border-sky-200 bg-white px-3 py-2 text-sm font-medium text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!userLocation}
+                >
+                  الحالي
+                </button>
+                {selectedCheckpoint ? (
+                  <button
+                    type="button"
+                    onClick={handleUseSelectedCheckpointAsOrigin}
+                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-black/[0.04]"
+                  >
+                    التحديد كمن
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-black/6 bg-[#f8fafc] p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-black/40">
+                    إلى
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-black">
+                    {routeToLabel}
+                  </p>
+                </div>
+
+                <span
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                  style={{
+                    backgroundColor: routeTo ? "#ecfeff" : "#f1f5f9",
+                    color: routeTo ? "#155e75" : "#475569",
+                  }}
+                >
+                  {routeTo ? "Selected" : "Unset"}
+                </span>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {selectedCheckpoint ? (
+                  <button
+                    type="button"
+                    onClick={handleUseSelectedCheckpointAsDestination}
+                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-black/[0.04]"
+                  >
+                    التحديد كإلى
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex flex-col justify-between gap-3 rounded-3xl border border-black/6 bg-[linear-gradient(135deg,#0f172a,#1d4ed8)] p-4 text-white">
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/70">
+                  Action
+                </p>
+                <p className="text-sm text-white/75">
+                  Build the route after picking both endpoints.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleBuildRoute}
+                  disabled={isRoutePending}
+                  className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#0f172a] transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {isRoutePending ? "Routing..." : "Route"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearRoute}
+                  className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-black/55">
+            <span className="rounded-full bg-black/[0.04] px-2.5 py-1">
+              Route from checkpoints by default
+            </span>
+            <span className="rounded-full bg-black/[0.04] px-2.5 py-1">
+              Current location only works for من
+            </span>
+          </div>
+        </section>
+
+        <section className="pointer-events-auto w-full max-w-md rounded-2xl border border-black/10 bg-white/92 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.14)] backdrop-blur-md">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-black/45">
@@ -422,13 +812,6 @@ export default function MapHome() {
               className="rounded-full bg-[#111827] px-4 py-2 text-sm font-medium text-white transition hover:bg-black disabled:cursor-wait disabled:opacity-60"
             >
               {isRoutePending ? "Loading route..." : "Load demo route"}
-            </button>
-            <button
-              type="button"
-              onClick={handleClearRoute}
-              className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-black/[0.04]"
-            >
-              Clear route
             </button>
             <button
               type="button"
@@ -528,7 +911,7 @@ export default function MapHome() {
       enteringStatusUi &&
       leavingStatusUi ? (
         <div className="pointer-events-none absolute inset-x-4 bottom-4 flex justify-start">
-          <section className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-[28px] border border-white/70 bg-white/96 shadow-[0_24px_80px_rgba(15,23,42,0.18)] backdrop-blur-xl">
+          <section className="pointer-events-auto w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/70 bg-white/96 shadow-[0_24px_80px_rgba(15,23,42,0.18)] backdrop-blur-xl">
             <div className="border-b border-black/6 bg-[linear-gradient(135deg,rgba(14,165,233,0.08),rgba(37,99,235,0.02))] px-5 py-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -664,6 +1047,23 @@ export default function MapHome() {
                   </div>
                 </div>
 
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleUseSelectedCheckpointAsOrigin}
+                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-black/[0.04]"
+                  >
+                    استخدم كمن
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUseSelectedCheckpointAsDestination}
+                    className="rounded-full border border-black/10 bg-white px-3 py-2 text-sm font-medium text-black transition hover:bg-black/[0.04]"
+                  >
+                    استخدم كإلى
+                  </button>
+                </div>
+
                 <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -672,11 +1072,16 @@ export default function MapHome() {
                       </p>
                       <p className="mt-1 text-sm text-slate-700">
                         {isForecastLoading
-                          ? "Loading the checkpoint forecast and preparing the live override..."
+                          ? "Loading forecast horizons..."
                           : selectedCheckpointForecast
-                            ? `Forecast applied from ${selectedCheckpointForecast.request.statusType} status.`
+                            ? "Forecast applied for both directions."
                             : "Click a checkpoint to load the forecast timeline."}
                       </p>
+                      {selectedCheckpointForecast ? (
+                        <p className="mt-2 text-[11px] uppercase tracking-[0.18em] text-sky-800/55">
+                          Captured {formatForecastDateTime(selectedCheckpointForecast.request.asOf)}
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm">
@@ -710,70 +1115,126 @@ export default function MapHome() {
 
                   {isForecastLoading ? (
                     <div className="mt-3 rounded-xl border border-sky-100 bg-white px-3 py-3 text-sm text-slate-600">
-                      Forecasting the current checkpoint state now.
+                      Forecasting checkpoints by hour now.
                     </div>
                   ) : null}
 
                   {selectedCheckpointForecast ? (
                     <div className="mt-3 space-y-3">
-                      {selectedCheckpointForecast.predictions.length > 0 ? (
-                        selectedCheckpointForecast.predictions.map((item) => {
-                          const forecastStatusUi = getStatusUi(
-                            item.prediction.predictedStatus,
-                          );
+                      <div className="rounded-2xl border border-sky-100 bg-white px-3 py-3 text-sm text-slate-600">
+                        {forecastRows.length > 0
+                          ? `Forecast returned ${forecastRows.length} horizon${forecastRows.length === 1 ? "" : "s"} with entering and leaving predictions.`
+                          : "The forecast response did not include timeline items."}
+                      </div>
 
-                          return (
-                            <div
-                              key={`${item.horizon}-${item.targetDateTime ?? "pending"}`}
-                              className="rounded-2xl border border-white/80 bg-white px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.04)]"
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-black/40">
-                                    {getForecastHorizonLabel(item.horizon)}
-                                  </p>
-                                  <p className="mt-1 text-sm font-medium text-black">
-                                    {formatForecastDateTime(item.targetDateTime)}
-                                  </p>
+                      <div className="space-y-2">
+                        {forecastRows.length > 0 ? (
+                          forecastRows.map((row) => {
+                            const enteringUi = row.entering
+                              ? getStatusUi(row.entering.prediction.predictedStatus)
+                              : null;
+                            const leavingUi = row.leaving
+                              ? getStatusUi(row.leaving.prediction.predictedStatus)
+                              : null;
+
+                            return (
+                              <article
+                                key={row.horizon}
+                                className="rounded-[22px] border border-black/6 bg-white p-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.02)]"
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-800/55">
+                                      {getForecastHorizonLabel(row.horizon)}
+                                    </p>
+                                    <p className="mt-1 text-sm font-medium text-black">
+                                      {formatForecastDateTime(row.targetDateTime)}
+                                    </p>
+                                  </div>
+
+                                  <div className="rounded-full bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                                    {row.entering && row.leaving
+                                      ? "Both"
+                                      : row.entering
+                                        ? "Entering"
+                                        : row.leaving
+                                          ? "Leaving"
+                                          : "Pending"}
+                                  </div>
                                 </div>
 
-                                <div
-                                  className="rounded-full px-2.5 py-1 text-xs font-medium"
-                                  style={{
-                                    backgroundColor: forecastStatusUi.softBg,
-                                    color: forecastStatusUi.softText,
-                                  }}
-                                >
-                                  {forecastStatusUi.chipLabel}
-                                </div>
-                              </div>
+                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                  {(["entering", "leaving"] as const).map((direction) => {
+                                    const item = row[direction];
+                                    const ui =
+                                      direction === "entering"
+                                        ? enteringUi
+                                        : leavingUi;
 
-                              <div className="mt-3 flex flex-wrap items-center gap-2">
-                                <span
-                                  className="h-2.5 w-2.5 rounded-full"
-                                  style={{
-                                    backgroundColor: getStatusColor(
-                                      item.prediction.predictedStatus,
-                                    ),
-                                  }}
-                                />
-                                <p className="text-sm font-semibold text-black">
-                                  {item.prediction.predictedStatus}
-                                </p>
-                                <p className="text-xs text-black/45">
-                                  {formatForecastConfidence(
-                                    item.prediction.confidence,
-                                  )} confidence
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="rounded-xl border border-sky-100 bg-white px-3 py-3 text-sm text-slate-600">
-                          The forecast response did not include timeline items.
-                        </div>
-                      )}
+                                    return (
+                                      <div
+                                        key={direction}
+                                        className={`rounded-2xl border p-3 ${
+                                          direction === "entering"
+                                            ? "border-emerald-100 bg-emerald-50/50"
+                                            : "border-amber-100 bg-amber-50/50"
+                                        } ${item ? "" : "opacity-55"}`}
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/40">
+                                            {getDirectionalStatusLabel(direction)}
+                                          </p>
+                                          <span
+                                            className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium shadow-sm"
+                                            style={
+                                              item && ui
+                                                ? {
+                                                    color: ui.softText,
+                                                  }
+                                                : undefined
+                                            }
+                                          >
+                                            {item && ui ? ui.chipLabel : "Pending"}
+                                          </span>
+                                        </div>
+
+                                        {item ? (
+                                          <div className="mt-2 flex items-center gap-2">
+                                            <span
+                                              className="h-2.5 w-2.5 rounded-full"
+                                              style={{
+                                                backgroundColor: getStatusColor(
+                                                  item.prediction.predictedStatus,
+                                                ),
+                                              }}
+                                            />
+                                            <p className="text-sm font-semibold text-black">
+                                              {item.prediction.predictedStatus}
+                                            </p>
+                                            <p className="text-xs text-black/45">
+                                              {formatForecastConfidence(
+                                                item.prediction.confidence,
+                                              )} confidence
+                                            </p>
+                                          </div>
+                                        ) : (
+                                          <p className="mt-2 text-xs text-black/35">
+                                            No data
+                                          </p>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </article>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-2xl border border-dashed border-black/10 bg-white/70 px-3 py-3 text-sm text-slate-500">
+                            The forecast response did not include timeline items.
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : null}
                 </div>

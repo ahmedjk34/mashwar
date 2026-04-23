@@ -3,6 +3,7 @@ import { normalizeCheckpointRecord } from "@/lib/services/checkpoints";
 import type {
   CheckpointForecastApiEnvelope,
   CheckpointForecastPredictionItemDto,
+  CheckpointForecastPredictionsDto,
   CheckpointForecastResponseDataDto,
   CheckpointForecastStatusType,
   NormalizedCheckpointForecast,
@@ -66,6 +67,17 @@ function normalizeClassProbabilities(
 
     return accumulator;
   }, {});
+}
+
+function isPredictionGroup(
+  value: unknown,
+): value is CheckpointForecastPredictionsDto {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      ("entering" in value || "leaving" in value),
+  );
 }
 
 function extractForecastData(payload: unknown): CheckpointForecastResponseDataDto {
@@ -155,6 +167,34 @@ function normalizePredictionItem(
   };
 }
 
+function addTimelineItem(
+  target: NormalizedCheckpointForecast["predictions"],
+  item: NormalizedCheckpointForecastTimelineItem | null,
+): void {
+  if (!item) {
+    return;
+  }
+
+  const direction =
+    item.prediction.statusType === "leaving" ? "leaving" : "entering";
+  target[direction].push(item);
+}
+
+function normalizePredictionGroup(
+  items: CheckpointForecastPredictionItemDto[] | null | undefined,
+  fallbackStatusType: CheckpointForecastStatusType,
+): NormalizedCheckpointForecastTimelineItem[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items
+    .map((item, index) => normalizePredictionItem(item, index, fallbackStatusType))
+    .filter(
+      (item): item is NormalizedCheckpointForecastTimelineItem => item !== null,
+    );
+}
+
 export async function getCheckpointForecast(
   checkpointId: string | number,
   statusType: CheckpointForecastStatusType,
@@ -165,8 +205,8 @@ export async function getCheckpointForecast(
     throw new Error("Forecast requests require a numeric checkpoint id.");
   }
 
-  if (statusType !== "entering" && statusType !== "leaving") {
-    throw new Error("Forecast status_type must be entering or leaving.");
+  if (statusType !== "entering" && statusType !== "leaving" && statusType !== "both") {
+    throw new Error("Forecast status_type must be entering, leaving, or both.");
   }
 
   const endpoint = new URL(
@@ -201,21 +241,40 @@ export async function getCheckpointForecast(
     const requestStatusType = (
       firstNonEmptyString(data.request?.status_type, statusType) ?? statusType
     ) as CheckpointForecastStatusType | string;
-    const predictions = Array.isArray(data.predictions)
-      ? data.predictions
-          .map((item, index) =>
-            normalizePredictionItem(
-              item,
-              index,
-              requestStatusType === "leaving" ? "leaving" : "entering",
-            ),
-          )
-          .filter(
-            (
-              item,
-            ): item is NormalizedCheckpointForecastTimelineItem => item !== null,
-          )
-      : [];
+    const predictions = {
+      entering: [] as NormalizedCheckpointForecastTimelineItem[],
+      leaving: [] as NormalizedCheckpointForecastTimelineItem[],
+    };
+
+    if (Array.isArray(data.predictions)) {
+      const fallbackStatusType =
+        requestStatusType === "leaving" ? "leaving" : "entering";
+      const normalizedItems = normalizePredictionGroup(
+        data.predictions,
+        fallbackStatusType,
+      );
+
+      for (const item of normalizedItems) {
+        addTimelineItem(predictions, item);
+      }
+    } else if (isPredictionGroup(data.predictions)) {
+      const enteringItems = normalizePredictionGroup(
+        data.predictions.entering,
+        "entering",
+      );
+      const leavingItems = normalizePredictionGroup(
+        data.predictions.leaving,
+        "leaving",
+      );
+
+      for (const item of enteringItems) {
+        addTimelineItem(predictions, item);
+      }
+
+      for (const item of leavingItems) {
+        addTimelineItem(predictions, item);
+      }
+    }
 
     return {
       checkpoint,

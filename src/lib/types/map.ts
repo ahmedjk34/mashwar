@@ -46,7 +46,7 @@ export interface CheckpointApiEnvelope {
   data?: CheckpointApiRecord[] | null;
 }
 
-export type CheckpointForecastStatusType = "entering" | "leaving";
+export type CheckpointForecastStatusType = "entering" | "leaving" | "both";
 
 export type CheckpointForecastHorizon =
   | "plus_30m"
@@ -87,6 +87,11 @@ export interface CheckpointForecastPredictionItemDto {
   prediction?: CheckpointForecastPredictionDto | null;
 }
 
+export interface CheckpointForecastPredictionsDto {
+  entering?: CheckpointForecastPredictionItemDto[] | null;
+  leaving?: CheckpointForecastPredictionItemDto[] | null;
+}
+
 export interface CheckpointForecastRequestDto {
   checkpoint_id?: number | string | null;
   status_type?: string | null;
@@ -96,7 +101,7 @@ export interface CheckpointForecastRequestDto {
 export interface CheckpointForecastResponseDataDto {
   checkpoint?: CheckpointApiRecord | null;
   request?: CheckpointForecastRequestDto | null;
-  predictions?: CheckpointForecastPredictionItemDto[] | null;
+  predictions?: CheckpointForecastPredictionItemDto[] | CheckpointForecastPredictionsDto | null;
 }
 
 export interface CheckpointForecastApiEnvelope {
@@ -127,7 +132,10 @@ export interface NormalizedCheckpointForecast {
     statusType: CheckpointForecastStatusType | string;
     asOf: string | null;
   };
-  predictions: NormalizedCheckpointForecastTimelineItem[];
+  predictions: {
+    entering: NormalizedCheckpointForecastTimelineItem[];
+    leaving: NormalizedCheckpointForecastTimelineItem[];
+  };
 }
 
 export interface RoutePoint {
