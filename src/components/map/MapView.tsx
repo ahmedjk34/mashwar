@@ -14,6 +14,7 @@ import {
   CLUSTER_COLOR_EXPRESSION,
   CLUSTER_RADIUS_EXPRESSION,
   DEFAULT_ZOOM,
+  DEFAULT_MAP_GLYPHS_URL,
   getMapTileUrlTemplate,
   MAX_ZOOM,
   MIN_ZOOM,
@@ -106,6 +107,7 @@ export default function MapView({
         container: containerRef.current,
         style: {
           version: 8,
+          glyphs: DEFAULT_MAP_GLYPHS_URL,
           sources: {
             [TILE_SOURCE_ID]: {
               type: "raster",

@@ -11,10 +11,15 @@ This document captures the React Native reference behavior preserved in the Next
 - `react-native-inspo/utils/mapUtils.ts`
 - `react-native-inspo/docs/maps-backend-api.md`
 - `react-native-inspo/docs/maps-integration-guide.md`
+- `API_GUIDE.md`
 
 ## Data Shapes Preserved
 
 - Checkpoint map coordinates are normalized to GeoJSON-friendly `[lng, lat]`.
+- Backend checkpoint integration now follows `API_GUIDE.md`:
+  - `GET /checkpoints/current-status`
+  - success envelope `{ success: true, data: [...] }`
+  - checkpoint rows include `checkpoint`, `city`, `entering_status`, `leaving_status`, `alert_text`, `latitude`, `longitude`
 - Routing requests use:
   - `startPoint: { lat, lng }`
   - `endPoint: { lat, lng }`
@@ -67,3 +72,4 @@ This document captures the React Native reference behavior preserved in the Next
 
 - `react-native-inspo` is treated as reference-only.
 - The RN folder currently contains stale doc pointers and merge-conflict markers, so the web implementation trusts the concrete map utilities and map components first, then uses docs only where source files are missing.
+- The web checkpoint service now uses the backend contract in `API_GUIDE.md` as the source of truth for current checkpoint status data.

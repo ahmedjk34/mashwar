@@ -18,6 +18,8 @@ import type {
 
 export const DEFAULT_MAP_TILE_URL_TEMPLATE =
   "http://164.68.121.28/tiles/{z}/{x}/{y}.png";
+export const DEFAULT_MAP_GLYPHS_URL =
+  "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
 
 export const PALESTINE_CENTER: LngLatCoordinate = [35.1, 31.4];
 export const PALESTINE_BOUNDS: [LngLatCoordinate, LngLatCoordinate] = [
@@ -242,11 +244,15 @@ export function getStatusBorderColor(status: MapCheckpointStatus): string {
 export function buildCheckpointFeatureCollection(
   checkpoints: MapCheckpoint[],
 ): FeatureCollection<Point, CheckpointFeatureProperties> {
+  const mappableCheckpoints = checkpoints.filter(
+    (
+      checkpoint,
+    ): checkpoint is MapCheckpoint & { latitude: number; longitude: number } =>
+      hasValidCoordinates(checkpoint.latitude, checkpoint.longitude),
+  );
+
   const features: Array<Feature<Point, CheckpointFeatureProperties>> =
-    checkpoints
-      .filter((checkpoint) =>
-        hasValidCoordinates(checkpoint.latitude, checkpoint.longitude),
-      )
+    mappableCheckpoints
       .map((checkpoint) => {
         const worstStatus = getWorstStatus(
           checkpoint.enteringStatus,

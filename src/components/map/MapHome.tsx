@@ -17,6 +17,55 @@ const EMPTY_ROUTES: NormalizedRoutes = {
   alternativeRoutes: [],
 };
 
+function getStatusUi(status: ReturnType<typeof getWorstStatus>) {
+  switch (status) {
+    case "سالك":
+      return {
+        chipLabel: "Open",
+        sectionLabel: "Low risk",
+        accent: "#16a34a",
+        softBg: "#eaf8ef",
+        softText: "#166534",
+      };
+    case "أزمة متوسطة":
+      return {
+        chipLabel: "Slow",
+        sectionLabel: "Moderate delay",
+        accent: "#f59e0b",
+        softBg: "#fff5e8",
+        softText: "#b45309",
+      };
+    case "أزمة خانقة":
+      return {
+        chipLabel: "Heavy",
+        sectionLabel: "Severe delay",
+        accent: "#f97316",
+        softBg: "#fff0e8",
+        softText: "#c2410c",
+      };
+    case "مغلق":
+      return {
+        chipLabel: "Closed",
+        sectionLabel: "Blocked",
+        accent: "#ef4444",
+        softBg: "#fef0f0",
+        softText: "#b91c1c",
+      };
+    default:
+      return {
+        chipLabel: "Unknown",
+        sectionLabel: "Status unclear",
+        accent: "#94a3b8",
+        softBg: "#f1f5f9",
+        softText: "#475569",
+      };
+  }
+}
+
+function getDirectionalStatusLabel(direction: "entering" | "leaving") {
+  return direction === "entering" ? "Entering" : "Leaving";
+}
+
 export default function MapHome() {
   const [checkpoints, setCheckpoints] = useState<MapCheckpoint[]>([]);
   const [selectedCheckpoint, setSelectedCheckpoint] =
@@ -26,6 +75,7 @@ export default function MapHome() {
   const [isLoadingCheckpoints, setIsLoadingCheckpoints] = useState(true);
   const [routes, setRoutes] = useState<NormalizedRoutes>(EMPTY_ROUTES);
   const [isRoutePending, startRouteTransition] = useTransition();
+  const [checkpointReloadNonce, setCheckpointReloadNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,18 +109,45 @@ export default function MapHome() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [checkpointReloadNonce]);
 
-  const fallbackCheckpointCount = useMemo(() => {
-    return checkpoints.filter((checkpoint) => checkpoint.usesFallbackStatus)
-      .length;
+  const mappableCheckpointCount = useMemo(() => {
+    return checkpoints.filter(
+      (checkpoint) =>
+        typeof checkpoint.latitude === "number" &&
+        typeof checkpoint.longitude === "number",
+    ).length;
   }, [checkpoints]);
+
+  const checkpointsWithoutCoordinates = useMemo(() => {
+    return checkpoints.filter(
+      (checkpoint) =>
+        typeof checkpoint.latitude !== "number" ||
+        typeof checkpoint.longitude !== "number",
+    );
+  }, [checkpoints]);
+
+  const coordinateMissingExamples = useMemo(() => {
+    return checkpointsWithoutCoordinates
+      .slice(0, 3)
+      .map((checkpoint) => checkpoint.name)
+      .join(" • ");
+  }, [checkpointsWithoutCoordinates]);
 
   const selectedCheckpointStatus = selectedCheckpoint
     ? getWorstStatus(
         selectedCheckpoint.enteringStatus,
         selectedCheckpoint.leavingStatus,
       )
+    : null;
+  const selectedCheckpointStatusUi = selectedCheckpointStatus
+    ? getStatusUi(selectedCheckpointStatus)
+    : null;
+  const enteringStatusUi = selectedCheckpoint
+    ? getStatusUi(selectedCheckpoint.enteringStatus)
+    : null;
+  const leavingStatusUi = selectedCheckpoint
+    ? getStatusUi(selectedCheckpoint.leavingStatus)
     : null;
 
   function handleLoadDemoRoute(): void {
@@ -100,6 +177,10 @@ export default function MapHome() {
     });
   }
 
+  function handleRetryCheckpoints(): void {
+    setCheckpointReloadNonce((current) => current + 1);
+  }
+
   return (
     <main className="relative flex min-h-screen flex-1 overflow-hidden bg-[#f3f5ef]">
       <MapView
@@ -125,7 +206,7 @@ export default function MapHome() {
             </div>
 
             <div className="rounded-full bg-[#eef5e8] px-3 py-1 text-xs font-medium text-[#365314]">
-              {checkpoints.length} checkpoints
+              {checkpoints.length} current checkpoints
             </div>
           </div>
 
@@ -145,14 +226,51 @@ export default function MapHome() {
             >
               Clear route
             </button>
+            <button
+              type="button"
+              onClick={handleRetryCheckpoints}
+              className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-black/[0.04]"
+            >
+              Retry checkpoints
+            </button>
           </div>
 
           <div className="mt-4 space-y-2 text-sm text-black/70">
             <p>
               {isLoadingCheckpoints
-                ? "Loading checkpoints from the configured Geo API..."
-                : "Checkpoint dots are rendered through clustered GeoJSON layers."}
+                ? "Loading current checkpoints from the backend contract in API_GUIDE.md..."
+                : "Checkpoint dots are rendered through clustered GeoJSON layers using the backend's live entering/leaving statuses."}
             </p>
+
+            {!isLoadingCheckpoints ? (
+              <p>
+                {mappableCheckpointCount} of {checkpoints.length} checkpoints have
+                usable coordinates and can be drawn on the map.
+              </p>
+            ) : null}
+
+            {!isLoadingCheckpoints &&
+            checkpoints.length > 0 &&
+            mappableCheckpointCount === 0 ? (
+              <p className="rounded-xl border border-[#f59e0b]/30 bg-[#fff7ed] px-3 py-2 text-[#9a3412]">
+                The backend returned {checkpoints.length} checkpoint
+                {checkpoints.length === 1 ? "" : "s"}, but none include usable
+                latitude/longitude values, so the map has nothing to draw yet.
+                {coordinateMissingExamples
+                  ? ` Examples: ${coordinateMissingExamples}.`
+                  : ""}
+              </p>
+            ) : null}
+
+            {!isLoadingCheckpoints &&
+            checkpointsWithoutCoordinates.length > 0 &&
+            mappableCheckpointCount > 0 ? (
+              <p className="text-[#92400e]">
+                {checkpointsWithoutCoordinates.length} checkpoint
+                {checkpointsWithoutCoordinates.length === 1 ? "" : "s"} were
+                skipped because they are missing coordinates.
+              </p>
+            ) : null}
 
             {routes.mainRoute ? (
               <p>
@@ -163,15 +281,6 @@ export default function MapHome() {
               <p>No route loaded yet. Use the demo trigger to test line rendering.</p>
             )}
 
-            {fallbackCheckpointCount > 0 ? (
-              <p className="text-[#92400e]">
-                {fallbackCheckpointCount} checkpoint
-                {fallbackCheckpointCount === 1 ? "" : "s"} currently use the
-                temporary status-color fallback because the documented endpoint
-                only guarantees coordinates.
-              </p>
-            ) : null}
-
             {checkpointError ? (
               <p className="text-[#b91c1c]">{checkpointError}</p>
             ) : null}
@@ -179,49 +288,154 @@ export default function MapHome() {
             {routeError ? <p className="text-[#b91c1c]">{routeError}</p> : null}
           </div>
         </section>
+      </div>
 
-        {selectedCheckpoint && selectedCheckpointStatus ? (
-          <section className="pointer-events-auto rounded-2xl border border-black/10 bg-white/94 p-4 shadow-[0_16px_44px_rgba(15,23,42,0.14)] backdrop-blur-md">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-black/45">
-                  Selected checkpoint
-                </p>
-                <h2 className="mt-1 text-base font-semibold text-black">
-                  {selectedCheckpoint.name}
-                </h2>
-              </div>
+      {selectedCheckpoint &&
+      selectedCheckpointStatus &&
+      selectedCheckpointStatusUi &&
+      enteringStatusUi &&
+      leavingStatusUi ? (
+        <div className="pointer-events-none absolute inset-x-4 bottom-4 flex justify-start">
+          <section className="pointer-events-auto w-full max-w-sm overflow-hidden rounded-[28px] border border-white/70 bg-white/96 shadow-[0_24px_80px_rgba(15,23,42,0.18)] backdrop-blur-xl">
+            <div className="border-b border-black/6 bg-[linear-gradient(135deg,rgba(14,165,233,0.08),rgba(37,99,235,0.02))] px-5 py-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-black/40">
+                    Checkpoint
+                  </p>
+                  <h2 className="mt-2 truncate text-lg font-semibold text-black">
+                    {selectedCheckpoint.name}
+                  </h2>
+                </div>
 
-              <div className="flex items-center gap-2 rounded-full border border-black/8 bg-black/[0.03] px-3 py-1 text-sm font-medium text-black">
-                <span
-                  className="h-2.5 w-2.5 rounded-full"
+                <div
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]"
                   style={{
-                    backgroundColor: getStatusColor(selectedCheckpointStatus),
+                    backgroundColor: selectedCheckpointStatusUi.softBg,
+                    color: selectedCheckpointStatusUi.softText,
                   }}
-                />
-                {selectedCheckpointStatus}
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{
+                      backgroundColor: selectedCheckpointStatusUi.accent,
+                    }}
+                  />
+                  {selectedCheckpointStatusUi.chipLabel}
+                </div>
               </div>
             </div>
 
-            <div className="mt-3 space-y-1 text-sm text-black/70">
-              <p>
-                Location: {selectedCheckpoint.latitude.toFixed(5)},{" "}
-                {selectedCheckpoint.longitude.toFixed(5)}
-              </p>
-              <p>
-                Status model: entering {selectedCheckpoint.enteringStatus} •
-                leaving {selectedCheckpoint.leavingStatus}
-              </p>
-              {selectedCheckpoint.usesFallbackStatus ? (
-                <p className="text-[#92400e]">
-                  Temporary dev fallback status. Wire the real status-bearing
-                  checkpoint endpoint here when available.
-                </p>
-              ) : null}
+            <div className="px-5 py-5">
+              <div className="rounded-2xl border border-black/6 bg-[#f8fafc] p-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+                    style={{
+                      backgroundColor: `${getStatusColor(selectedCheckpointStatus)}18`,
+                    }}
+                  >
+                    <span
+                      className="h-3 w-3 rounded-full"
+                      style={{
+                        backgroundColor: getStatusColor(selectedCheckpointStatus),
+                      }}
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-black/40">
+                      Checkpoint overview
+                    </p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-base font-semibold text-black">
+                        {selectedCheckpointStatus}
+                      </span>
+                      <span
+                        className="rounded-full px-2.5 py-1 text-xs font-medium"
+                        style={{
+                          backgroundColor: selectedCheckpointStatusUi.softBg,
+                          color: selectedCheckpointStatusUi.softText,
+                        }}
+                      >
+                        {selectedCheckpointStatusUi.sectionLabel}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl bg-white px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)]">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{
+                            backgroundColor: getStatusColor(
+                              selectedCheckpoint.enteringStatus,
+                            ),
+                          }}
+                        />
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-black/40">
+                            {getDirectionalStatusLabel("entering")}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-black">
+                            {selectedCheckpoint.enteringStatus}
+                          </p>
+                        </div>
+                      </div>
+
+                      <span
+                        className="rounded-full px-2.5 py-1 text-xs font-medium"
+                        style={{
+                          backgroundColor: enteringStatusUi.softBg,
+                          color: enteringStatusUi.softText,
+                        }}
+                      >
+                        {enteringStatusUi.chipLabel}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-white px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)]">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{
+                            backgroundColor: getStatusColor(
+                              selectedCheckpoint.leavingStatus,
+                            ),
+                          }}
+                        />
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-black/40">
+                            {getDirectionalStatusLabel("leaving")}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-black">
+                            {selectedCheckpoint.leavingStatus}
+                          </p>
+                        </div>
+                      </div>
+
+                      <span
+                        className="rounded-full px-2.5 py-1 text-xs font-medium"
+                        style={{
+                          backgroundColor: leavingStatusUi.softBg,
+                          color: leavingStatusUi.softText,
+                        }}
+                      >
+                        {leavingStatusUi.chipLabel}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </main>
   );
 }

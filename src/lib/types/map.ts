@@ -22,10 +22,12 @@ export interface CheckpointApiRecord {
   name?: string | null;
   nameAr?: string | null;
   checkpoint?: string | null;
+  city?: string | null;
   lat?: number | string | null;
   lng?: number | string | null;
   latitude?: number | string | null;
   longitude?: number | string | null;
+  alert_text?: string | null;
   status?: string | null;
   current_status?: string | null;
   currentStatus?: string | null;
@@ -33,17 +35,28 @@ export interface CheckpointApiRecord {
   enteringStatus?: string | null;
   leaving_status?: string | null;
   leavingStatus?: string | null;
+  entering_status_last_updated?: string | null;
+  enteringStatusLastUpdated?: string | null;
+  leaving_status_last_updated?: string | null;
+  leavingStatusLastUpdated?: string | null;
+}
+
+export interface CheckpointApiEnvelope {
+  success?: boolean;
+  data?: CheckpointApiRecord[] | null;
 }
 
 export interface MapCheckpoint {
   id: string;
   name: string;
-  latitude: number;
-  longitude: number;
+  city: string | null;
+  latitude: number | null;
+  longitude: number | null;
   enteringStatus: MapCheckpointStatus;
   leavingStatus: MapCheckpointStatus;
-  usesFallbackStatus: boolean;
-  rawStatus: string | null;
+  enteringStatusLastUpdated: string | null;
+  leavingStatusLastUpdated: string | null;
+  alertText: string | null;
 }
 
 export interface RoutePoint {

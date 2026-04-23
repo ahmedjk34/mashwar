@@ -3,23 +3,16 @@ import {
   normalizeCheckpointStatus,
 } from "@/lib/config/map";
 import type {
+  CheckpointApiEnvelope,
   CheckpointApiRecord,
   MapCheckpoint,
-  MapCheckpointStatus,
 } from "@/lib/types/map";
-
-const DEV_FALLBACK_STATUS_SEQUENCE: MapCheckpointStatus[] = [
-  "سالك",
-  "أزمة متوسطة",
-  "أزمة خانقة",
-  "مغلق",
-];
 
 function getGeoApiBaseUrl(): string {
   const baseUrl = process.env.NEXT_PUBLIC_GEO_API_URL?.trim();
   if (!baseUrl) {
     throw new Error(
-      "NEXT_PUBLIC_GEO_API_URL is required to fetch checkpoint coordinates.",
+      "NEXT_PUBLIC_GEO_API_URL is required to fetch current checkpoints.",
     );
   }
 
@@ -37,18 +30,6 @@ function toNumber(value: number | string | null | undefined): number | null {
   }
 
   return null;
-}
-
-function getStableFallbackStatus(seed: string): MapCheckpointStatus {
-  let hash = 0;
-
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = (hash * 31 + seed.charCodeAt(index)) | 0;
-  }
-
-  return DEV_FALLBACK_STATUS_SEQUENCE[
-    Math.abs(hash) % DEV_FALLBACK_STATUS_SEQUENCE.length
-  ];
 }
 
 function firstNonEmptyString(
@@ -70,16 +51,9 @@ function firstNonEmptyString(
 function normalizeCheckpointRecord(
   record: CheckpointApiRecord,
   index: number,
-): MapCheckpoint | null {
+): MapCheckpoint {
   const latitude = toNumber(record.lat ?? record.latitude);
   const longitude = toNumber(record.lng ?? record.longitude);
-
-  if (!hasValidCoordinates(latitude, longitude)) {
-    return null;
-  }
-
-  const normalizedLatitude = latitude as number;
-  const normalizedLongitude = longitude as number;
 
   const name =
     firstNonEmptyString(record.nameAr, record.name, record.checkpoint) ??
@@ -93,25 +67,6 @@ function normalizeCheckpointRecord(
     record.currentStatus,
     record.status,
   );
-  const hasDirectionalStatuses =
-    Boolean(record.entering_status) || Boolean(record.leaving_status);
-  const hasCurrentStatus = Boolean(currentStatus);
-
-  if (!hasDirectionalStatuses && !hasCurrentStatus) {
-    const fallbackStatus = getStableFallbackStatus(`${id}:${name}`);
-
-    return {
-      id,
-      name,
-      latitude: normalizedLatitude,
-      longitude: normalizedLongitude,
-      enteringStatus: fallbackStatus,
-      leavingStatus: fallbackStatus,
-      usesFallbackStatus: true,
-      rawStatus: null,
-    };
-  }
-
   const normalizedCurrentStatus = normalizeCheckpointStatus(currentStatus);
   const enteringStatus = normalizeCheckpointStatus(
     record.entering_status ?? record.enteringStatus ?? currentStatus,
@@ -123,17 +78,59 @@ function normalizeCheckpointRecord(
   return {
     id,
     name,
-    latitude: normalizedLatitude,
-    longitude: normalizedLongitude,
-    enteringStatus: hasDirectionalStatuses ? enteringStatus : normalizedCurrentStatus,
-    leavingStatus: hasDirectionalStatuses ? leavingStatus : normalizedCurrentStatus,
-    usesFallbackStatus: false,
-    rawStatus: currentStatus,
+    city: firstNonEmptyString(record.city),
+    latitude: hasValidCoordinates(latitude, longitude) ? latitude : null,
+    longitude: hasValidCoordinates(latitude, longitude) ? longitude : null,
+    enteringStatus: enteringStatus ?? normalizedCurrentStatus,
+    leavingStatus: leavingStatus ?? normalizedCurrentStatus,
+    enteringStatusLastUpdated: firstNonEmptyString(
+      record.entering_status_last_updated,
+      record.enteringStatusLastUpdated,
+    ),
+    leavingStatusLastUpdated: firstNonEmptyString(
+      record.leaving_status_last_updated,
+      record.leavingStatusLastUpdated,
+    ),
+    alertText: firstNonEmptyString(record.alert_text),
   };
 }
 
+async function getErrorMessage(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as { detail?: string };
+    if (typeof payload?.detail === "string" && payload.detail.trim()) {
+      if (response.status === 503) {
+        return "Checkpoint service is currently unavailable.";
+      }
+
+      if (response.status === 502) {
+        return "Unable to fetch current checkpoints right now.";
+      }
+
+      return payload.detail;
+    }
+  } catch {
+    return `Checkpoint request failed with status ${response.status}.`;
+  }
+
+  return `Checkpoint request failed with status ${response.status}.`;
+}
+
+function extractCheckpointRecords(payload: unknown): CheckpointApiRecord[] {
+  if (Array.isArray(payload)) {
+    return payload as CheckpointApiRecord[];
+  }
+
+  const envelope = payload as CheckpointApiEnvelope | null;
+  if (envelope?.success === true && Array.isArray(envelope.data)) {
+    return envelope.data;
+  }
+
+  throw new Error("Invalid checkpoints response.");
+}
+
 export async function getCheckpoints(): Promise<MapCheckpoint[]> {
-  const endpoint = `${getGeoApiBaseUrl()}/api/checkpoints/coordinates`;
+  const endpoint = `${getGeoApiBaseUrl()}/checkpoints/current-status`;
 
   try {
     const response = await fetch(endpoint, {
@@ -145,23 +142,22 @@ export async function getCheckpoints(): Promise<MapCheckpoint[]> {
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Checkpoint request failed with status ${response.status}.`,
-      );
+      throw new Error(await getErrorMessage(response));
     }
 
     const payload: unknown = await response.json();
-    if (!Array.isArray(payload)) {
-      throw new Error("Checkpoint API must return an array.");
-    }
+    const records = extractCheckpointRecords(payload);
 
-    return payload
+    return records
       .map((record, index) =>
         normalizeCheckpointRecord(record as CheckpointApiRecord, index),
-      )
-      .filter((checkpoint): checkpoint is MapCheckpoint => checkpoint !== null);
+      );
   } catch (error) {
     if (error instanceof Error) {
+      if (error.name === "TypeError") {
+        throw new Error("Unable to reach the checkpoint service.");
+      }
+
       throw error;
     }
 
