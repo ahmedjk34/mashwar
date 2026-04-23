@@ -53,6 +53,9 @@ export const ROUTE_ALT_1_SOURCE_ID = "route-alt-1-source";
 export const ROUTE_ALT_1_LAYER_ID = "route-alt-1-layer";
 export const ROUTE_ALT_2_SOURCE_ID = "route-alt-2-source";
 export const ROUTE_ALT_2_LAYER_ID = "route-alt-2-layer";
+export const USER_LOCATION_SOURCE_ID = "user-location-source";
+export const USER_LOCATION_LAYER_ID = "user-location-layer";
+export const USER_LOCATION_ACCURACY_LAYER_ID = "user-location-accuracy-layer";
 
 export const ROUTE_STYLE = {
   MAIN_COLOR: "#3b82f6",
@@ -61,6 +64,13 @@ export const ROUTE_STYLE = {
   ALT_WIDTH: 3,
   MAIN_OPACITY: 0.9,
   ALT_OPACITY: 0.5,
+} as const;
+
+export const USER_LOCATION_STYLE = {
+  DOT_COLOR: "#2563eb",
+  DOT_BORDER_COLOR: "#ffffff",
+  ACCURACY_FILL: "#3b82f633",
+  ACCURACY_BORDER: "#3b82f680",
 } as const;
 
 export const STATUS_COLORS: Record<MapCheckpointStatus, string> = {

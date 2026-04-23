@@ -253,6 +253,69 @@ The backend returns only these columns:
 }
 ```
 
+### `status_type=both` Success Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "checkpoint": {
+      "id": 359,
+      "checkpoint": "مسافر يطّا والبادية",
+      "city": "الخليل",
+      "entering_status": "سالك",
+      "leaving_status": "سالك",
+      "entering_status_last_updated": "2026-04-22T19:24:51",
+      "leaving_status_last_updated": "2026-04-22T19:24:51",
+      "alert_text": null,
+      "latitude": null,
+      "longitude": null
+    },
+    "request": {
+      "checkpoint_id": 359,
+      "status_type": "both",
+      "as_of": "2026-04-23T08:00:00Z"
+    },
+    "predictions": {
+      "entering": [
+        {
+          "horizon": "plus_30m",
+          "target_datetime": "2026-04-23T08:30:00Z",
+          "prediction": {
+            "target_datetime": "2026-04-23T08:30:00Z",
+            "status_type": "entering",
+            "predicted_status": "سالك",
+            "confidence": 0.6801,
+            "class_probabilities": {
+              "سالك": 0.6801,
+              "أزمة": 0.2022,
+              "مغلق": 0.1177
+            }
+          }
+        }
+      ],
+      "leaving": [
+        {
+          "horizon": "plus_30m",
+          "target_datetime": "2026-04-23T08:30:00Z",
+          "prediction": {
+            "target_datetime": "2026-04-23T08:30:00Z",
+            "status_type": "leaving",
+            "predicted_status": "سالك",
+            "confidence": 0.6123,
+            "class_probabilities": {
+              "سالك": 0.6123,
+              "أزمة": 0.2451,
+              "مغلق": 0.1426
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
 ### Status Codes
 
 - `200 OK`
@@ -520,13 +583,20 @@ This endpoint is designed for the frontend to show:
 - path param:
   - `checkpoint_id` integer
 - query params:
-  - `status_type` required, canonical values: `entering` or `leaving`
+  - `status_type` required, canonical values: `entering`, `leaving`, or `both`
+  - `both` is forecast-only and means the backend will run both directions for each horizon
   - `as_of` optional ISO 8601 datetime
 
 ### Example
 
 ```text
 GET /checkpoints/359/forecast?status_type=entering&as_of=2026-04-23T08:00:00Z
+```
+
+For both directions:
+
+```text
+GET /checkpoints/359/forecast?status_type=both&as_of=2026-04-23T08:00:00Z
 ```
 
 If `as_of` is omitted, the backend uses the current UTC time.
@@ -539,6 +609,11 @@ The backend computes the following prediction targets in UTC:
 - `+1 hour`
 - `+2 hours`
 - `next day at 08:00`
+
+When `status_type=both`, the backend runs 8 predictions total:
+
+- 4 horizons for `entering`
+- 4 horizons for `leaving`
 
 ### Success Response
 
@@ -641,6 +716,7 @@ The backend computes the following prediction targets in UTC:
 
 - render the current `checkpoint` object as the live status panel
 - render `predictions` as a timeline or cards
+- if `status_type=both`, render `predictions.entering` and `predictions.leaving` separately
 - do not treat missing `alert_text` as an error
 - if the response is `404`, show checkpoint-not-found
 - if the response is `422`, show invalid filter/selection
@@ -809,7 +885,8 @@ The model is used via the Python function:
 - `checkpoint_id`
   - numeric checkpoint ID from the live Supabase table
 - `status_type`
-  - canonical values: `entering` or `leaving`
+  - canonical values: `entering` or `leaving` for direct model inference
+  - forecast requests also allow `both`, which runs both directions for every forecast horizon
 - `target_datetime`
   - exact ISO 8601 datetime
   - timezone-aware is preferred

@@ -24,6 +24,7 @@ import type {
   MapCheckpoint,
   NormalizedCheckpointForecast,
   NormalizedRoutes,
+  UserLocation,
 } from "@/lib/types/map";
 
 const EMPTY_ROUTES: NormalizedRoutes = {
@@ -148,6 +149,9 @@ export default function MapHome() {
   const [checkpointError, setCheckpointError] = useState<string | null>(null);
   const [forecastError, setForecastError] = useState<string | null>(null);
   const [isForecastLoading, setIsForecastLoading] = useState(false);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [isSyncingLocation, setIsSyncingLocation] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [isLoadingCheckpoints, setIsLoadingCheckpoints] = useState(true);
   const [routes, setRoutes] = useState<NormalizedRoutes>(EMPTY_ROUTES);
@@ -260,6 +264,53 @@ export default function MapHome() {
     setCheckpointReloadNonce((current) => current + 1);
   }
 
+  const handleSyncLocation = useCallback(() => {
+    setLocationError(null);
+
+    if (!navigator.geolocation) {
+      setLocationError("Location access is not supported in this browser.");
+      return;
+    }
+
+    setIsSyncingLocation(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        });
+        setIsSyncingLocation(false);
+      },
+      (error) => {
+        setIsSyncingLocation(false);
+
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationError("Location permission was denied.");
+          return;
+        }
+
+        if (error.code === error.POSITION_UNAVAILABLE) {
+          setLocationError("Your current location could not be determined.");
+          return;
+        }
+
+        if (error.code === error.TIMEOUT) {
+          setLocationError("Location request timed out. Please try again.");
+          return;
+        }
+
+        setLocationError("Unable to sync your location right now.");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 15000,
+      },
+    );
+  }, []);
+
   const handleCheckpointSelect = useCallback(
     (nextCheckpoint: MapCheckpoint | null) => {
       selectedCheckpointIdRef.current = nextCheckpoint?.id ?? null;
@@ -331,6 +382,7 @@ export default function MapHome() {
       <MapView
         checkpoints={checkpoints}
         routes={routes}
+        userLocation={userLocation}
         onCheckpointSelect={handleCheckpointSelect}
       />
 
@@ -385,6 +437,14 @@ export default function MapHome() {
             >
               Retry checkpoints
             </button>
+            <button
+              type="button"
+              onClick={handleSyncLocation}
+              disabled={isSyncingLocation}
+              className="rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-900 transition hover:bg-sky-100 disabled:cursor-wait disabled:opacity-60"
+            >
+              {isSyncingLocation ? "Syncing location..." : "Sync location"}
+            </button>
           </div>
 
           <div className="mt-4 space-y-2 text-sm text-black/70">
@@ -438,6 +498,21 @@ export default function MapHome() {
             ) : null}
 
             {routeError ? <p className="text-[#b91c1c]">{routeError}</p> : null}
+
+            {userLocation ? (
+              <p className="text-[#0f766e]">
+                Location synced at {userLocation.lat.toFixed(5)},{" "}
+                {userLocation.lng.toFixed(5)}. The map will zoom there.
+              </p>
+            ) : (
+              <p className="text-black/55">
+                Sync your location to center the map on your current position.
+              </p>
+            )}
+
+            {locationError ? (
+              <p className="text-[#b91c1c]">{locationError}</p>
+            ) : null}
           </div>
         </section>
       </div>

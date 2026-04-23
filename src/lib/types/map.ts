@@ -67,6 +67,12 @@ export interface MapCheckpoint {
   alertText: string | null;
 }
 
+export interface UserLocation {
+  lat: number;
+  lng: number;
+  accuracy?: number | null;
+}
+
 export interface CheckpointForecastPredictionDto {
   target_datetime?: string | null;
   status_type?: string | null;

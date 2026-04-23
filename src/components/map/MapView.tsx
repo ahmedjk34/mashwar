@@ -27,6 +27,10 @@ import {
   ROUTE_MAIN_LAYER_ID,
   ROUTE_MAIN_SOURCE_ID,
   ROUTE_STYLE,
+  USER_LOCATION_ACCURACY_LAYER_ID,
+  USER_LOCATION_LAYER_ID,
+  USER_LOCATION_SOURCE_ID,
+  USER_LOCATION_STYLE,
   TILE_LAYER_ID,
   TILE_SOURCE_ID,
   transformRouteToGeoJSON,
@@ -35,11 +39,13 @@ import {
 import type {
   MapCheckpoint,
   NormalizedRoutes,
+  UserLocation,
 } from "@/lib/types/map";
 
 interface MapViewProps {
   checkpoints: MapCheckpoint[];
   routes: NormalizedRoutes;
+  userLocation?: UserLocation | null;
   onCheckpointSelect?: (checkpoint: MapCheckpoint | null) => void;
 }
 
@@ -50,11 +56,14 @@ function cleanupRouteLayers(map: MapLibreMap): void {
     ROUTE_MAIN_LAYER_ID,
     ROUTE_ALT_1_LAYER_ID,
     ROUTE_ALT_2_LAYER_ID,
+    USER_LOCATION_ACCURACY_LAYER_ID,
+    USER_LOCATION_LAYER_ID,
   ];
   const sourceIds = [
     ROUTE_MAIN_SOURCE_ID,
     ROUTE_ALT_1_SOURCE_ID,
     ROUTE_ALT_2_SOURCE_ID,
+    USER_LOCATION_SOURCE_ID,
   ];
 
   layerIds.forEach((id) => {
@@ -73,6 +82,7 @@ function cleanupRouteLayers(map: MapLibreMap): void {
 export default function MapView({
   checkpoints,
   routes,
+  userLocation,
   onCheckpointSelect,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -222,6 +232,99 @@ export default function MapView({
 
     existingSource.setData(checkpointFeatureCollection);
   }, [checkpointFeatureCollection, mapLoaded]);
+
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded) {
+      return;
+    }
+
+    const map = mapRef.current;
+    const existingSource = map.getSource(
+      USER_LOCATION_SOURCE_ID,
+    ) as GeoJSONSource | undefined;
+
+    if (!userLocation) {
+      if (existingSource) {
+        existingSource.setData({
+          type: "FeatureCollection",
+          features: [],
+        });
+      }
+      return;
+    }
+
+    const userLocationFeatureCollection = {
+      type: "FeatureCollection" as const,
+      features: [
+        {
+          type: "Feature" as const,
+          geometry: {
+            type: "Point" as const,
+            coordinates: [userLocation.lng, userLocation.lat],
+          },
+          properties: {
+            accuracy: userLocation.accuracy ?? null,
+          },
+        },
+      ],
+    };
+
+    if (!existingSource) {
+      map.addSource(USER_LOCATION_SOURCE_ID, {
+        type: "geojson",
+        data: userLocationFeatureCollection,
+      });
+
+      map.addLayer({
+        id: USER_LOCATION_ACCURACY_LAYER_ID,
+        type: "circle",
+        source: USER_LOCATION_SOURCE_ID,
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["coalesce", ["get", "accuracy"], 0],
+            0,
+            28,
+            50,
+            40,
+            150,
+            55,
+          ] as any,
+          "circle-color": USER_LOCATION_STYLE.ACCURACY_FILL,
+          "circle-stroke-color": USER_LOCATION_STYLE.ACCURACY_BORDER,
+          "circle-stroke-width": 1,
+        },
+      });
+
+      map.addLayer({
+        id: USER_LOCATION_LAYER_ID,
+        type: "circle",
+        source: USER_LOCATION_SOURCE_ID,
+        paint: {
+          "circle-radius": 7,
+          "circle-color": USER_LOCATION_STYLE.DOT_COLOR,
+          "circle-stroke-color": USER_LOCATION_STYLE.DOT_BORDER_COLOR,
+          "circle-stroke-width": 3,
+        },
+      });
+      return;
+    }
+
+    existingSource.setData(userLocationFeatureCollection);
+  }, [mapLoaded, userLocation]);
+
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded || !userLocation) {
+      return;
+    }
+
+    mapRef.current.easeTo({
+      center: [userLocation.lng, userLocation.lat],
+      zoom: 14,
+      duration: 900,
+    });
+  }, [mapLoaded, userLocation]);
 
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) {
