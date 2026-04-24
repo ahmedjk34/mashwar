@@ -1,13 +1,18 @@
 import { normalizeCheckpointStatus } from "@/lib/config/map";
 import { normalizeCheckpointRecord } from "@/lib/services/checkpoints";
+import { logRoutingDebug } from "@/lib/utils/routing-debug";
+import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 import type {
   CheckpointForecastApiEnvelope,
   CheckpointForecastPredictionItemDto,
   CheckpointForecastPredictionsDto,
   CheckpointForecastResponseDataDto,
   CheckpointForecastStatusType,
+  CheckpointPredictionApiEnvelope,
+  CheckpointPredictionResponseDataDto,
   NormalizedCheckpointForecast,
   NormalizedCheckpointForecastTimelineItem,
+  NormalizedCheckpointPrediction,
 } from "@/lib/types/map";
 
 function getGeoApiBaseUrl(): string {
@@ -101,6 +106,27 @@ function extractForecastData(payload: unknown): CheckpointForecastResponseDataDt
   }
 
   throw new Error("Invalid forecast response.");
+}
+
+function extractPredictionData(
+  payload: unknown,
+): CheckpointPredictionResponseDataDto {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid prediction response.");
+  }
+
+  const envelope = payload as CheckpointPredictionApiEnvelope &
+    CheckpointPredictionResponseDataDto;
+
+  if (envelope.success === true && envelope.data) {
+    return envelope.data;
+  }
+
+  if ("checkpoint" in envelope || "request" in envelope || "prediction" in envelope) {
+    return envelope;
+  }
+
+  throw new Error("Invalid prediction response.");
 }
 
 async function getErrorMessage(response: Response): Promise<string> {
@@ -218,6 +244,13 @@ export async function getCheckpointForecast(
   }
 
   try {
+    logRoutingDebug("checkpoint forecast request payload", {
+      endpoint: endpoint.toString(),
+      checkpointId: numericCheckpointId,
+      statusType,
+      asOf: typeof asOf === "string" ? asOf.trim() : undefined,
+    });
+
     const response = await fetch(endpoint, {
       method: "GET",
       headers: {
@@ -231,6 +264,12 @@ export async function getCheckpointForecast(
     }
 
     const payload: unknown = await response.json();
+    logRoutingDebug("checkpoint forecast raw response payload", {
+      endpoint: endpoint.toString(),
+      status: response.status,
+      payload,
+    });
+
     const data = extractForecastData(payload);
 
     if (!data.checkpoint) {
@@ -285,6 +324,9 @@ export async function getCheckpointForecast(
         ) ?? String(numericCheckpointId),
         statusType: requestStatusType,
         asOf: firstNonEmptyString(data.request?.as_of, asOf),
+        asOfPalestine: formatDateTimeInPalestine(
+          firstNonEmptyString(data.request?.as_of, asOf),
+        ),
       },
       predictions,
     };
@@ -298,5 +340,116 @@ export async function getCheckpointForecast(
     }
 
     throw new Error("Unable to load checkpoint forecast data.");
+  }
+}
+
+export async function getCheckpointPrediction(
+  checkpointId: string | number,
+  targetDateTime: string,
+  statusType: "entering" | "leaving",
+): Promise<NormalizedCheckpointPrediction> {
+  const numericCheckpointId = Number(checkpointId);
+  if (!Number.isFinite(numericCheckpointId)) {
+    throw new Error("Prediction requests require a numeric checkpoint id.");
+  }
+
+  if (statusType !== "entering" && statusType !== "leaving") {
+    throw new Error("Prediction status_type must be entering or leaving.");
+  }
+
+  const trimmedTargetDateTime = targetDateTime.trim();
+  if (!trimmedTargetDateTime) {
+    throw new Error("Prediction requests require a target datetime.");
+  }
+
+  const endpoint = `${getGeoApiBaseUrl()}/checkpoints/${numericCheckpointId}/predict`;
+  try {
+    logRoutingDebug("checkpoint prediction request payload", {
+      endpoint,
+      checkpointId: numericCheckpointId,
+      targetDateTime: trimmedTargetDateTime,
+      targetDateTimePalestine: formatDateTimeInPalestine(trimmedTargetDateTime),
+      statusType,
+    });
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        target_datetime: trimmedTargetDateTime,
+        status_type: statusType,
+      }),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error(await getErrorMessage(response));
+    }
+
+    const payload: unknown = await response.json();
+    logRoutingDebug("checkpoint prediction raw response payload", {
+      endpoint,
+      status: response.status,
+      payload,
+    });
+
+    const data = extractPredictionData(payload);
+
+    if (!data.checkpoint || !data.prediction) {
+      throw new Error("Prediction response did not include a checkpoint prediction.");
+    }
+
+    const checkpoint = normalizeCheckpointRecord(data.checkpoint, 0);
+    const requestStatusType = (
+      firstNonEmptyString(data.request?.status_type, statusType) ?? statusType
+    ) as "entering" | "leaving" | string;
+    const normalizedPredictionItem = normalizePredictionItem(
+      {
+        horizon: "exact_time",
+        target_datetime: firstNonEmptyString(
+          data.request?.target_datetime,
+          trimmedTargetDateTime,
+        ),
+        prediction: data.prediction,
+      },
+      0,
+      requestStatusType === "leaving" ? "leaving" : "entering",
+    );
+
+    if (!normalizedPredictionItem) {
+      throw new Error("Prediction response could not be normalized.");
+    }
+
+    return {
+      checkpoint,
+      request: {
+        checkpointId: firstNonEmptyString(
+          data.request?.checkpoint_id,
+          numericCheckpointId,
+        ) ?? String(numericCheckpointId),
+        targetDateTime: firstNonEmptyString(
+          data.request?.target_datetime,
+          trimmedTargetDateTime,
+        ),
+        targetDateTimePalestine: formatDateTimeInPalestine(
+          firstNonEmptyString(data.request?.target_datetime, trimmedTargetDateTime),
+        ),
+        statusType: requestStatusType,
+      },
+      prediction: normalizedPredictionItem.prediction,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.name === "TypeError") {
+        throw new Error("Unable to reach the prediction service.");
+      }
+
+      throw error;
+    }
+
+    throw new Error("Unable to load checkpoint prediction data.");
   }
 }

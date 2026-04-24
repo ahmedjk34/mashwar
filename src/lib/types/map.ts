@@ -131,11 +131,40 @@ export interface NormalizedCheckpointForecast {
     checkpointId: string;
     statusType: CheckpointForecastStatusType | string;
     asOf: string | null;
+    asOfPalestine?: string | null;
   };
   predictions: {
     entering: NormalizedCheckpointForecastTimelineItem[];
     leaving: NormalizedCheckpointForecastTimelineItem[];
   };
+}
+
+export interface CheckpointPredictionRequestDto {
+  checkpoint_id?: number | string | null;
+  target_datetime?: string | null;
+  status_type?: string | null;
+}
+
+export interface CheckpointPredictionResponseDataDto {
+  checkpoint?: CheckpointApiRecord | null;
+  request?: CheckpointPredictionRequestDto | null;
+  prediction?: CheckpointForecastPredictionDto | null;
+}
+
+export interface CheckpointPredictionApiEnvelope {
+  success?: boolean;
+  data?: CheckpointPredictionResponseDataDto | null;
+}
+
+export interface NormalizedCheckpointPrediction {
+  checkpoint: MapCheckpoint;
+  request: {
+    checkpointId: string;
+    targetDateTime: string | null;
+    targetDateTimePalestine?: string | null;
+    statusType: CheckpointForecastStatusType | string;
+  };
+  prediction: NormalizedCheckpointForecastPrediction;
 }
 
 export interface RoutePoint {
@@ -153,8 +182,41 @@ export interface RoutingV2Request {
   origin: RoutePoint;
   destination: RoutePoint;
   depart_at?: string;
+  origin_city?: string | null;
+  destination_city?: string | null;
+  originCity?: string | null;
+  destinationCity?: string | null;
   profile: "car";
 }
+
+export interface RoutingV2CheckpointMatchingDto {
+  mode?: string | null;
+  outer_threshold_m?: number | string | null;
+  strong_match_distance_m?: number | string | null;
+  medium_match_distance_m?: number | string | null;
+  weak_match_distance_m?: number | string | null;
+  static_checkpoint_source?: string | null;
+  city_source?: string | null;
+  city_inference?: string | null;
+  direction_mode?: string | null;
+}
+
+export type RoutingCheckpointMatchConfidence =
+  | "strong"
+  | "medium"
+  | "weak"
+  | "unknown";
+
+export type RoutingCheckpointDirection =
+  | "entering"
+  | "leaving"
+  | "transit"
+  | "unknown";
+
+export type RoutingCheckpointSelectedStatusType =
+  | "entering"
+  | "leaving"
+  | "worst";
 
 export interface RoutingV2CheckpointRawStatusDto {
   entering_status?: string | null;
@@ -169,9 +231,14 @@ export interface RoutingV2CheckpointRawStatusDto {
 export interface RoutingV2CheckpointDto {
   checkpoint_id?: number | string | null;
   name?: string | null;
+  city?: string | null;
+  checkpoint_city_group?: string | null;
   lat?: number | string | null;
   lng?: number | string | null;
   distance_from_route_m?: number | string | null;
+  match_confidence?: string | null;
+  route_direction?: string | null;
+  projection_t?: number | string | null;
   nearest_segment_index?: number | string | null;
   projected_point_on_route?: unknown;
   chainage_m?: number | string | null;
@@ -236,6 +303,7 @@ export interface RoutingV2RouteDto {
 export interface RoutingV2ResponseDataDto {
   generated_at?: string | null;
   version?: string | null;
+  checkpoint_matching?: RoutingV2CheckpointMatchingDto | null;
   origin?: RoutePoint | null;
   destination?: RoutePoint | null;
   depart_at?: string | null;
@@ -252,11 +320,16 @@ export interface RoutingApiEnvelope {
 export interface RoutingCheckpoint {
   checkpointId: string;
   name: string;
+  city: string | null;
+  checkpointCityGroup: string | null;
   lat: number;
   lng: number;
+  routeDirection: RoutingCheckpointDirection;
+  matchConfidence: RoutingCheckpointMatchConfidence;
+  projectionT: number | null;
   distanceFromRouteM: number;
   nearestSegmentIndex: number;
-  projectedPointOnRoute: LngLatCoordinate[] | null;
+  projectedPointOnRoute: LngLatCoordinate | null;
   chainageM: number;
   etaMs: number;
   etaSeconds: number;
@@ -276,7 +349,8 @@ export interface RoutingCheckpoint {
   expectedDelayMinutes: number | null;
   forecastProbabilities: Record<string, number>;
   severityRatio: number | null;
-  selectedStatusType: string | null;
+  selectedStatusType: RoutingCheckpointSelectedStatusType | string | null;
+  crossingDateTimePalestine?: string | null;
 }
 
 export interface RoutePath {
@@ -303,6 +377,7 @@ export interface RoutePath {
   smartEtaMs: number | null;
   smartEtaMinutes: number | null;
   smartEtaDateTime: string | null;
+  smartEtaDateTimePalestine?: string | null;
   expectedDelayMs: number | null;
   expectedDelayMinutes: number | null;
   riskScore: number | null;
@@ -320,10 +395,23 @@ export type RoutingRequest = RoutingV2Request;
 
 export interface NormalizedRoutes {
   generatedAt: string | null;
+  generatedAtPalestine?: string | null;
   version: string | null;
+  checkpointMatching: {
+    mode: string | null;
+    outerThresholdM: number | null;
+    strongMatchDistanceM: number | null;
+    mediumMatchDistanceM: number | null;
+    weakMatchDistanceM: number | null;
+    staticCheckpointSource: string | null;
+    citySource: string | null;
+    cityInference: string | null;
+    directionMode: string | null;
+  } | null;
   origin: RoutePoint | null;
   destination: RoutePoint | null;
   departAt: string | null;
+  departAtPalestine?: string | null;
   warnings: string[];
   graphhopperInfo: Record<string, unknown> | null;
   routes: RoutePath[];

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
-import type { FeatureCollection, Point } from "geojson";
 
 import {
   buildCheckpointFeatureCollection,
@@ -32,6 +31,7 @@ import {
   transformRouteToGeoJSON,
   UNCLUSTERED_RADIUS_EXPRESSION,
 } from "@/lib/config/map";
+import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 import type {
   MapCheckpoint,
   NormalizedRoutes,
@@ -59,9 +59,6 @@ interface MapViewProps {
 
 type MapLibreModule = typeof import("maplibre-gl");
 
-const ROUTE_ENDPOINT_SOURCE_ID = "route-endpoints-source";
-const ROUTE_ENDPOINT_FROM_LAYER_ID = "route-endpoint-from-layer";
-const ROUTE_ENDPOINT_TO_LAYER_ID = "route-endpoint-to-layer";
 const ROUTE_LAYER_IDS = [
   "route-v2-slot-1",
   "route-v2-slot-2",
@@ -73,26 +70,29 @@ const ROUTE_LAYER_OUTLINE_IDS = [
   "route-v2-slot-3-outline",
 ] as const;
 
-const ROUTE_LABEL_OFFSETS = [
-  { x: -34, y: -112 },
-  { x: 0, y: -132 },
-  { x: 34, y: -112 },
-] as const;
-
-type RouteLabelTone = "good" | "warning" | "danger";
-
 interface RouteLabelItem {
   routeId: string;
   rank: number;
   x: number;
   y: number;
+  anchorX: number;
+  anchorY: number;
+  normalX: number;
+  normalY: number;
   accentColor: string;
-  tone: RouteLabelTone;
-  riskLabel: string;
-  scoreLabel: string;
+  scale: number;
+  opacity: number;
+  width: number;
+  height: number;
+  durationLabel: string;
+  arrivalLabel: string;
   delayLabel: string | null;
-  smartEtaLabel: string;
-  noteLabel: string | null;
+  riskLabel: string;
+  riskTone: "good" | "warning" | "danger";
+  scoreLabel: string;
+  checkpointLabel: string;
+  summaryLabel: string | null;
+  isSelected: boolean;
 }
 
 function getRouteLayerStyle(routeIndex: number, isSelected: boolean) {
@@ -111,7 +111,7 @@ function getRouteLayerStyle(routeIndex: number, isSelected: boolean) {
 
 function getRouteRiskLabel(route: RoutePath): {
   label: string;
-  tone: RouteLabelTone;
+  tone: "good" | "warning" | "danger";
 } {
   const riskLevel: RoutingRiskLevel =
     route.riskLevel !== "unknown"
@@ -134,7 +134,7 @@ function getRouteRiskLabel(route: RoutePath): {
   }
 }
 
-function getRouteToneStyles(tone: RouteLabelTone) {
+function getRouteToneStyles(tone: "good" | "warning" | "danger") {
   switch (tone) {
     case "good":
       return {
@@ -170,21 +170,12 @@ function formatRouteArrivalLabel(value: string | null): string {
     return "Arrival n/a";
   }
 
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(parsed);
+  return formatDateTimeInPalestine(value);
 }
 
 function getRouteNoteLabel(route: RoutePath): string | null {
   if (route.expectedDelayMinutes !== null && route.expectedDelayMinutes > 0) {
-    return "includes predicted checkpoint delay";
+    return "Base ETA + upstream delay";
   }
 
   if (route.riskComponents.length > 0) {
@@ -196,56 +187,211 @@ function getRouteNoteLabel(route: RoutePath): string | null {
 
 function getRouteScoreLabel(route: RoutePath): string {
   if (route.riskScore !== null && Number.isFinite(route.riskScore)) {
-    return `Risk score ${route.riskScore.toFixed(1)}`;
+    return `Risk ${route.riskScore.toFixed(1)}`;
   }
 
   if (Number.isFinite(route.routeScore)) {
-    return `Routing score ${route.routeScore.toFixed(1)}`;
+    return `Route ${route.routeScore.toFixed(1)}`;
   }
 
-  return "Risk score n/a";
+  return "Risk n/a";
 }
 
-function getRouteAnchorCoordinate(route: RoutePath): [number, number] {
-  const coordinates = route.geometry.coordinates;
-  if (coordinates.length === 0) {
-    return [0, 0];
+function formatDurationLabel(durationMs: number | null): string {
+  if (durationMs === null || !Number.isFinite(durationMs) || durationMs <= 0) {
+    return "n/a";
   }
 
-  if (coordinates.length === 1) {
-    return coordinates[0];
+  const totalMinutes = Math.round(durationMs / 60000);
+  if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   }
 
-  const midpointIndex = Math.max(
-    0,
-    Math.min(coordinates.length - 1, Math.floor((coordinates.length - 1) * 0.45)),
+  return `${totalMinutes} min`;
+}
+
+function formatRouteDistance(distanceM: number): string {
+  if (!Number.isFinite(distanceM) || distanceM <= 0) {
+    return "0 km";
+  }
+
+  if (distanceM >= 1000) {
+    return `${(distanceM / 1000).toFixed(distanceM >= 10000 ? 0 : 1)} km`;
+  }
+
+  return `${Math.round(distanceM)} m`;
+}
+
+function formatConfidence(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  return `${Math.round(value * 100)}%`;
+}
+
+function getRouteSummary(route: RoutePath): string | null {
+  if (route.riskComponents.length > 0) {
+    return route.riskComponents.slice(0, 2).join(" · ");
+  }
+
+  return route.reasonSummary || null;
+}
+
+function truncateLabel(value: string | null, maxLength: number): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1).trimEnd()}…` : value;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function intersects(
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+  other: { left: number; top: number; right: number; bottom: number },
+): boolean {
+  return !(
+    right <= other.left ||
+    left >= other.right ||
+    bottom <= other.top ||
+    top >= other.bottom
   );
-
-  return coordinates[midpointIndex];
 }
 
-function cleanupRouteLayers(map: MapLibreMap): void {
-  const layerIds = [
-    ...ROUTE_LAYER_IDS,
-    ...ROUTE_LAYER_OUTLINE_IDS,
-    ROUTE_ENDPOINT_FROM_LAYER_ID,
-    ROUTE_ENDPOINT_TO_LAYER_ID,
-    USER_LOCATION_ACCURACY_LAYER_ID,
-    USER_LOCATION_LAYER_ID,
-  ];
-  const sourceIds = [...ROUTE_LAYER_IDS, ROUTE_ENDPOINT_SOURCE_ID, USER_LOCATION_SOURCE_ID];
-
-  layerIds.forEach((id) => {
-    if (map.getLayer(id)) {
-      map.removeLayer(id);
+function resolveRouteLabelLayout(
+  items: RouteLabelItem[],
+  viewportWidth: number,
+  viewportHeight: number,
+): RouteLabelItem[] {
+  const placed: Array<
+    RouteLabelItem & {
+      left: number;
+      top: number;
+      right: number;
+      bottom: number;
     }
+  > = [];
+  const sortedItems = [...items].sort((left, right) => {
+    if (left.isSelected !== right.isSelected) {
+      return left.isSelected ? -1 : 1;
+    }
+
+    return left.rank - right.rank;
   });
 
-  sourceIds.forEach((id) => {
-    if (map.getSource(id)) {
-      map.removeSource(id);
+  sortedItems.forEach((item) => {
+    const scaleOptions = [
+      item.scale,
+      clamp(item.scale * 0.9, 0.62, 1.2),
+      clamp(item.scale * 0.82, 0.58, 1.08),
+      clamp(item.scale * 0.74, 0.54, 0.98),
+    ];
+    const laneOffsets = [0, 1, -1, 2, -2, 3, -3, 4, -4];
+    const tangentX = -item.normalY;
+    const tangentY = item.normalX;
+    let chosen:
+      | (RouteLabelItem & {
+          left: number;
+          top: number;
+          right: number;
+          bottom: number;
+        })
+      | null = null;
+    let fallbackCandidate:
+      | (RouteLabelItem & {
+          left: number;
+          top: number;
+          right: number;
+          bottom: number;
+          overlapCount: number;
+        })
+      | null = null;
+
+    scaleOptions.forEach((candidateScale) => {
+      if (chosen) {
+        return;
+      }
+
+      const width = Math.round(item.width * (candidateScale / item.scale));
+      const height = Math.round(item.height * (candidateScale / item.scale));
+      const verticalLift = 14 + candidateScale * 12;
+      const laneSpacing = 24 + candidateScale * 24;
+
+      laneOffsets.forEach((laneOffset) => {
+        if (chosen) {
+          return;
+        }
+
+        const laneShift = laneOffset * laneSpacing;
+        const x = item.anchorX + item.normalX * laneShift + tangentX * laneOffset * 8;
+        const y =
+          item.anchorY + item.normalY * laneShift + tangentY * laneOffset * 6 - verticalLift;
+        const left = x - width / 2;
+        const top = y - height;
+        const right = x + width / 2;
+        const bottom = y;
+
+        if (
+          left < 8 ||
+          top < 8 ||
+          right > viewportWidth - 8 ||
+          bottom > viewportHeight - 8
+        ) {
+          return;
+        }
+
+        const overlapCount = placed.filter((other) =>
+          intersects(left, top, right, bottom, other),
+        ).length;
+        const candidate = {
+          ...item,
+          x,
+          y,
+          width,
+          height,
+          scale: candidateScale,
+          left,
+          top,
+          right,
+          bottom,
+        };
+
+        if (overlapCount === 0) {
+          chosen = candidate;
+          return;
+        }
+
+        if (
+          !fallbackCandidate ||
+          overlapCount < fallbackCandidate.overlapCount ||
+          (overlapCount === fallbackCandidate.overlapCount &&
+            candidateScale < fallbackCandidate.scale)
+        ) {
+          fallbackCandidate = { ...candidate, overlapCount };
+        }
+      });
+    });
+
+    const finalCandidate = chosen ?? (item.isSelected ? fallbackCandidate : null);
+    if (!finalCandidate) {
+      return;
     }
+
+    placed.push(finalCandidate);
   });
+
+  return placed.map(
+    ({ left: _left, top: _top, right: _right, bottom: _bottom, ...item }) => item,
+  );
 }
 
 export default function MapView({
@@ -264,8 +410,20 @@ export default function MapView({
   const mapRef = useRef<MapLibreMap | null>(null);
   const maplibreRef = useRef<MapLibreModule | null>(null);
   const routePopupRef = useRef<InstanceType<MapLibreModule["Popup"]> | null>(null);
+  const routeEndpointMarkerRefs = useRef<{
+    from: InstanceType<MapLibreModule["Marker"]> | null;
+    to: InstanceType<MapLibreModule["Marker"]> | null;
+  }>({
+    from: null,
+    to: null,
+  });
+  const departAtRef = useRef<string | null | undefined>(departAt);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [routeLabelItems, setRouteLabelItems] = useState<RouteLabelItem[]>([]);
+
+  useEffect(() => {
+    departAtRef.current = departAt;
+  }, [departAt]);
 
   const checkpointsById = useMemo(() => {
     return new Map(checkpoints.map((checkpoint) => [checkpoint.id, checkpoint]));
@@ -274,45 +432,6 @@ export default function MapView({
   const checkpointFeatureCollection = useMemo(() => {
     return buildCheckpointFeatureCollection(checkpoints);
   }, [checkpoints]);
-
-  const routeEndpointsFeatureCollection = useMemo<
-    FeatureCollection<Point, { role: "from" | "to" }>
-  >(() => {
-    const features: Array<
-      FeatureCollection<Point, { role: "from" | "to" }>["features"][number]
-    > = [];
-
-    if (routeEndpoints?.from) {
-      features.push({
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: [routeEndpoints.from.lng, routeEndpoints.from.lat],
-        },
-        properties: {
-          role: "from",
-        },
-      });
-    }
-
-    if (routeEndpoints?.to) {
-      features.push({
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: [routeEndpoints.to.lng, routeEndpoints.to.lat],
-        },
-        properties: {
-          role: "to",
-        },
-      });
-    }
-
-    return {
-      type: "FeatureCollection",
-      features,
-    };
-  }, [routeEndpoints]);
 
   const routePaths = useMemo(() => getRenderableRoutes(routes), [routes]);
 
@@ -344,20 +463,140 @@ export default function MapView({
         const canvas = map.getCanvas();
         const width = canvas.clientWidth;
         const height = canvas.clientHeight;
+        const zoom = map.getZoom();
+        const selectedRouteId =
+          routes.selectedRouteId ?? routePaths[0]?.routeId ?? null;
+        const viewportFactor = clamp((Math.min(width, height) - 360) / 880, 0, 1);
+        const zoomFactor = clamp((zoom - 7) / 8, 0, 1);
+        const scale = clamp(0.64 + viewportFactor * 0.1 + zoomFactor * 0.18, 0.64, 0.92);
+        const offsetDistance = 12 + scale * 8;
+        const opacity = clamp(0.58 + zoomFactor * 0.3, 0.58, 0.88);
+        const proposedLabels = routePaths
+          .slice(0, ROUTE_LAYER_IDS.length)
+          .flatMap((route, index) => {
+            const projectedCoordinates = route.geometry.coordinates.map(([lng, lat]) =>
+              map.project([lng, lat]),
+            );
+            const isSelectedRoute = route.routeId === selectedRouteId;
+            const risk = getRouteRiskLabel(route);
+            const arrivalLabel = formatRouteArrivalLabel(
+              resolveRouteArrivalDateTime(route),
+            );
+            const routeScale = isSelectedRoute ? scale : scale * 0.86;
+            const labelWidth = isSelectedRoute
+              ? Math.round(176 + routeScale * 28)
+              : Math.round(138 + routeScale * 18);
+            const labelHeight = isSelectedRoute
+              ? Math.round(88 + routeScale * 14)
+              : Math.round(40 + routeScale * 8);
+            const summaryLabel = isSelectedRoute
+              ? truncateLabel(getRouteSummary(route), 48)
+              : null;
+            const checkpointLabel = isSelectedRoute
+              ? `${route.checkpointCount} checkpoints · ${formatRouteDistance(route.distanceM)}`
+              : formatRouteDistance(route.distanceM);
 
-        setRouteLabelItems(
-          routePaths.slice(0, ROUTE_LAYER_IDS.length).flatMap((route, index) => {
-            const [lng, lat] = getRouteAnchorCoordinate(route);
-            const projected = map.project([lng, lat]);
-            const offset = ROUTE_LABEL_OFFSETS[index] ?? ROUTE_LABEL_OFFSETS[ROUTE_LABEL_OFFSETS.length - 1];
-            const x = projected.x + offset.x;
-            const y = projected.y + offset.y;
+            if (projectedCoordinates.length === 0) {
+              return [];
+            }
+
+            if (projectedCoordinates.length === 1) {
+              const singlePoint = projectedCoordinates[0];
+              return [
+                {
+                  routeId: route.routeId,
+                  rank: route.rank,
+                  x: singlePoint.x,
+                  y: singlePoint.y,
+                  anchorX: singlePoint.x,
+                  anchorY: singlePoint.y,
+                  normalX: 0,
+                  normalY: -1,
+                  accentColor:
+                    ROUTE_STYLE.PALETTE[index] ??
+                    ROUTE_STYLE.PALETTE[ROUTE_STYLE.PALETTE.length - 1],
+                  scale: routeScale,
+                  opacity,
+                  width: labelWidth,
+                  height: labelHeight,
+                  durationLabel: formatDurationLabel(route.smartEtaMs ?? route.durationMs),
+                  arrivalLabel,
+                  delayLabel: formatDelayLabel(
+                    route.expectedDelayMinutes ?? route.estimatedDelayMinutes,
+                  ),
+                  riskLabel: risk.label,
+                  riskTone: risk.tone,
+                  scoreLabel: `${getRouteScoreLabel(route)} · ${formatConfidence(route.riskConfidence)}`,
+                  checkpointLabel,
+                  summaryLabel,
+                  isSelected: isSelectedRoute,
+                },
+              ];
+            }
+
+            const segmentLengths: number[] = [];
+            let totalLength = 0;
+
+            for (let pointIndex = 1; pointIndex < projectedCoordinates.length; pointIndex += 1) {
+              const previousPoint = projectedCoordinates[pointIndex - 1];
+              const point = projectedCoordinates[pointIndex];
+              const segmentLength = Math.hypot(
+                point.x - previousPoint.x,
+                point.y - previousPoint.y,
+              );
+
+              segmentLengths.push(segmentLength);
+              totalLength += segmentLength;
+            }
+
+            if (totalLength <= 0) {
+              return [];
+            }
+
+            const midpointDistance = totalLength / 2;
+            let traversedLength = 0;
+            let anchorX = projectedCoordinates[0].x;
+            let anchorY = projectedCoordinates[0].y;
+            let normalX = 0;
+            let normalY = -1;
+
+            for (
+              let segmentIndex = 0;
+              segmentIndex < segmentLengths.length;
+              segmentIndex += 1
+            ) {
+              const segmentLength = segmentLengths[segmentIndex];
+              if (segmentLength <= 0) {
+                continue;
+              }
+
+              if (traversedLength + segmentLength >= midpointDistance) {
+                const startPoint = projectedCoordinates[segmentIndex];
+                const endPoint = projectedCoordinates[segmentIndex + 1];
+                const segmentProgress =
+                  (midpointDistance - traversedLength) / segmentLength;
+                const dx = endPoint.x - startPoint.x;
+                const dy = endPoint.y - startPoint.y;
+
+                anchorX = startPoint.x + dx * segmentProgress;
+                anchorY = startPoint.y + dy * segmentProgress;
+
+                normalX = -dy / segmentLength;
+                normalY = dx / segmentLength;
+                break;
+              }
+
+              traversedLength += segmentLength;
+            }
+
+            const centeredIndex = index - (Math.min(routePaths.length, ROUTE_LAYER_IDS.length) - 1) / 2;
+            const signedOffset = centeredIndex * offsetDistance;
+            const x = anchorX + normalX * signedOffset;
+            const y = anchorY + normalY * signedOffset;
 
             if (x < -220 || y < -220 || x > width + 220 || y > height + 220) {
               return [];
             }
-
-            const risk = getRouteRiskLabel(route);
 
             return [
               {
@@ -365,23 +604,33 @@ export default function MapView({
                 rank: route.rank,
                 x,
                 y,
+                anchorX,
+                anchorY,
+                normalX,
+                normalY,
                 accentColor:
                   ROUTE_STYLE.PALETTE[index] ??
                   ROUTE_STYLE.PALETTE[ROUTE_STYLE.PALETTE.length - 1],
-                tone: risk.tone,
-                riskLabel: risk.label,
-                scoreLabel: getRouteScoreLabel(route),
+                scale: routeScale,
+                opacity,
+                width: labelWidth,
+                height: labelHeight,
+                durationLabel: formatDurationLabel(route.smartEtaMs ?? route.durationMs),
+                arrivalLabel,
                 delayLabel: formatDelayLabel(
                   route.expectedDelayMinutes ?? route.estimatedDelayMinutes,
                 ),
-                smartEtaLabel: formatRouteArrivalLabel(
-                  resolveRouteArrivalDateTime(route),
-                ),
-                noteLabel: getRouteNoteLabel(route),
+                riskLabel: risk.label,
+                riskTone: risk.tone,
+                scoreLabel: `${getRouteScoreLabel(route)} · ${formatConfidence(route.riskConfidence)}`,
+                checkpointLabel,
+                summaryLabel,
+                isSelected: isSelectedRoute,
               },
             ];
-          }),
-        );
+          });
+
+        setRouteLabelItems(resolveRouteLabelLayout(proposedLabels, width, height));
       });
     };
 
@@ -399,7 +648,87 @@ export default function MapView({
       map.off("resize", updateRouteLabels);
       map.off("rotate", updateRouteLabels);
     };
-  }, [departAt, mapLoaded, routePaths]);
+  }, [mapLoaded, routePaths]);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !maplibreRef.current) {
+      return;
+    }
+
+    const map = mapRef.current;
+    const maplibregl = maplibreRef.current;
+    const markers = routeEndpointMarkerRefs.current;
+
+    markers.from?.remove();
+    markers.to?.remove();
+    markers.from = null;
+    markers.to = null;
+
+    if (!routeEndpoints?.from && !routeEndpoints?.to) {
+      return;
+    }
+
+    const buildEndpointElement = (role: "from" | "to") => {
+      const root = document.createElement("div");
+      root.style.display = "flex";
+      root.style.flexDirection = "column";
+      root.style.alignItems = "center";
+      root.style.gap = "4px";
+      root.style.pointerEvents = "none";
+      root.style.transform = "translateY(-2px)";
+
+      const dot = document.createElement("div");
+      dot.style.width = "18px";
+      dot.style.height = "18px";
+      dot.style.borderRadius = "9999px";
+      dot.style.border = "3px solid #ffffff";
+      dot.style.boxShadow = "0 8px 20px rgba(15, 23, 42, 0.28)";
+      dot.style.backgroundColor = role === "from" ? "#2563eb" : "#f59e0b";
+
+      const label = document.createElement("div");
+      label.textContent = role === "from" ? "START" : "FINISH";
+      label.style.padding = "3px 8px";
+      label.style.borderRadius = "9999px";
+      label.style.backgroundColor = "#ffffff";
+      label.style.border = `1px solid ${role === "from" ? "#bfdbfe" : "#fde68a"}`;
+      label.style.color = role === "from" ? "#1d4ed8" : "#b45309";
+      label.style.fontSize = "10px";
+      label.style.fontWeight = "800";
+      label.style.letterSpacing = "0.22em";
+      label.style.lineHeight = "1";
+      label.style.textTransform = "uppercase";
+      label.style.boxShadow = "0 10px 24px rgba(15, 23, 42, 0.14)";
+
+      root.appendChild(dot);
+      root.appendChild(label);
+      return root;
+    };
+
+    if (routeEndpoints.from) {
+      markers.from = new maplibregl.Marker({
+        element: buildEndpointElement("from"),
+        anchor: "bottom",
+      })
+        .setLngLat([routeEndpoints.from.lng, routeEndpoints.from.lat])
+        .addTo(map);
+    }
+
+    if (routeEndpoints.to) {
+      markers.to = new maplibregl.Marker({
+        element: buildEndpointElement("to"),
+        anchor: "bottom",
+      })
+        .setLngLat([routeEndpoints.to.lng, routeEndpoints.to.lat])
+        .addTo(map);
+    }
+
+    return () => {
+      markers.from?.remove();
+      markers.to?.remove();
+      markers.from = null;
+      markers.to = null;
+    };
+  }, [mapLoaded, routeEndpoints]);
 
   function closeRoutePopup(): void {
     routePopupRef.current?.remove();
@@ -411,11 +740,12 @@ export default function MapView({
       return route.smartEtaDateTime;
     }
 
-    if (!departAt) {
+    const currentDepartAt = departAtRef.current;
+    if (!currentDepartAt) {
       return null;
     }
 
-    const departDate = new Date(departAt);
+    const departDate = new Date(currentDepartAt);
     if (Number.isNaN(departDate.getTime())) {
       return null;
     }
@@ -668,54 +998,6 @@ export default function MapView({
   }, [mapLoaded, userLocation]);
 
   useEffect(() => {
-    if (!mapRef.current || !mapLoaded) {
-      return;
-    }
-
-    const map = mapRef.current;
-    const existingSource = map.getSource(
-      ROUTE_ENDPOINT_SOURCE_ID,
-    ) as GeoJSONSource | undefined;
-
-    if (!existingSource) {
-      map.addSource(ROUTE_ENDPOINT_SOURCE_ID, {
-        type: "geojson",
-        data: routeEndpointsFeatureCollection,
-      });
-
-      map.addLayer({
-        id: ROUTE_ENDPOINT_FROM_LAYER_ID,
-        type: "circle",
-        source: ROUTE_ENDPOINT_SOURCE_ID,
-        filter: ["==", ["get", "role"], "from"],
-        paint: {
-          "circle-radius": 10,
-          "circle-color": "#3b82f6",
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 2,
-        },
-      });
-
-      map.addLayer({
-        id: ROUTE_ENDPOINT_TO_LAYER_ID,
-        type: "circle",
-        source: ROUTE_ENDPOINT_SOURCE_ID,
-        filter: ["==", ["get", "role"], "to"],
-        paint: {
-          "circle-radius": 10,
-          "circle-color": "#f59e0b",
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 2,
-        },
-      });
-
-      return;
-    }
-
-    existingSource.setData(routeEndpointsFeatureCollection);
-  }, [mapLoaded, routeEndpointsFeatureCollection]);
-
-  useEffect(() => {
     if (!mapRef.current || !mapLoaded || !userLocation) {
       return;
     }
@@ -856,7 +1138,25 @@ export default function MapView({
     }
 
     const map = mapRef.current;
-    cleanupRouteLayers(map);
+    const layerIds = [
+      ...ROUTE_LAYER_IDS,
+      ...ROUTE_LAYER_OUTLINE_IDS,
+      USER_LOCATION_ACCURACY_LAYER_ID,
+      USER_LOCATION_LAYER_ID,
+    ];
+    const sourceIds = [...ROUTE_LAYER_IDS, USER_LOCATION_SOURCE_ID];
+
+    layerIds.forEach((id) => {
+      if (map.getLayer(id)) {
+        map.removeLayer(id);
+      }
+    });
+
+    sourceIds.forEach((id) => {
+      if (map.getSource(id)) {
+        map.removeSource(id);
+      }
+    });
 
     if (routePaths.length === 0) {
       closeRoutePopup();
@@ -1038,7 +1338,6 @@ export default function MapView({
       });
     };
   }, [
-    departAt,
     mapLoaded,
     onMapPlacement,
     onRouteOpen,
@@ -1051,60 +1350,162 @@ export default function MapView({
     <div className="relative h-full w-full overflow-hidden">
       <div ref={containerRef} className="h-full w-full" />
 
-      <div className="pointer-events-none absolute inset-0">
-        {routeLabelItems.map((item) => {
-          const toneStyles = getRouteToneStyles(item.tone);
+      {routeLabelItems.length > 0 ? (
+        <div className="pointer-events-none absolute inset-0 z-20">
+          {routeLabelItems.map((item, index) => {
+            const toneStyles = getRouteToneStyles(item.riskTone);
+            const cardBackground = item.isSelected
+              ? "linear-gradient(180deg, rgba(255,248,238,0.96), rgba(255,255,255,0.93))"
+              : "linear-gradient(180deg, rgba(255,251,245,0.95), rgba(255,255,255,0.92))";
+            const cardShadow = item.isSelected
+              ? "0 14px 32px rgba(15,23,42,0.20)"
+              : "0 10px 24px rgba(15,23,42,0.14)";
+            const routeMetaColor = item.isSelected ? "#6b7280" : "#7c8798";
 
-          return (
-            <div
-              key={item.routeId}
-              className="absolute -translate-x-1/2 -translate-y-full"
-              style={{ left: item.x, top: item.y }}
-            >
+            return (
               <div
-                className="w-[196px] rounded-[18px] border border-slate-200 bg-white/92 px-4 py-3 shadow-[0_18px_40px_rgba(15,23,42,0.14)] backdrop-blur-xl"
+                key={`${item.routeId}-${index}`}
+                className="absolute -translate-x-1/2 -translate-y-full"
                 style={{
-                  borderLeftColor: item.accentColor,
-                  borderLeftWidth: 4,
+                  left: item.x,
+                  top: item.y,
+                  opacity: item.opacity,
+                  zIndex: item.isSelected ? 3 : 2,
                 }}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500">
-                    Route #{item.rank}
-                  </p>
-                  <span
-                    className="rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]"
-                    style={{
-                      color: toneStyles.text,
-                      backgroundColor: toneStyles.background,
-                      borderColor: toneStyles.border,
-                    }}
-                  >
-                    {item.riskLabel}
-                  </span>
-                </div>
+                <div
+                  className="relative overflow-hidden rounded-[20px] border text-slate-950 backdrop-blur-xl transition-transform duration-200 ease-out"
+                  style={{
+                    width: item.width,
+                    minHeight: item.height,
+                    borderColor: item.isSelected ? item.accentColor : `${item.accentColor}AA`,
+                    background: cardBackground,
+                    boxShadow: cardShadow,
+                    transform: `scale(${item.scale})`,
+                    transformOrigin: "center bottom",
+                  }}
+                >
+                  {item.isSelected ? (
+                    <div className="relative px-3 py-3">
+                      <div
+                        className="absolute inset-y-0 left-0 w-[5px]"
+                        style={{ backgroundColor: item.accentColor }}
+                      />
+                      <div className="absolute inset-x-0 top-0 h-[1px] bg-[linear-gradient(90deg,transparent,rgba(148,163,184,0.42),transparent)]" />
 
-                <div className="mt-2 text-[28px] font-semibold leading-none text-slate-950">
-                  {item.smartEtaLabel}
-                </div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full"
+                              style={{ backgroundColor: item.accentColor }}
+                            />
+                            <p
+                              className="shrink-0 text-[9px] font-bold uppercase tracking-[0.24em]"
+                              style={{ color: routeMetaColor }}
+                            >
+                              Route #{item.rank}
+                            </p>
+                          </div>
+                          <div className="mt-2 flex items-end gap-2">
+                            <p className="text-[24px] font-semibold leading-none text-slate-950">
+                              {item.durationLabel}
+                            </p>
+                            <p className="pb-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                              ETA {item.arrivalLabel}
+                            </p>
+                          </div>
+                        </div>
+                        <span
+                          className="shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em]"
+                          style={{
+                            color: toneStyles.text,
+                            backgroundColor: toneStyles.background,
+                            borderColor: toneStyles.border,
+                          }}
+                        >
+                          {item.riskLabel}
+                        </span>
+                      </div>
 
-                <div className="mt-2 space-y-1 text-[12px] leading-5 text-slate-600">
-                  <p>Smart ETA</p>
-                  {item.delayLabel ? (
-                    <p style={{ color: item.accentColor }}>{item.delayLabel}</p>
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <div className="rounded-[12px] border border-slate-200/80 bg-white/55 px-2.5 py-2">
+                          <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                            Delay
+                          </p>
+                          <p
+                            className="mt-1 text-[11px] font-semibold leading-tight"
+                            style={{ color: item.delayLabel ? item.accentColor : "#475569" }}
+                          >
+                            {item.delayLabel ?? "Clear"}
+                          </p>
+                        </div>
+                        <div className="rounded-[12px] border border-slate-200/80 bg-white/55 px-2.5 py-2">
+                          <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                            Route Data
+                          </p>
+                          <p className="mt-1 text-[11px] font-semibold leading-tight text-slate-700">
+                            {item.checkpointLabel}
+                          </p>
+                        </div>
+                        <div className="rounded-[12px] border border-slate-200/80 bg-white/55 px-2.5 py-2">
+                          <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                            Signal
+                          </p>
+                          <p className="mt-1 text-[11px] font-semibold leading-tight text-slate-700">
+                            {item.scoreLabel}
+                          </p>
+                        </div>
+                      </div>
+
+                      {item.summaryLabel ? (
+                        <p className="mt-2.5 line-clamp-2 text-[10px] leading-4 text-slate-600">
+                          {item.summaryLabel}
+                        </p>
+                      ) : null}
+                    </div>
                   ) : (
-                    <p className="text-slate-500">No predicted delay</p>
+                    <div className="relative flex items-center gap-2 px-2.5 py-2">
+                      <div
+                        className="absolute inset-y-0 left-0 w-[4px]"
+                        style={{ backgroundColor: item.accentColor }}
+                      />
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: item.accentColor }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className="truncate text-[8px] font-bold uppercase tracking-[0.22em]"
+                          style={{ color: routeMetaColor }}
+                        >
+                          Route #{item.rank}
+                        </p>
+                        <div className="mt-0.5 flex items-baseline gap-2">
+                          <span className="text-[17px] font-semibold leading-none text-slate-950">
+                            {item.durationLabel}
+                          </span>
+                          <span className="truncate text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500">
+                            {item.riskLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-[8px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                          Route
+                        </p>
+                        <p className="mt-0.5 text-[10px] font-semibold text-slate-700">
+                          {item.checkpointLabel}
+                        </p>
+                      </div>
+                    </div>
                   )}
-                  <p>{item.scoreLabel}</p>
-                  {item.noteLabel ? (
-                    <p style={{ color: item.accentColor }}>{item.noteLabel}</p>
-                  ) : null}
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }

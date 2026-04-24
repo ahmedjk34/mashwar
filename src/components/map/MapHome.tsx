@@ -20,6 +20,7 @@ import {
 import { getCheckpoints } from "@/lib/services/checkpoints";
 import { getCheckpointForecast } from "@/lib/services/forecast";
 import { getRoute } from "@/lib/services/routing";
+import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 import type {
   CheckpointForecastStatusType,
   MapCheckpoint,
@@ -32,6 +33,7 @@ import type {
 const EMPTY_ROUTES: NormalizedRoutes = {
   generatedAt: null,
   version: null,
+  checkpointMatching: null,
   origin: null,
   destination: null,
   departAt: null,
@@ -182,27 +184,14 @@ function getForecastHorizonLabel(horizon: string): string {
     case "plus_2h":
       return "+2h";
     case "next_day_8am":
-      return "Next day 08:00 UTC";
+      return "Next day 08:00 Palestine";
     default:
       return horizon;
   }
 }
 
 function formatForecastDateTime(value: string | null): string {
-  if (!value) {
-    return "Pending";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(parsed);
+  return formatDateTimeInPalestine(value);
 }
 
 function formatForecastConfidence(value: number | null): string {
@@ -217,6 +206,11 @@ type RouteEndpointSelection =
   | { kind: "current-location" }
   | { kind: "checkpoint"; checkpointId: string };
 
+interface ResolvedRouteEndpoint {
+  point: RoutePoint;
+  city: string | null;
+}
+
 function getRouteSelectionLabel(
   selection: RouteEndpointSelection | null,
   checkpointsById: Map<string, MapCheckpoint>,
@@ -230,14 +224,18 @@ function getRouteSelectionLabel(
   }
 
   const checkpoint = checkpointsById.get(selection.checkpointId);
-  return checkpoint?.name ?? "Checkpoint";
+  if (!checkpoint) {
+    return "Checkpoint";
+  }
+
+  return checkpoint.city ? `${checkpoint.name} · ${checkpoint.city}` : checkpoint.name;
 }
 
-function resolveRoutePoint(
+function resolveRouteEndpoint(
   selection: RouteEndpointSelection | null,
   checkpointsById: Map<string, MapCheckpoint>,
   userLocation: UserLocation | null,
-): RoutePoint | null {
+): ResolvedRouteEndpoint | null {
   if (!selection) {
     return null;
   }
@@ -248,8 +246,11 @@ function resolveRoutePoint(
     }
 
     return {
-      lat: userLocation.lat,
-      lng: userLocation.lng,
+      point: {
+        lat: userLocation.lat,
+        lng: userLocation.lng,
+      },
+      city: null,
     };
   }
 
@@ -268,8 +269,11 @@ function resolveRoutePoint(
   }
 
   return {
-    lat: latitude,
-    lng: longitude,
+    point: {
+      lat: latitude,
+      lng: longitude,
+    },
+    city: checkpoint.city,
   };
 }
 
@@ -578,8 +582,8 @@ export default function MapHome() {
   const handleBuildRoute = useCallback(() => {
     setRouteError(null);
 
-    const resolvedFrom = resolveRoutePoint(routeFrom, checkpointsById, userLocation);
-    const resolvedTo = resolveRoutePoint(routeTo, checkpointsById, userLocation);
+    const resolvedFrom = resolveRouteEndpoint(routeFrom, checkpointsById, userLocation);
+    const resolvedTo = resolveRouteEndpoint(routeTo, checkpointsById, userLocation);
 
     if (!resolvedFrom) {
       setRouteError(
@@ -596,8 +600,8 @@ export default function MapHome() {
     }
 
     if (
-      resolvedFrom.lat === resolvedTo.lat &&
-      resolvedFrom.lng === resolvedTo.lng
+      resolvedFrom.point.lat === resolvedTo.point.lat &&
+      resolvedFrom.point.lng === resolvedTo.point.lng
     ) {
       setRouteError("Choose two different endpoints for the route.");
       return;
@@ -607,8 +611,10 @@ export default function MapHome() {
       void (async () => {
         try {
           const nextRoutes = await getRoute({
-            origin: resolvedFrom,
-            destination: resolvedTo,
+            origin: resolvedFrom.point,
+            destination: resolvedTo.point,
+            ...(resolvedFrom.city ? { origin_city: resolvedFrom.city } : {}),
+            ...(resolvedTo.city ? { destination_city: resolvedTo.city } : {}),
             profile: "car",
           });
           setRoutes(nextRoutes);

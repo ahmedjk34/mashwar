@@ -22,6 +22,7 @@ import {
 import { getCheckpoints } from "@/lib/services/checkpoints";
 import { getCheckpointForecast } from "@/lib/services/forecast";
 import { getRoute } from "@/lib/services/routing";
+import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 import type {
   CheckpointForecastStatusType,
   MapCheckpoint,
@@ -35,6 +36,7 @@ import type {
 const EMPTY_ROUTES: NormalizedRoutes = {
   generatedAt: null,
   version: null,
+  checkpointMatching: null,
   origin: null,
   destination: null,
   departAt: null,
@@ -122,20 +124,7 @@ const STATUS_VISUALS: Record<
 };
 
 function formatDateTimeLabel(value: string | null): string {
-  if (!value) {
-    return "n/a";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(parsed);
+  return formatDateTimeInPalestine(value);
 }
 
 function formatCoordinatePair(lat: number, lng: number): string {
@@ -190,7 +179,7 @@ function formatForecastDateTime(value: string | null): string {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
-    timeZone: "UTC",
+    timeZone: "Asia/Hebron",
   }).formatToParts(parsed);
 
   const month = parts.find((part) => part.type === "month")?.value?.toUpperCase();
@@ -311,7 +300,12 @@ function formatSelectionLabel(
     return "مثبت على الخريطة";
   }
 
-  return checkpointsById.get(selection.checkpointId)?.name ?? "غير محدد";
+  const checkpoint = checkpointsById.get(selection.checkpointId);
+  if (!checkpoint) {
+    return "غير محدد";
+  }
+
+  return checkpoint.city ? `${checkpoint.name} · ${checkpoint.city}` : checkpoint.name;
 }
 
 function StatusPill({
@@ -631,12 +625,12 @@ export default function MashwarHome() {
   const leavingVisual = selectedCheckpoint
     ? STATUS_VISUALS[selectedCheckpoint.leavingStatus]
     : STATUS_VISUALS["غير معروف"];
-  const routeFromPoint = resolveRoutePoint(
-    routeFrom,
-    checkpointsById,
-    userLocation,
-  );
-  const routeToPoint = resolveRoutePoint(routeTo, checkpointsById, userLocation);
+  const routeFromPoint =
+    resolveRouteEndpointInfo(routeFrom, checkpointsById, userLocation)?.point ??
+    null;
+  const routeToPoint =
+    resolveRouteEndpointInfo(routeTo, checkpointsById, userLocation)?.point ??
+    null;
 
   function handleLoadDemoRoute(): void {
     setRouteError(null);
@@ -685,8 +679,16 @@ export default function MashwarHome() {
       return;
     }
 
-    const resolvedFrom = resolveRoutePoint(routeFrom, checkpointsById, userLocation);
-    const resolvedTo = resolveRoutePoint(routeTo, checkpointsById, userLocation);
+    const resolvedFrom = resolveRouteEndpointInfo(
+      routeFrom,
+      checkpointsById,
+      userLocation,
+    );
+    const resolvedTo = resolveRouteEndpointInfo(
+      routeTo,
+      checkpointsById,
+      userLocation,
+    );
 
     if (!resolvedFrom) {
       setRouteError(
@@ -703,8 +705,8 @@ export default function MashwarHome() {
     }
 
     if (
-      resolvedFrom.lat === resolvedTo.lat &&
-      resolvedFrom.lng === resolvedTo.lng
+      resolvedFrom.point.lat === resolvedTo.point.lat &&
+      resolvedFrom.point.lng === resolvedTo.point.lng
     ) {
       setRouteError("Choose two different endpoints for the route.");
       return;
@@ -716,8 +718,10 @@ export default function MashwarHome() {
       void (async () => {
         try {
           const nextRoutes = await getRoute({
-            origin: resolvedFrom,
-            destination: resolvedTo,
+            origin: resolvedFrom.point,
+            destination: resolvedTo.point,
+            ...(resolvedFrom.city ? { origin_city: resolvedFrom.city } : {}),
+            ...(resolvedTo.city ? { destination_city: resolvedTo.city } : {}),
             profile: "car",
           });
           setRoutes(nextRoutes);
@@ -1310,19 +1314,22 @@ export default function MashwarHome() {
 
       <MashwarNaturalLanguageRouteModal
         open={isNaturalRouteModalOpen}
+        currentLocation={userLocation}
         onClose={() => setIsNaturalRouteModalOpen(false)}
       />
       <RouteDetailsModal
         open={Boolean(routeDetailsRoute)}
         route={routeDetailsRoute}
         departAt={routes.departAt}
+        routeVersion={routes.version}
+        checkpointMatching={routes.checkpointMatching}
         onClose={() => setRouteDetailsRouteId(null)}
       />
     </main>
   );
 }
 
-function resolveRoutePoint(
+function resolveRouteEndpointInfo(
   selection:
     | { kind: "current-location" }
     | { kind: "checkpoint"; checkpointId: string }
@@ -1330,7 +1337,7 @@ function resolveRoutePoint(
     | null,
   checkpointsById: Map<string, MapCheckpoint>,
   userLocation: UserLocation | null,
-): RoutePoint | null {
+): { point: RoutePoint; city: string | null } | null {
   if (!selection) {
     return null;
   }
@@ -1341,15 +1348,21 @@ function resolveRoutePoint(
     }
 
     return {
-      lat: userLocation.lat,
-      lng: userLocation.lng,
+      point: {
+        lat: userLocation.lat,
+        lng: userLocation.lng,
+      },
+      city: null,
     };
   }
 
   if (selection.kind === "map-point") {
     return {
-      lat: selection.lat,
-      lng: selection.lng,
+      point: {
+        lat: selection.lat,
+        lng: selection.lng,
+      },
+      city: null,
     };
   }
 
@@ -1366,7 +1379,10 @@ function resolveRoutePoint(
   }
 
   return {
-    lat: checkpoint.latitude,
-    lng: checkpoint.longitude,
+    point: {
+      lat: checkpoint.latitude,
+      lng: checkpoint.longitude,
+    },
+    city: checkpoint.city,
   };
 }

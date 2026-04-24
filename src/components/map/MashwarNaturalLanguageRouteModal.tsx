@@ -2,395 +2,368 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { getStatusBorderColor, getStatusColor } from "@/lib/config/map";
-import type { MapCheckpointStatus } from "@/lib/types/map";
-
-interface MockRouteCheckpoint {
-  name: string;
-  status: MapCheckpointStatus;
-  note: string;
-}
-
-interface MockRouteReport {
-  rawPrompt: string;
-  origin: string;
-  destination: string;
-  departureLabel: string;
-  distanceKm: number;
-  durationMinutes: number;
-  confidence: number;
-  summary: string;
-  checkpoints: MockRouteCheckpoint[];
-}
-
-interface RouteTemplate {
-  origin: string;
-  destination: string;
-  summary: string;
-  distanceKm: number;
-  durationMinutes: number;
-  confidence: number;
-  checkpoints: MockRouteCheckpoint[];
-}
+import { resolveNaturalLanguageRequest } from "@/lib/services/route-intent";
+import type { MapCheckpointStatus, UserLocation } from "@/lib/types/map";
+import type {
+  NaturalLanguageExecution,
+  NaturalLanguageCheckpointExecution,
+  NaturalLanguageRouteExecution,
+} from "@/lib/types/route-intent";
+import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 
 interface NaturalLanguageRouteModalProps {
   open: boolean;
   onClose: () => void;
+  currentLocation?: UserLocation | null;
 }
 
-const SAMPLE_PROMPT = "لو بدي اطلع من جنين لنابلس بكرة 8";
+const SAMPLE_PROMPT = "لو بدي اطلع من رام الله الى جنين بكرة 8";
 
-const LOCATION_ALIASES = [
-  { name: "Jenin", aliases: ["jenin", "جنين"] },
-  { name: "Nablus", aliases: ["nablus", "نابلس"] },
-  { name: "Ramallah", aliases: ["ramallah", "رام الله", "رامالله"] },
-  { name: "Bethlehem", aliases: ["bethlehem", "بيت لحم"] },
-  { name: "Hebron", aliases: ["hebron", "الخليل", "خليل"] },
-  { name: "Jericho", aliases: ["jericho", "أريحا", "اريحا"] },
-] as const;
-
-const ROUTE_TEMPLATES: Record<string, RouteTemplate> = {
-  "Jenin|Nablus": {
-    origin: "Jenin",
-    destination: "Nablus",
-    summary:
-      "A northbound mock corridor with one slow merge and two checkpoint touchpoints before the city edge.",
-    distanceKm: 38,
-    durationMinutes: 62,
-    confidence: 96,
-    checkpoints: [
-      {
-        name: "Jenin city exit",
-        status: "سالك",
-        note: "Easy departure from the urban edge.",
-      },
-      {
-        name: "South valley merge",
-        status: "أزمة متوسطة",
-        note: "A short queue forms near the merge lane.",
-      },
-      {
-        name: "Nablus east approach",
-        status: "سالك",
-        note: "Final approach is open in this mock brief.",
-      },
-    ],
+const STATUS_VISUALS: Record<
+  MapCheckpointStatus,
+  {
+    text: string;
+    bg: string;
+    border: string;
+  }
+> = {
+  سالك: {
+    text: "#86efac",
+    bg: "rgba(34, 197, 94, 0.12)",
+    border: "rgba(34, 197, 94, 0.35)",
   },
-  "Ramallah|Bethlehem": {
-    origin: "Ramallah",
-    destination: "Bethlehem",
-    summary:
-      "A mock central-south corridor with alternating slow and clear segments.",
-    distanceKm: 29,
-    durationMinutes: 54,
-    confidence: 92,
-    checkpoints: [
-      {
-        name: "Ramallah south exit",
-        status: "سالك",
-        note: "Initial departure is clean.",
-      },
-      {
-        name: "Mid-corridor junction",
-        status: "أزمة خانقة",
-        note: "A temporary pinch point slows the route.",
-      },
-      {
-        name: "Bethlehem entry ring",
-        status: "أزمة متوسطة",
-        note: "The route opens again near the ring road.",
-      },
-    ],
+  "أزمة متوسطة": {
+    text: "#fbbf24",
+    bg: "rgba(245, 158, 11, 0.12)",
+    border: "rgba(245, 158, 11, 0.35)",
   },
-  "Hebron|Jericho": {
-    origin: "Hebron",
-    destination: "Jericho",
-    summary:
-      "A long south-east mock route with a quiet start and a later restricted segment.",
-    distanceKm: 57,
-    durationMinutes: 88,
-    confidence: 89,
-    checkpoints: [
-      {
-        name: "Hebron outbound lane",
-        status: "سالك",
-        note: "Smooth leaving movement for the first leg.",
-      },
-      {
-        name: "Desert ridge checkpoint",
-        status: "أزمة متوسطة",
-        note: "Traffic compresses briefly at the ridge line.",
-      },
-      {
-        name: "Jericho access road",
-        status: "مغلق",
-        note: "The mock brief marks the final entry as closed.",
-      },
-    ],
+  "أزمة خانقة": {
+    text: "#fdba74",
+    bg: "rgba(249, 115, 22, 0.12)",
+    border: "rgba(249, 115, 22, 0.35)",
+  },
+  مغلق: {
+    text: "#fca5a5",
+    bg: "rgba(239, 68, 68, 0.12)",
+    border: "rgba(239, 68, 68, 0.35)",
+  },
+  "غير معروف": {
+    text: "#cbd5e1",
+    bg: "rgba(148, 163, 184, 0.12)",
+    border: "rgba(148, 163, 184, 0.35)",
   },
 };
 
-const DEFAULT_TEMPLATE: RouteTemplate = {
-  origin: "Origin point",
-  destination: "Destination point",
-  summary:
-    "This mock route brief keeps the structure ready for a real parser and live map application later.",
-  distanceKm: 24,
-  durationMinutes: 41,
-  confidence: 78,
-  checkpoints: [
-    {
-      name: "Initial departure",
-      status: "سالك",
-      note: "The first segment is free-flowing.",
-    },
-    {
-      name: "Mid-route control point",
-      status: "أزمة متوسطة",
-      note: "A soft slowdown appears at the midpoint.",
-    },
-    {
-      name: "Arrival approach",
-      status: "سالك",
-      note: "The final approach is clear in this mock output.",
-    },
-  ],
+const RISK_VISUALS: Record<
+  "low" | "medium" | "high" | "unknown",
+  {
+    label: string;
+    text: string;
+    bg: string;
+    border: string;
+  }
+> = {
+  low: {
+    label: "LOW",
+    text: "#86efac",
+    bg: "rgba(34, 197, 94, 0.12)",
+    border: "rgba(34, 197, 94, 0.35)",
+  },
+  medium: {
+    label: "MEDIUM",
+    text: "#fbbf24",
+    bg: "rgba(245, 158, 11, 0.12)",
+    border: "rgba(245, 158, 11, 0.35)",
+  },
+  high: {
+    label: "HIGH",
+    text: "#fca5a5",
+    bg: "rgba(239, 68, 68, 0.12)",
+    border: "rgba(239, 68, 68, 0.35)",
+  },
+  unknown: {
+    label: "UNKNOWN",
+    text: "#cbd5e1",
+    bg: "rgba(148, 163, 184, 0.12)",
+    border: "rgba(148, 163, 184, 0.35)",
+  },
 };
 
-function normalizeText(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s:@/-]+/gu, " ")
-    .replace(/\s+/g, " ");
+interface PillProps {
+  label: string;
+  text: string;
+  bg: string;
+  border: string;
 }
 
-function getLocationsInOrder(prompt: string): string[] {
-  const normalizedPrompt = normalizeText(prompt);
-  const matches = LOCATION_ALIASES.flatMap((entry) =>
-    entry.aliases.flatMap((alias) => {
-      const index =
-        alias === alias.toLowerCase()
-          ? normalizedPrompt.indexOf(alias)
-          : prompt.indexOf(alias);
-
-      if (index < 0) {
-        return [];
-      }
-
-      return [{ name: entry.name, index }];
-    }),
-  );
-
-  return Array.from(new Set(matches.sort((left, right) => left.index - right.index).map((entry) => entry.name)));
-}
-
-function getTemplateKey(origin: string, destination: string): string {
-  return `${origin}|${destination}`;
-}
-
-function parseTimeLabel(prompt: string): string {
-  const normalizedPrompt = normalizeText(prompt);
-  const timeMatch = normalizedPrompt.match(
-    /(?:\b(?:at|around|ساعة|الساعة|عند)\b\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/,
-  );
-
-  if (!timeMatch) {
-    return "08:00 AM";
-  }
-
-  const hour = Number(timeMatch[1]);
-  const minute = Number(timeMatch[2] ?? "0");
-  const meridiem = timeMatch[3];
-
-  if (!Number.isFinite(hour) || hour < 0 || hour > 23) {
-    return "08:00 AM";
-  }
-
-  const adjustedHour =
-    meridiem === "pm" && hour < 12
-      ? hour + 12
-      : meridiem === "am" && hour === 12
-        ? 0
-        : hour;
-
-  const formattedHour = `${adjustedHour % 12 === 0 ? 12 : adjustedHour % 12}`.padStart(2, "0");
-  const formattedMinute = `${Math.max(0, Math.min(59, minute))}`.padStart(2, "0");
-  const period = adjustedHour >= 12 ? "PM" : "AM";
-
-  return `${formattedHour}:${formattedMinute} ${period}`;
-}
-
-function parseDepartureLabel(prompt: string): string {
-  const normalizedPrompt = normalizeText(prompt);
-  const tomorrowTokens = ["tomorrow", "بكرة", "باجر", "غد", "غدا"];
-
-  if (tomorrowTokens.some((token) => normalizedPrompt.includes(token))) {
-    return "Tomorrow";
-  }
-
-  if (
-    ["today", "اليوم", "now", "الآن", "الان"].some((token) =>
-      normalizedPrompt.includes(token),
-    )
-  ) {
-    return "Today";
-  }
-
-  return "Next available slot";
-}
-
-function generateMockRouteReport(prompt: string): MockRouteReport {
-  const [originCandidate, destinationCandidate] = getLocationsInOrder(prompt);
-  const origin = originCandidate ?? DEFAULT_TEMPLATE.origin;
-  const destination = destinationCandidate ?? DEFAULT_TEMPLATE.destination;
-  const template =
-    ROUTE_TEMPLATES[getTemplateKey(origin, destination)] ??
-    ROUTE_TEMPLATES[getTemplateKey(destination, origin)] ??
-    {
-      ...DEFAULT_TEMPLATE,
-      origin,
-      destination,
-    };
-
-  return {
-    rawPrompt: prompt.trim(),
-    origin: template.origin,
-    destination: template.destination,
-    departureLabel: `${parseDepartureLabel(prompt)}, ${parseTimeLabel(prompt)}`,
-    distanceKm: template.distanceKm,
-    durationMinutes: template.durationMinutes,
-    confidence: template.confidence,
-    summary: template.summary,
-    checkpoints: template.checkpoints,
-  };
-}
-
-function getConfidenceTone(confidence: number) {
-  if (confidence > 90) {
-    return { color: "#86efac", text: `${confidence}%` };
-  }
-
-  if (confidence >= 80) {
-    return { color: "#22c55e", text: `${confidence}%` };
-  }
-
-  return { color: "#f59e0b", text: `${confidence}%` };
-}
-
-function StatusPill({ status }: { status: MapCheckpointStatus }) {
+function Pill({ label, text, bg, border }: PillProps) {
   return (
     <span
-      className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold"
-      style={{
-        backgroundColor: `${getStatusColor(status)}12`,
-        color: getStatusBorderColor(status),
-        borderColor: `${getStatusColor(status)}55`,
-      }}
+      className="inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]"
+      style={{ color: text, backgroundColor: bg, borderColor: border }}
     >
-      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getStatusColor(status) }} />
-      {status}
+      {label}
     </span>
   );
 }
 
-function IconMic() {
+function formatDateTimeLabel(value: string | null): string {
+  return formatDateTimeInPalestine(value);
+}
+
+function formatPercent(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatRiskScore(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  return value.toFixed(1);
+}
+
+function formatDurationLabel(durationMs: number | null): string {
+  if (durationMs === null || !Number.isFinite(durationMs) || durationMs <= 0) {
+    return "n/a";
+  }
+
+  const totalMinutes = Math.round(durationMs / 60000);
+  if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+
+  return `${totalMinutes}m`;
+}
+
+function formatDistanceLabel(distanceM: number | null): string {
+  if (distanceM === null || !Number.isFinite(distanceM) || distanceM <= 0) {
+    return "n/a";
+  }
+
+  if (distanceM >= 1000) {
+    return `${(distanceM / 1000).toFixed(distanceM >= 10000 ? 0 : 1)} km`;
+  }
+
+  return `${Math.round(distanceM)} m`;
+}
+
+function formatRouteTitle(route: NaturalLanguageRouteExecution["resolution"]): string {
+  return `${route.originLabel} → ${route.destinationLabel}`;
+}
+
+function buildForecastRows(
+  forecast: NonNullable<NaturalLanguageCheckpointExecution["resolution"]["forecast"]>,
+) {
+  const rows = new Map<
+    string,
+    {
+      horizon: string;
+      targetDateTime: string | null;
+      entering: (typeof forecast.predictions.entering)[number] | null;
+      leaving: (typeof forecast.predictions.leaving)[number] | null;
+    }
+  >();
+
+  const addItem = (
+    direction: "entering" | "leaving",
+    item: (typeof forecast.predictions.entering)[number],
+  ) => {
+    const current = rows.get(item.horizon) ?? {
+      horizon: item.horizon,
+      targetDateTime: item.targetDateTime,
+      entering: null,
+      leaving: null,
+    };
+
+    current[direction] = item;
+    current.targetDateTime = current.targetDateTime ?? item.targetDateTime;
+    rows.set(item.horizon, current);
+  };
+
+  forecast.predictions.entering.forEach((item) => addItem("entering", item));
+  forecast.predictions.leaving.forEach((item) => addItem("leaving", item));
+
+  const order = new Map([
+    ["plus_30m", 0],
+    ["plus_1h", 1],
+    ["plus_2h", 2],
+    ["next_day_8am", 3],
+  ]);
+
+  return Array.from(rows.values()).sort((left, right) => {
+    const leftRank = order.get(left.horizon) ?? 99;
+    const rightRank = order.get(right.horizon) ?? 99;
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
+
+    return left.horizon.localeCompare(right.horizon);
+  });
+}
+
+function StatusBadge({ status }: { status: MapCheckpointStatus }) {
+  const visual = STATUS_VISUALS[status];
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" aria-hidden="true">
-      <path
-        d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v6a3.5 3.5 0 0 0 3.5 3.5Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M7.5 11.5a4.5 4.5 0 0 0 9 0"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path
-        d="M12 15.5V20"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path
-        d="M9 20h6"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-    </svg>
+    <Pill label={status} text={visual.text} bg={visual.bg} border={visual.border} />
   );
 }
 
-function SectionLabel({
-  label,
+function RouteWindowCard({
   title,
-  subtitle,
+  departAt,
+  route,
 }: {
-  label: string;
   title: string;
-  subtitle?: string;
+  departAt: string;
+  route: NaturalLanguageRouteExecution["resolution"]["route"]["mainRoute"];
 }) {
-  return (
-    <div className="space-y-1">
-      <p className="mashwar-mono text-[10px] uppercase tracking-[0.34em] text-[#6b7280]">
-        {label}
-      </p>
-      <h2 className="text-[24px] font-bold text-[#f9fafb]">{title}</h2>
-      {subtitle ? <p className="text-[13px] leading-6 text-[#94a3b8]">{subtitle}</p> : null}
-    </div>
-  );
-}
+  if (!route) {
+    return null;
+  }
 
-function Tile({
-  label,
-  value,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  tone?: "default" | "blue" | "green" | "amber";
-}) {
-  const valueColor =
-    tone === "blue"
-      ? "#60a5fa"
-      : tone === "green"
-        ? "#86efac"
-        : tone === "amber"
-          ? "#fbbf24"
-          : "#f9fafb";
+  const risk = RISK_VISUALS[route.riskLevel ?? "unknown"];
 
   return (
-    <div className="rounded-[8px] border border-white/5 bg-transparent p-3">
-      <p className="mashwar-mono text-[9px] uppercase tracking-[0.26em] text-[#6b7280]">
-        {label}
-      </p>
-      <p className="mt-2 text-[16px] font-medium" style={{ color: valueColor }}>
-        {value}
-      </p>
-    </div>
+    <article className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+            {title}
+          </p>
+          <h4 className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
+            {formatDateTimeLabel(departAt)}
+          </h4>
+          <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
+            {route.reasonSummary || "No backend summary returned for this window."}
+          </p>
+        </div>
+
+        <Pill label={risk.label} text={risk.text} bg={risk.bg} border={risk.border} />
+      </div>
+
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+          <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+            Smart ETA
+          </p>
+          <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
+            {formatDateTimeLabel(route.smartEtaDateTime)}
+          </p>
+        </div>
+        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+          <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+            Expected Delay
+          </p>
+          <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
+            {route.expectedDelayMinutes !== null
+              ? `+${Math.max(1, Math.round(route.expectedDelayMinutes))} min`
+              : "n/a"}
+          </p>
+        </div>
+        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+          <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+            Risk
+          </p>
+          <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
+            {formatRiskScore(route.riskScore)}
+          </p>
+        </div>
+        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+          <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+            Checkpoints
+          </p>
+          <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
+            {route.checkpointCount}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {route.riskConfidence !== null ? (
+          <Pill
+            label={`Confidence ${formatPercent(route.riskConfidence)}`}
+            text="#cbd5e1"
+            bg="rgba(148, 163, 184, 0.12)"
+            border="rgba(148, 163, 184, 0.24)"
+          />
+        ) : null}
+        {route.historicalVolatility !== null ? (
+          <Pill
+            label={`Volatility ${route.historicalVolatility.toFixed(1)}`}
+            text="#cbd5e1"
+            bg="rgba(148, 163, 184, 0.12)"
+            border="rgba(148, 163, 184, 0.24)"
+          />
+        ) : null}
+        <Pill
+          label={`Distance ${formatDistanceLabel(route.distanceM)}`}
+          text="#cbd5e1"
+          bg="rgba(148, 163, 184, 0.12)"
+          border="rgba(148, 163, 184, 0.24)"
+        />
+      </div>
+    </article>
   );
 }
 
 export default function MashwarNaturalLanguageRouteModal({
   open,
   onClose,
+  currentLocation,
 }: NaturalLanguageRouteModalProps) {
   const [isMounted, setIsMounted] = useState(open);
   const [isVisible, setIsVisible] = useState(open);
   const [prompt, setPrompt] = useState(SAMPLE_PROMPT);
-  const [report, setReport] = useState<MockRouteReport | null>(null);
+  const [result, setResult] = useState<NaturalLanguageExecution | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"text" | "voice">("text");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const closeTimerRef = useRef<number | null>(null);
   const voiceTimerRef = useRef<number | null>(null);
-  const parseTimerRef = useRef<number | null>(null);
+  const requestNonceRef = useRef(0);
+
+  async function runPrompt(promptValue: string): Promise<void> {
+    const requestId = ++requestNonceRef.current;
+    setIsParsing(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const nextResult = await resolveNaturalLanguageRequest({
+        text: promptValue,
+        currentLocation: currentLocation ?? null,
+      });
+
+      if (requestNonceRef.current !== requestId) {
+        return;
+      }
+
+      setResult(nextResult);
+    } catch (nextError) {
+      if (requestNonceRef.current !== requestId) {
+        return;
+      }
+
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : "Unable to generate route intelligence right now.",
+      );
+    } finally {
+      if (requestNonceRef.current === requestId) {
+        setIsParsing(false);
+      }
+    }
+  }
 
   useEffect(() => {
     if (open) {
@@ -398,10 +371,17 @@ export default function MashwarNaturalLanguageRouteModal({
       requestAnimationFrame(() => {
         setIsVisible(true);
       });
+
+      setPrompt(SAMPLE_PROMPT);
+      setMode("text");
+      setResult(null);
+      setError(null);
+      setIsParsing(false);
       return;
     }
 
     setIsVisible(false);
+    requestNonceRef.current += 1;
 
     if (closeTimerRef.current) {
       window.clearTimeout(closeTimerRef.current);
@@ -411,7 +391,8 @@ export default function MashwarNaturalLanguageRouteModal({
       setIsMounted(false);
       setIsParsing(false);
       setIsListening(false);
-      setReport(null);
+      setError(null);
+      setResult(null);
     }, 240);
   }, [open]);
 
@@ -441,32 +422,6 @@ export default function MashwarNaturalLanguageRouteModal({
   }, [isMounted]);
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    setPrompt(SAMPLE_PROMPT);
-    setMode("text");
-    setIsParsing(true);
-    setReport(null);
-
-    if (parseTimerRef.current) {
-      window.clearTimeout(parseTimerRef.current);
-    }
-
-    parseTimerRef.current = window.setTimeout(() => {
-      setReport(generateMockRouteReport(SAMPLE_PROMPT));
-      setIsParsing(false);
-    }, 900);
-
-    return () => {
-      if (parseTimerRef.current) {
-        window.clearTimeout(parseTimerRef.current);
-      }
-    };
-  }, [open]);
-
-  useEffect(() => {
     return () => {
       if (closeTimerRef.current) {
         window.clearTimeout(closeTimerRef.current);
@@ -474,24 +429,17 @@ export default function MashwarNaturalLanguageRouteModal({
       if (voiceTimerRef.current) {
         window.clearTimeout(voiceTimerRef.current);
       }
-      if (parseTimerRef.current) {
-        window.clearTimeout(parseTimerRef.current);
-      }
     };
   }, []);
 
   function handleGenerateReport(promptOverride?: string): void {
-    setIsParsing(true);
-    setReport(null);
-
-    if (parseTimerRef.current) {
-      window.clearTimeout(parseTimerRef.current);
+    const nextPrompt = (promptOverride ?? prompt).trim();
+    if (!nextPrompt) {
+      setError("Enter a route or checkpoint question first.");
+      return;
     }
 
-    parseTimerRef.current = window.setTimeout(() => {
-      setReport(generateMockRouteReport(promptOverride ?? prompt));
-      setIsParsing(false);
-    }, 900);
+    void runPrompt(nextPrompt);
   }
 
   function handleUseVoice(): void {
@@ -510,7 +458,7 @@ export default function MashwarNaturalLanguageRouteModal({
       setPrompt(SAMPLE_PROMPT);
       setIsListening(false);
       setMode("text");
-      handleGenerateReport(SAMPLE_PROMPT);
+      void runPrompt(SAMPLE_PROMPT);
     }, 1200);
   }
 
@@ -518,7 +466,8 @@ export default function MashwarNaturalLanguageRouteModal({
     return null;
   }
 
-  const confidenceTone = report ? getConfidenceTone(report.confidence) : null;
+  const parsedConfidence =
+    result && "parse" in result ? formatPercent(result.parse.confidence) : "—";
 
   return (
     <div className="fixed inset-0 z-50" aria-hidden={!isVisible}>
@@ -549,18 +498,21 @@ export default function MashwarNaturalLanguageRouteModal({
                 NATURAL LANGUAGE ROUTING
               </p>
               <h2 id="natural-route-title" className="text-[24px] font-bold text-[#f9fafb]">
-                Compact route brief
+                Smart route and checkpoint parser
               </h2>
               <p className="max-w-2xl text-[13px] leading-6 text-[#94a3b8]">
-                Parse a brief, listen to a voice note, and keep the route report crisp,
-                bilingual, and ready for map application.
+                Parse a freeform travel prompt, resolve city coordinates from the local
+                city map, and call the live forecast or route services as needed.
               </p>
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
-              <span className="mashwar-pill inline-flex items-center rounded-full border border-[#92400e] bg-transparent px-3 py-1 text-[#fbbf24]">
-                Mock only
-              </span>
+              <Pill
+                label={currentLocation ? "Current location ready" : "No current location"}
+                text={currentLocation ? "#86efac" : "#cbd5e1"}
+                bg={currentLocation ? "rgba(34, 197, 94, 0.12)" : "rgba(148, 163, 184, 0.12)"}
+                border={currentLocation ? "rgba(34, 197, 94, 0.35)" : "rgba(148, 163, 184, 0.35)"}
+              />
               <button
                 type="button"
                 onClick={onClose}
@@ -611,9 +563,8 @@ export default function MashwarNaturalLanguageRouteModal({
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 rows={5}
-                placeholder="لو بدي اطلع من جنين لنابلس بكرة 8"
+                placeholder="لو بدي اطلع من رام الله الى جنين بكرة 8"
                 className="mt-3 min-h-[128px] w-full resize-none rounded-[8px] border border-[#2d3139] bg-transparent px-4 py-3 text-[16px] leading-7 text-[#f9fafb] outline-none transition placeholder:text-[#64748b] focus:border-[#3b82f6] focus:ring-4 focus:ring-[#3b82f6]/12"
-                style={{ fontFamily: "var(--font-ibm-arabic), ui-sans-serif, sans-serif" }}
               />
 
               <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -637,43 +588,31 @@ export default function MashwarNaturalLanguageRouteModal({
                 </button>
               </div>
 
-              <p className="mt-3 text-[11px] uppercase tracking-[0.22em] text-[#f59e0b]">
-                Example: {SAMPLE_PROMPT}
-              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Pill
+                  label={result ? `Parsed confidence ${parsedConfidence}` : "Awaiting parse"}
+                  text="#cbd5e1"
+                  bg="rgba(148, 163, 184, 0.12)"
+                  border="rgba(148, 163, 184, 0.24)"
+                />
+                <Pill
+                  label={currentLocation ? "Can fall back to current location" : "Current location unavailable"}
+                  text={currentLocation ? "#86efac" : "#fbbf24"}
+                  bg={currentLocation ? "rgba(34, 197, 94, 0.12)" : "rgba(245, 158, 11, 0.12)"}
+                  border={currentLocation ? "rgba(34, 197, 94, 0.35)" : "rgba(245, 158, 11, 0.35)"}
+                />
+              </div>
             </section>
 
             <section className="mashwar-panel p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                    PARSED ROUTE
-                  </p>
-                  <h3 className="mt-2 truncate text-[16px] font-bold text-[#f9fafb]">
-                    {report ? `${report.origin} → ${report.destination}` : "Awaiting route"}
-                  </h3>
-                </div>
-
-                <div className="rounded-[10px] border border-white/8 bg-transparent px-3 py-2 text-right">
-                  <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[#6b7280]">
-                    CONFIDENCE
-                  </p>
-                  <p className="mt-1 mashwar-mono text-[24px] font-bold" style={{ color: confidenceTone?.color ?? "#60a5fa" }}>
-                    {report ? `${report.confidence}%` : "—"}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                <Tile label="Origin" value={report?.origin ?? "Jenin"} tone="default" />
-                <Tile label="Destination" value={report?.destination ?? "Nablus"} tone="default" />
-                <Tile label="Departure" value={report?.departureLabel ?? "Tomorrow, 08:00 AM"} tone="amber" />
-                <Tile label="Mode" value="Mock brief" tone="default" />
-              </div>
-
-              <p className="mt-3 text-[11px] italic leading-5 text-[#94a3b8]">
-                This output is mock only and does not apply to live navigation until the
-                map layer confirms a valid route.
+              <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                INPUT EXAMPLES
               </p>
+              <div className="mt-3 space-y-2 text-[13px] leading-6 text-[#94a3b8]">
+                <p>• "Huwwara at 9:23am"</p>
+                <p>• "from Ramallah to Jenin tomorrow 8"</p>
+                <p>• "to Jenin at 7:30"</p>
+              </div>
             </section>
           </aside>
 
@@ -690,99 +629,357 @@ export default function MashwarNaturalLanguageRouteModal({
                         Generating intelligence brief
                       </p>
                       <p className="mt-1 text-[13px] leading-6 text-[#94a3b8]">
-                        Mock parsing origin, destination, time, and checkpoint sequence.
+                        Parsing the prompt, resolving cities, and calling the live APIs.
                       </p>
                     </div>
                   </div>
                 </div>
-              ) : report ? (
+              ) : error ? (
+                <div className="flex min-h-[18rem] items-center justify-center rounded-[12px] border border-dashed border-[#2d3139] bg-white/[0.03] px-5 text-center">
+                  <div className="max-w-md">
+                    <p className="text-[18px] font-semibold text-[#f9fafb]">
+                      Request failed
+                    </p>
+                    <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
+                      {error}
+                    </p>
+                  </div>
+                </div>
+              ) : result && result.kind === "clarification" ? (
                 <div className="space-y-4">
-                  <section className="rounded-[12px] border border-white/8 bg-transparent p-4">
+                  <section className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
+                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.3em] text-[#6b7280]">
+                      Clarification needed
+                    </p>
+                    <h3 className="mt-2 text-[22px] font-semibold text-[#f9fafb]">
+                      We need one more detail
+                    </h3>
+                    <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
+                      {result.message}
+                    </p>
+                  </section>
+                </div>
+              ) : result && result.kind === "error" ? (
+                <div className="flex min-h-[18rem] items-center justify-center rounded-[12px] border border-dashed border-[#2d3139] bg-white/[0.03] px-5 text-center">
+                  <div className="max-w-md">
+                    <p className="text-[18px] font-semibold text-[#f9fafb]">
+                      Unable to process the prompt
+                    </p>
+                    <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
+                      {result.message}
+                    </p>
+                  </div>
+                </div>
+              ) : result && result.kind === "route" ? (
+                <div className="space-y-4">
+                  <section className="rounded-[12px] border border-white/8 bg-white/[0.03] p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.32em] text-[#6b7280]">
-                          MOCK ROUTE REPORT
+                          ROUTE INTENT
                         </p>
-                        <h3 className="mt-2 text-[22px] font-bold text-[#f9fafb]">
-                          {report.origin} to {report.destination}
+                        <h3 className="mt-2 text-[22px] font-semibold text-[#f9fafb]">
+                          {formatRouteTitle(result.resolution)}
                         </h3>
                         <p className="mt-2 max-w-2xl text-[13px] leading-6 text-[#94a3b8]">
-                          {report.summary}
+                          {result.parse.entities.wantsSimulation
+                            ? "The prompt asked for a what-if comparison, so the backend route was evaluated across multiple departure windows."
+                            : "The prompt was resolved into a single live route request with Smart ETA and journey risk."}
                         </p>
                       </div>
 
-                      <div className="rounded-[10px] border border-white/8 bg-transparent px-3 py-2">
-                        <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[#6b7280]">
-                          CONFIDENCE
-                        </p>
-                        <p className="mt-1 mashwar-mono text-[22px] font-bold" style={{ color: confidenceTone?.color ?? "#60a5fa" }}>
-                          {report.confidence}%
-                        </p>
-                      </div>
+                      <Pill
+                        label={`Confidence ${formatPercent(result.parse.confidence)}`}
+                        text="#cbd5e1"
+                        bg="rgba(148, 163, 184, 0.12)"
+                        border="rgba(148, 163, 184, 0.24)"
+                      />
                     </div>
 
                     <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                      <Tile label="Confidence" value={`${report.confidence}%`} tone="blue" />
-                      <Tile label="Departure" value={report.departureLabel} tone="default" />
-                      <Tile label="Distance" value={`${report.distanceKm} km`} tone="default" />
-                      <Tile label="Duration" value={`${report.durationMinutes} min`} tone="default" />
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[#2d3139] bg-transparent px-3 py-3">
-                      <div className="min-w-0">
-                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                          PROMPT CAPTURED
+                      <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                          Origin
                         </p>
-                        <p className="mt-1 text-[13px] leading-6 text-[#e5e7eb]">
-                          {report.rawPrompt}
+                        <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                          {result.resolution.originLabel}
                         </p>
                       </div>
-                      <span className="mashwar-pill inline-flex items-center gap-2 border border-[#14532d] bg-transparent px-3 py-1 text-[#86efac]">
-                        <span className="h-2 w-2 rounded-full bg-[#22c55e]" />
-                        Smart parsing active
-                      </span>
+                      <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                          Destination
+                        </p>
+                        <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                          {result.resolution.destinationLabel}
+                        </p>
+                      </div>
+                      <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                          Departure
+                        </p>
+                        <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                          {formatDateTimeLabel(result.resolution.departAt)}
+                        </p>
+                      </div>
+                      <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                          Smart ETA
+                        </p>
+                        <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                          {formatDateTimeLabel(result.resolution.route.mainRoute?.smartEtaDateTime ?? null)}
+                        </p>
+                      </div>
                     </div>
                   </section>
 
-                  <div className="space-y-2">
-                    {report.checkpoints.map((checkpoint, index) => (
-                      <article
-                        key={`${checkpoint.name}-${index}`}
-                        className="rounded-[10px] border border-white/5 bg-transparent px-3 py-3 transition hover:bg-white/5"
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/5 bg-transparent text-[12px] font-semibold text-[#cbd5e1]">
-                            {index + 1}
-                          </div>
+                  {result.resolution.simulations.length > 0 ? (
+                    <section className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                            WHAT-IF SIMULATION
+                          </p>
+                          <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">
+                            Departure windows
+                          </h4>
+                        </div>
+                      </div>
 
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <h4 className="text-[14px] font-bold text-[#f9fafb]">
-                                  {checkpoint.name}
-                                </h4>
-                                <p className="mt-1 text-[12px] leading-5 text-[#94a3b8]">
-                                  {checkpoint.note}
+                      <div className="space-y-3">
+                        {result.resolution.simulations.map((window) => (
+                          <RouteWindowCard
+                            key={`${window.label}-${window.departAt}`}
+                            title={window.label}
+                            departAt={window.departAt}
+                            route={window.routes.mainRoute}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ) : (
+                    <section className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                            ROUTE RESULT
+                          </p>
+                          <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">
+                            Main route
+                          </h4>
+                        </div>
+                      </div>
+                      <RouteWindowCard
+                        title="Live route"
+                        departAt={result.resolution.departAt ?? new Date().toISOString()}
+                        route={result.resolution.route.mainRoute}
+                      />
+                    </section>
+                  )}
+                </div>
+              ) : result && result.kind === "checkpoint" ? (
+                <div className="space-y-4">
+                  <section className="rounded-[12px] border border-white/8 bg-white/[0.03] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.32em] text-[#6b7280]">
+                          CHECKPOINT INTENT
+                        </p>
+                        <h3 className="mt-2 text-[22px] font-semibold text-[#f9fafb]">
+                          {result.resolution.checkpoint.name}
+                        </h3>
+                        <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
+                          {result.resolution.checkpoint.city ?? "Unknown city"}
+                          {result.resolution.checkpoint.alertText
+                            ? ` · ${result.resolution.checkpoint.alertText}`
+                            : ""}
+                        </p>
+                      </div>
+
+                      <StatusBadge
+                        status={result.resolution.currentStatusLabel as MapCheckpointStatus}
+                      />
+                    </div>
+
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                          Mode
+                        </p>
+                        <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                          {result.resolution.mode.toUpperCase()}
+                        </p>
+                      </div>
+                      <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                          Target time
+                        </p>
+                        <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                          {formatDateTimeLabel(result.resolution.targetDateTime)}
+                        </p>
+                      </div>
+                      <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                          Current status
+                        </p>
+                        <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                          {result.resolution.currentStatusLabel}
+                        </p>
+                      </div>
+                      <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                          Confidence
+                        </p>
+                        <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                          {parsedConfidence}
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+
+                  {result.resolution.forecast ? (
+                    <section className="space-y-3">
+                      <div>
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                          FORECAST TIMELINE
+                        </p>
+                        <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">
+                          Entering and leaving windows
+                        </h4>
+                      </div>
+
+                      <div className="space-y-3">
+                        {buildForecastRows(result.resolution.forecast).map((row) => (
+                          <article
+                            key={row.horizon}
+                            className="rounded-[16px] border border-[#2d3139] bg-white/[0.03] p-4"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="mashwar-mono text-[10px] uppercase tracking-[0.26em] text-[#6b7280]">
+                                  {row.horizon.replace(/_/g, " ").toUpperCase()}
                                 </p>
+                                <h5 className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                  {formatDateTimeLabel(row.targetDateTime)}
+                                </h5>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {row.entering ? (
+                                  <StatusBadge status={row.entering.prediction.predictedStatus} />
+                                ) : null}
+                                {row.leaving ? (
+                                  <StatusBadge status={row.leaving.prediction.predictedStatus} />
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                              {row.entering ? (
+                                <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                                  <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                                    Entering
+                                  </p>
+                                  <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                    {row.entering.prediction.predictedStatus}
+                                  </p>
+                                  <p className="mt-1 text-[12px] text-[#94a3b8]">
+                                    Confidence {formatPercent(row.entering.prediction.confidence)}
+                                  </p>
+                                </div>
+                              ) : null}
+
+                              {row.leaving ? (
+                                <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                                  <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                                    Leaving
+                                  </p>
+                                  <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                    {row.leaving.prediction.predictedStatus}
+                                  </p>
+                                  <p className="mt-1 text-[12px] text-[#94a3b8]">
+                                    Confidence {formatPercent(row.leaving.prediction.confidence)}
+                                  </p>
+                                </div>
+                              ) : null}
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  ) : (
+                    <section className="space-y-3">
+                      <div>
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                          EXACT-TIME PREDICTION
+                        </p>
+                        <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">
+                          Direction-specific predictions
+                        </h4>
+                      </div>
+
+                      <div className="space-y-3">
+                        {result.resolution.predictions.map((prediction) => {
+                          const visual =
+                            STATUS_VISUALS[prediction.prediction.predictedStatus] ??
+                            STATUS_VISUALS["غير معروف"];
+
+                          return (
+                            <article
+                              key={prediction.request.statusType}
+                              className="rounded-[16px] border border-[#2d3139] bg-white/[0.03] p-4"
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                  <p className="mashwar-mono text-[10px] uppercase tracking-[0.26em] text-[#6b7280]">
+                                    {prediction.request.statusType}
+                                  </p>
+                                  <h5 className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                    {prediction.prediction.predictedStatus}
+                                  </h5>
+                                </div>
+                                <Pill
+                                  label={prediction.prediction.predictedStatus}
+                                  text={visual.text}
+                                  bg={visual.bg}
+                                  border={visual.border}
+                                />
                               </div>
 
-                              <StatusPill status={checkpoint.status} />
-                            </div>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
+                              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                                <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                                  <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                                    Target time
+                                  </p>
+                                  <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                    {formatDateTimeLabel(
+                                      prediction.prediction.targetDateTime,
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                                  <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                                    Confidence
+                                  </p>
+                                  <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                    {formatPercent(prediction.prediction.confidence)}
+                                  </p>
+                                </div>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  )}
                 </div>
               ) : (
-                <div className="flex min-h-[18rem] items-center justify-center rounded-[12px] border border-dashed border-white/8 bg-transparent px-5 text-center">
+                <div className="flex min-h-[18rem] items-center justify-center rounded-[12px] border border-dashed border-[#2d3139] bg-white/[0.03] px-5 text-center">
                   <div className="max-w-md">
-                    <p className="text-[18px] font-bold text-[#f9fafb]">
-                      No route generated yet
+                    <p className="text-[18px] font-semibold text-[#f9fafb]">
+                      No intelligence generated yet
                     </p>
                     <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
-                      Generate the mock brief to see checkpoints, timing, and route
-                      summary appear here.
+                      Generate a route or checkpoint brief to see Smart ETA, risk, and
+                      checkpoint forecasting appear here.
                     </p>
                   </div>
                 </div>
@@ -792,5 +989,37 @@ export default function MashwarNaturalLanguageRouteModal({
         </div>
       </section>
     </div>
+  );
+}
+
+function IconMic() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      className="h-4 w-4"
+    >
+      <path
+        d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v6a3.5 3.5 0 0 0 3.5 3.5Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.5 11.5a4.5 4.5 0 0 0 9 0"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12 15.5V20"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+      <path d="M9 20h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
   );
 }

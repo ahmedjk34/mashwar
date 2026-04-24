@@ -1,0 +1,1241 @@
+[
+  {
+    "id": 2,
+    "checkpoint": "شافي شومرون",
+    "city": "نابلس",
+    "latitude": 32.264518,
+    "longitude": 35.188109
+  },
+  {
+    "id": 423,
+    "checkpoint": "بيت عور",
+    "city": "رام الله",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 425,
+    "checkpoint": "بوابة شقبا",
+    "city": "رام الله",
+    "latitude": 31.981916,
+    "longitude": 35.047633
+  },
+  {
+    "id": 100,
+    "checkpoint": "جسر جيوس عزون",
+    "city": "قلقيلية",
+    "latitude": 32.1832115713109,
+    "longitude": 35.0546603707851
+  },
+  {
+    "id": 426,
+    "checkpoint": "بوابة بيت ليد",
+    "city": "طولكرم",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 144,
+    "checkpoint": "الباذان - الصيرفي - المساكن",
+    "city": "نابلس",
+    "latitude": 32.237529,
+    "longitude": 35.305783
+  },
+  {
+    "id": 427,
+    "checkpoint": "عبارة كفل حارس",
+    "city": "سلفيت",
+    "latitude": 32.108972,
+    "longitude": 35.153972
+  },
+  {
+    "id": 18,
+    "checkpoint": "بوابة عابود",
+    "city": "رام الله",
+    "latitude": 32.012106,
+    "longitude": 35.079206
+  },
+  {
+    "id": 317,
+    "checkpoint": "بوابة ترمسعيا",
+    "city": "رام الله",
+    "latitude": 32.03818,
+    "longitude": 35.275581
+  },
+  {
+    "id": 424,
+    "checkpoint": "بوابة المهلل",
+    "city": "رام الله",
+    "latitude": 31.945604,
+    "longitude": 35.033387
+  },
+  {
+    "id": 102,
+    "checkpoint": "حجة - الفندق",
+    "city": "قلقيلية",
+    "latitude": 32.187523,
+    "longitude": 35.134198
+  },
+  {
+    "id": 422,
+    "checkpoint": "جسر الزاوية",
+    "city": "سلفيت",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 160,
+    "checkpoint": "بوابة جوريش",
+    "city": "نابلس",
+    "latitude": 32.105456,
+    "longitude": 35.342035
+  },
+  {
+    "id": 120,
+    "checkpoint": "سدة قراوة",
+    "city": "سلفيت",
+    "latitude": 32.116806,
+    "longitude": 35.09849
+  },
+  {
+    "id": 150,
+    "checkpoint": "بيتا تحت الجسر (الحسبة)",
+    "city": "نابلس",
+    "latitude": 32.136937,
+    "longitude": 35.261217
+  },
+  {
+    "id": 98,
+    "checkpoint": "مدخل اماتين",
+    "city": "قلقيلية",
+    "latitude": 32.1941905143824,
+    "longitude": 35.1500809192658
+  },
+  {
+    "id": 105,
+    "checkpoint": "عزون",
+    "city": "قلقيلية",
+    "latitude": 32.181742,
+    "longitude": 35.05659
+  },
+  {
+    "id": 56,
+    "checkpoint": "قلنديا",
+    "city": "القدس",
+    "latitude": 31.862674,
+    "longitude": 35.227825
+  },
+  {
+    "id": 325,
+    "checkpoint": "خربثا",
+    "city": "رام الله",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 414,
+    "checkpoint": "الجمعيّة العربيّة",
+    "city": "بيت لحم",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 417,
+    "checkpoint": "أم سلمونة",
+    "city": "بيت لحم",
+    "latitude": 31.649146,
+    "longitude": 35.164631
+  },
+  {
+    "id": 62,
+    "checkpoint": "معالي ادوميم",
+    "city": "القدس",
+    "latitude": 31.767142,
+    "longitude": 35.28915
+  },
+  {
+    "id": 74,
+    "checkpoint": "جناتا",
+    "city": "بيت لحم",
+    "latitude": 31.664808,
+    "longitude": 35.226726
+  },
+  {
+    "id": 421,
+    "checkpoint": "بيت عينون",
+    "city": "الخليل",
+    "latitude": 31.58534,
+    "longitude": 35.120172
+  },
+  {
+    "id": 162,
+    "checkpoint": "بوابة دوما",
+    "city": "نابلس",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 99,
+    "checkpoint": "مدخل جينصافوط",
+    "city": "قلقيلية",
+    "latitude": 32.1840575102492,
+    "longitude": 35.1314449310303
+  },
+  {
+    "id": 418,
+    "checkpoint": "عقبة حسنة",
+    "city": "بيت لحم",
+    "latitude": 31.705242,
+    "longitude": 35.156401
+  },
+  {
+    "id": 371,
+    "checkpoint": "الهجرة",
+    "city": "الخليل",
+    "latitude": 31.48625,
+    "longitude": 35.055085
+  },
+  {
+    "id": 377,
+    "checkpoint": "العروب – الجسر",
+    "city": "الخليل",
+    "latitude": 31.623614,
+    "longitude": 35.129979
+  },
+  {
+    "id": 15,
+    "checkpoint": "الجلزون",
+    "city": "رام الله",
+    "latitude": 31.939098,
+    "longitude": 35.217694
+  },
+  {
+    "id": 372,
+    "checkpoint": "واد الشاجنة",
+    "city": "الخليل",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 318,
+    "checkpoint": "بوابة سنجل",
+    "city": "رام الله",
+    "latitude": 32.043896,
+    "longitude": 35.263356
+  },
+  {
+    "id": 326,
+    "checkpoint": "سلواد يبرود",
+    "city": "رام الله",
+    "latitude": 31.9623710358974,
+    "longitude": 35.2626210451126
+  },
+  {
+    "id": 20,
+    "checkpoint": "روابي",
+    "city": "رام الله",
+    "latitude": 31.990324,
+    "longitude": 35.192063
+  },
+  {
+    "id": 356,
+    "checkpoint": "أم الشقحان",
+    "city": "الخليل",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 329,
+    "checkpoint": "بوابة بدو",
+    "city": "رام الله",
+    "latitude": 31.838867,
+    "longitude": 35.160435
+  },
+  {
+    "id": 57,
+    "checkpoint": "كفر عقب",
+    "city": "القدس",
+    "latitude": 31.872337,
+    "longitude": 35.220205
+  },
+  {
+    "id": 357,
+    "checkpoint": "خلة المية",
+    "city": "الخليل",
+    "latitude": 31.445882,
+    "longitude": 35.141447
+  },
+  {
+    "id": 67,
+    "checkpoint": "الكونتينر",
+    "city": "بيت لحم",
+    "latitude": 31.7422414005819,
+    "longitude": 35.2892262487193
+  },
+  {
+    "id": 63,
+    "checkpoint": "العيزرية",
+    "city": "القدس",
+    "latitude": 31.767142,
+    "longitude": 35.28915
+  },
+  {
+    "id": 328,
+    "checkpoint": "بوابة نعلين",
+    "city": "رام الله",
+    "latitude": 31.944488,
+    "longitude": 35.031109
+  },
+  {
+    "id": 156,
+    "checkpoint": "طريق يتسهار",
+    "city": "نابلس",
+    "latitude": 32.162389,
+    "longitude": 35.261673
+  },
+  {
+    "id": 7,
+    "checkpoint": "الـ 17 - عصيرة",
+    "city": "نابلس",
+    "latitude": 32.243339,
+    "longitude": 35.244312
+  },
+  {
+    "id": 152,
+    "checkpoint": "بوابة جماعين الكسارة",
+    "city": "نابلس",
+    "latitude": 32.126454,
+    "longitude": 35.236191
+  },
+  {
+    "id": 6,
+    "checkpoint": "صرة",
+    "city": "نابلس",
+    "latitude": 32.215338,
+    "longitude": 35.178807
+  },
+  {
+    "id": 12,
+    "checkpoint": "بيت إيل (DCO)",
+    "city": "رام الله",
+    "latitude": 31.921575,
+    "longitude": 35.224925
+  },
+  {
+    "id": 185,
+    "checkpoint": "اللدائن",
+    "city": "طولكرم",
+    "latitude": 32.266929,
+    "longitude": 35.159852
+  },
+  {
+    "id": 420,
+    "checkpoint": "نصار",
+    "city": "بيت لحم",
+    "latitude": 31.704306,
+    "longitude": 35.169259
+  },
+  {
+    "id": 97,
+    "checkpoint": "نفق حبلة",
+    "city": "قلقيلية",
+    "latitude": 32.136937,
+    "longitude": 35.261217
+  },
+  {
+    "id": 136,
+    "checkpoint": "عين شبلي - الحمرا",
+    "city": "أريحا - طوباس",
+    "latitude": 32.206728,
+    "longitude": 35.448718
+  },
+  {
+    "id": 96,
+    "checkpoint": "مدخل قلقيلية الشرقي",
+    "city": "قلقيلية",
+    "latitude": 32.188099,
+    "longitude": 34.99645
+  },
+  {
+    "id": 369,
+    "checkpoint": "شويكة",
+    "city": "الخليل",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 104,
+    "checkpoint": "مدخل بلدة النبي الياس",
+    "city": "قلقيلية",
+    "latitude": 32.184745471968,
+    "longitude": 35.0285070147073
+  },
+  {
+    "id": 61,
+    "checkpoint": "الزعيم",
+    "city": "القدس",
+    "latitude": 31.785235,
+    "longitude": 35.261818
+  },
+  {
+    "id": 60,
+    "checkpoint": "عناتا",
+    "city": "القدس",
+    "latitude": 31.822216,
+    "longitude": 35.272036
+  },
+  {
+    "id": 28,
+    "checkpoint": "الفحص",
+    "city": "الخليل",
+    "latitude": 31.501373,
+    "longitude": 35.117885
+  },
+  {
+    "id": 122,
+    "checkpoint": "بوابة بروقين",
+    "city": "سلفيت",
+    "latitude": 32.0836290358885,
+    "longitude": 35.1035070419312
+  },
+  {
+    "id": 116,
+    "checkpoint": "مدخل سلفيت الشمالي",
+    "city": "سلفيت",
+    "latitude": 32.098645,
+    "longitude": 35.158943
+  },
+  {
+    "id": 379,
+    "checkpoint": "سعير",
+    "city": "الخليل",
+    "latitude": 31.586048,
+    "longitude": 35.120952
+  },
+  {
+    "id": 39,
+    "checkpoint": "زيف",
+    "city": "الخليل",
+    "latitude": 31.470887,
+    "longitude": 35.132788
+  },
+  {
+    "id": 221,
+    "checkpoint": "بوابة كفر الديك",
+    "city": "سلفيت",
+    "latitude": 32.066439,
+    "longitude": 35.064012
+  },
+  {
+    "id": 126,
+    "checkpoint": "دير بلوط",
+    "city": "سلفيت",
+    "latitude": 32.0639283180052,
+    "longitude": 35.0401961803436
+  },
+  {
+    "id": 69,
+    "checkpoint": "النشاش",
+    "city": "بيت لحم",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 118,
+    "checkpoint": "بوابة حارس",
+    "city": "سلفيت",
+    "latitude": 32.1128359201276,
+    "longitude": 35.1342505216599
+  },
+  {
+    "id": 5,
+    "checkpoint": "عورتا",
+    "city": "نابلس",
+    "latitude": 32.179764,
+    "longitude": 35.282617
+  },
+  {
+    "id": 183,
+    "checkpoint": "الشعراوية",
+    "city": "طولكرم",
+    "latitude": 32.344745,
+    "longitude": 35.049119
+  },
+  {
+    "id": 9,
+    "checkpoint": "بيت فوريك",
+    "city": "نابلس",
+    "latitude": 32.199919,
+    "longitude": 35.317016
+  },
+  {
+    "id": 141,
+    "checkpoint": "أريحا DCO (الحاجز الجنوبي)",
+    "city": "أريحا - طوباس",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 68,
+    "checkpoint": "عش الغراب",
+    "city": "بيت لحم",
+    "latitude": 31.692763,
+    "longitude": 35.245229
+  },
+  {
+    "id": 416,
+    "checkpoint": "تقوع",
+    "city": "بيت لحم",
+    "latitude": 31.648557,
+    "longitude": 35.21826
+  },
+  {
+    "id": 26,
+    "checkpoint": "راس الجورة",
+    "city": "الخليل",
+    "latitude": 31.562523,
+    "longitude": 35.103442
+  },
+  {
+    "id": 46,
+    "checkpoint": "عناب (عنبتا)",
+    "city": "طولكرم",
+    "latitude": 32.2916538640766,
+    "longitude": 35.1349274652378
+  },
+  {
+    "id": 381,
+    "checkpoint": "ترقوميا – المصانع",
+    "city": "الخليل",
+    "latitude": 31.583663,
+    "longitude": 34.974843
+  },
+  {
+    "id": 16,
+    "checkpoint": "جسر اودلا",
+    "city": "نابلس",
+    "latitude": 32.153924,
+    "longitude": 35.266937
+  },
+  {
+    "id": 31,
+    "checkpoint": "بني نعيم",
+    "city": "الخليل",
+    "latitude": 31.516617,
+    "longitude": 35.143992
+  },
+  {
+    "id": 77,
+    "checkpoint": "العبيدية",
+    "city": "بيت لحم",
+    "latitude": 31.723458,
+    "longitude": 35.285887
+  },
+  {
+    "id": 363,
+    "checkpoint": "السموع (سيميا)",
+    "city": "الخليل",
+    "latitude": 31.415755,
+    "longitude": 35.034526
+  },
+  {
+    "id": 146,
+    "checkpoint": "اللبن الشرقية",
+    "city": "نابلس",
+    "latitude": 32.072659,
+    "longitude": 35.247488
+  },
+  {
+    "id": 124,
+    "checkpoint": "كدوميم",
+    "city": "سلفيت",
+    "latitude": 32.208178,
+    "longitude": 35.15881
+  },
+  {
+    "id": 138,
+    "checkpoint": "معالي افرايم",
+    "city": "أريحا - طوباس",
+    "latitude": 32.089742,
+    "longitude": 35.380357
+  },
+  {
+    "id": 367,
+    "checkpoint": "الظاهرية – مثلث السموع",
+    "city": "الخليل",
+    "latitude": 31.443937,
+    "longitude": 35.019485
+  },
+  {
+    "id": 159,
+    "checkpoint": "بوابة اوصرين",
+    "city": "نابلس",
+    "latitude": 32.120428,
+    "longitude": 35.311643
+  },
+  {
+    "id": 361,
+    "checkpoint": "أبو العرقان",
+    "city": "الخليل",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 50,
+    "checkpoint": "قفين",
+    "city": "طولكرم",
+    "latitude": 32.415472,
+    "longitude": 35.084479
+  },
+  {
+    "id": 13,
+    "checkpoint": "عطارة البلد - فوق الجسر",
+    "city": "رام الله",
+    "latitude": 31.98297,
+    "longitude": 35.200458
+  },
+  {
+    "id": 193,
+    "checkpoint": "طريق الغرس",
+    "city": "طولكرم",
+    "latitude": 32.302657,
+    "longitude": 35.183145
+  },
+  {
+    "id": 187,
+    "checkpoint": "سهل رامين",
+    "city": "طولكرم",
+    "latitude": 32.27282,
+    "longitude": 35.17649
+  },
+  {
+    "id": 149,
+    "checkpoint": "بوابة الساوية",
+    "city": "نابلس",
+    "latitude": 32.08766,
+    "longitude": 35.264533
+  },
+  {
+    "id": 38,
+    "checkpoint": "كرمة",
+    "city": "الخليل",
+    "latitude": 31.454895,
+    "longitude": 35.025481
+  },
+  {
+    "id": 366,
+    "checkpoint": "الرماضين الطَّوَر",
+    "city": "الخليل",
+    "latitude": 31.390705,
+    "longitude": 34.914762
+  },
+  {
+    "id": 17,
+    "checkpoint": "بوابة النبي صالح",
+    "city": "رام الله",
+    "latitude": 32.013516,
+    "longitude": 35.129331
+  },
+  {
+    "id": 161,
+    "checkpoint": "مجدل بني فاضل",
+    "city": "نابلس",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 59,
+    "checkpoint": "حزما",
+    "city": "القدس",
+    "latitude": 31.827795,
+    "longitude": 35.26282
+  },
+  {
+    "id": 89,
+    "checkpoint": "دوتان",
+    "city": "جنين",
+    "latitude": 32.432631,
+    "longitude": 35.180241
+  },
+  {
+    "id": 75,
+    "checkpoint": "المنشية",
+    "city": "بيت لحم",
+    "latitude": 31.64318,
+    "longitude": 35.194007
+  },
+  {
+    "id": 27,
+    "checkpoint": "فرش الهوى",
+    "city": "الخليل",
+    "latitude": 31.5602,
+    "longitude": 35.078623
+  },
+  {
+    "id": 364,
+    "checkpoint": "الفوار",
+    "city": "الخليل",
+    "latitude": 31.485126,
+    "longitude": 35.055789
+  },
+  {
+    "id": 1,
+    "checkpoint": "دير شرف",
+    "city": "نابلس",
+    "latitude": 32.255398,
+    "longitude": 35.18477
+  },
+  {
+    "id": 360,
+    "checkpoint": "واد السمن",
+    "city": "الخليل",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 158,
+    "checkpoint": "الناقورة",
+    "city": "نابلس",
+    "latitude": 32.264504,
+    "longitude": 35.188423
+  },
+  {
+    "id": 106,
+    "checkpoint": "كدوميم",
+    "city": "قلقيلية",
+    "latitude": 32.208178,
+    "longitude": 35.15881
+  },
+  {
+    "id": 139,
+    "checkpoint": "الهيئة",
+    "city": "أريحا - طوباس",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 70,
+    "checkpoint": "بيت جالا (DCO)",
+    "city": "بيت لحم",
+    "latitude": 31.716461,
+    "longitude": 35.17555
+  },
+  {
+    "id": 4,
+    "checkpoint": "بوابة بورين",
+    "city": "نابلس",
+    "latitude": 32.136937,
+    "longitude": 35.261217
+  },
+  {
+    "id": 45,
+    "checkpoint": "بزاريا",
+    "city": "طولكرم",
+    "latitude": 32.3057966948954,
+    "longitude": 35.1763772964478
+  },
+  {
+    "id": 362,
+    "checkpoint": "البقّاريّة",
+    "city": "الخليل",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 3,
+    "checkpoint": "المربعة",
+    "city": "نابلس",
+    "latitude": 32.195661,
+    "longitude": 35.230738
+  },
+  {
+    "id": 132,
+    "checkpoint": "تياسير",
+    "city": "أريحا - طوباس",
+    "latitude": 32.3399407062463,
+    "longitude": 35.4061675071716
+  },
+  {
+    "id": 101,
+    "checkpoint": "مدخل كفر لاقف",
+    "city": "قلقيلية",
+    "latitude": 32.1768838236798,
+    "longitude": 35.0936901569367
+  },
+  {
+    "id": 41,
+    "checkpoint": "جسر بيت كاحل",
+    "city": "الخليل",
+    "latitude": 31.559729,
+    "longitude": 35.090885
+  },
+  {
+    "id": 35,
+    "checkpoint": "الحواور",
+    "city": "الخليل",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 40,
+    "checkpoint": "جسر حلحول",
+    "city": "الخليل",
+    "latitude": 31.562859,
+    "longitude": 35.10044
+  },
+  {
+    "id": 191,
+    "checkpoint": "كفر اللبد",
+    "city": "طولكرم",
+    "latitude": 32.298567,
+    "longitude": 35.096471
+  },
+  {
+    "id": 148,
+    "checkpoint": "بوابة قبلان",
+    "city": "نابلس",
+    "latitude": 32.086516,
+    "longitude": 35.265242
+  },
+  {
+    "id": 117,
+    "checkpoint": "دير استيا",
+    "city": "سلفيت",
+    "latitude": 32.139185,
+    "longitude": 35.137716
+  },
+  {
+    "id": 375,
+    "checkpoint": "العروب – أبو شمعة",
+    "city": "الخليل",
+    "latitude": 31.635728,
+    "longitude": 35.139643
+  },
+  {
+    "id": 413,
+    "checkpoint": "المناشير",
+    "city": "بيت لحم",
+    "latitude": 31.7041425950357,
+    "longitude": 35.1687107976831
+  },
+  {
+    "id": 368,
+    "checkpoint": "ابو العسجا",
+    "city": "الخليل",
+    "latitude": 31.430349,
+    "longitude": 35.026816
+  },
+  {
+    "id": 49,
+    "checkpoint": "جبارة",
+    "city": "طولكرم",
+    "latitude": 32.280393,
+    "longitude": 35.039708
+  },
+  {
+    "id": 374,
+    "checkpoint": "بوابة إذنا",
+    "city": "الخليل",
+    "latitude": 31.572248,
+    "longitude": 34.982175
+  },
+  {
+    "id": 123,
+    "checkpoint": "ياسوف",
+    "city": "سلفيت",
+    "latitude": 32.114831,
+    "longitude": 35.247778
+  },
+  {
+    "id": 73,
+    "checkpoint": "السدر",
+    "city": "بيت لحم",
+    "latitude": 31.711367,
+    "longitude": 35.174785
+  },
+  {
+    "id": 151,
+    "checkpoint": "بوابة جماعين الرئيسية",
+    "city": "نابلس",
+    "latitude": 32.122454,
+    "longitude": 35.203771
+  },
+  {
+    "id": 285,
+    "checkpoint": "الرام",
+    "city": "القدس",
+    "latitude": 31.856666,
+    "longitude": 35.238502
+  },
+  {
+    "id": 125,
+    "checkpoint": "واد قانا",
+    "city": "سلفيت",
+    "latitude": 32.158454,
+    "longitude": 35.125674
+  },
+  {
+    "id": 137,
+    "checkpoint": "المعرجات-كرملو",
+    "city": "أريحا - طوباس",
+    "latitude": 31.9252775870802,
+    "longitude": 35.3186444470884
+  },
+  {
+    "id": 380,
+    "checkpoint": "بوابة بيت أمر",
+    "city": "الخليل",
+    "latitude": 31.618616,
+    "longitude": 35.11555
+  },
+  {
+    "id": 287,
+    "checkpoint": "السواحرة الشرقية",
+    "city": "القدس",
+    "latitude": 31.74264,
+    "longitude": 35.288342
+  },
+  {
+    "id": 227,
+    "checkpoint": "إشارات أرئيل",
+    "city": "سلفيت",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 370,
+    "checkpoint": "دورا – الرئيسية",
+    "city": "الخليل",
+    "latitude": 31.486252,
+    "longitude": 35.055069
+  },
+  {
+    "id": 315,
+    "checkpoint": "عيلي",
+    "city": "رام الله",
+    "latitude": 32.062476,
+    "longitude": 35.260386
+  },
+  {
+    "id": 182,
+    "checkpoint": "جبارة تحت الجسر",
+    "city": "طولكرم",
+    "latitude": 32.280037,
+    "longitude": 35.042213
+  },
+  {
+    "id": 157,
+    "checkpoint": "مفرق جيت",
+    "city": "نابلس",
+    "latitude": 32.216357227988,
+    "longitude": 35.1757818459036
+  },
+  {
+    "id": 238,
+    "checkpoint": "إشارات حارس",
+    "city": "سلفيت",
+    "latitude": 32.1128359201276,
+    "longitude": 35.1342505216599
+  },
+  {
+    "id": 411,
+    "checkpoint": "حاجز الـ 300",
+    "city": "بيت لحم",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 76,
+    "checkpoint": "الخضر",
+    "city": "بيت لحم",
+    "latitude": 31.7041425950357,
+    "longitude": 35.1687107976831
+  },
+  {
+    "id": 142,
+    "checkpoint": "البوابة الصفراء",
+    "city": "أريحا - طوباس",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 412,
+    "checkpoint": "الولجة",
+    "city": "بيت لحم",
+    "latitude": 31.722443,
+    "longitude": 35.164635
+  },
+  {
+    "id": 239,
+    "checkpoint": "جسر حارس",
+    "city": "سلفيت",
+    "latitude": 32.1128359201276,
+    "longitude": 35.1342505216599
+  },
+  {
+    "id": 223,
+    "checkpoint": "بوابة مردا الغربية",
+    "city": "سلفيت",
+    "latitude": 32.112321,
+    "longitude": 35.182448
+  },
+  {
+    "id": 322,
+    "checkpoint": "بوابة عطارة القديمة",
+    "city": "رام الله",
+    "latitude": 31.983675,
+    "longitude": 35.200323
+  },
+  {
+    "id": 290,
+    "checkpoint": "بيت اكسا",
+    "city": "القدس",
+    "latitude": 31.831345,
+    "longitude": 35.159417
+  },
+  {
+    "id": 72,
+    "checkpoint": "جورة الشمعة",
+    "city": "بيت لحم",
+    "latitude": 31.649498,
+    "longitude": 35.164848
+  },
+  {
+    "id": 87,
+    "checkpoint": "الجلمة",
+    "city": "جنين",
+    "latitude": 32.510803,
+    "longitude": 35.308774
+  },
+  {
+    "id": 323,
+    "checkpoint": "بوابة دير أبو مشعل",
+    "city": "رام الله",
+    "latitude": 32.010815,
+    "longitude": 35.084505
+  },
+  {
+    "id": 324,
+    "checkpoint": "راس كركر",
+    "city": "رام الله",
+    "latitude": 31.942453,
+    "longitude": 35.101574
+  },
+  {
+    "id": 415,
+    "checkpoint": "مراح رباح",
+    "city": "بيت لحم",
+    "latitude": 31.633621,
+    "longitude": 35.202078
+  },
+  {
+    "id": 154,
+    "checkpoint": "بوابة حوارة",
+    "city": "نابلس",
+    "latitude": 32.1623303914547,
+    "longitude": 35.2616539634432
+  },
+  {
+    "id": 147,
+    "checkpoint": "يتما",
+    "city": "نابلس",
+    "latitude": 32.114816,
+    "longitude": 35.259316
+  },
+  {
+    "id": 376,
+    "checkpoint": "العروب – العجّوري",
+    "city": "الخليل",
+    "latitude": 31.627123,
+    "longitude": 35.132655
+  },
+  {
+    "id": 378,
+    "checkpoint": "النبي يونس – حلحول",
+    "city": "الخليل",
+    "latitude": 31.584895,
+    "longitude": 35.119884
+  },
+  {
+    "id": 385,
+    "checkpoint": "الشيوخ",
+    "city": "الخليل",
+    "latitude": 31.586077,
+    "longitude": 35.120969
+  },
+  {
+    "id": 153,
+    "checkpoint": "بوابة عقربا",
+    "city": "نابلس",
+    "latitude": 32.119872,
+    "longitude": 35.317386
+  },
+  {
+    "id": 186,
+    "checkpoint": "مدخل رامین",
+    "city": "طولكرم",
+    "latitude": 32.304754,
+    "longitude": 35.151014
+  },
+  {
+    "id": 143,
+    "checkpoint": "عين جدي شارع 90",
+    "city": "أريحا - طوباس",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 71,
+    "checkpoint": "النفق",
+    "city": "بيت لحم",
+    "latitude": 31.705340611734,
+    "longitude": 35.1687724884957
+  },
+  {
+    "id": 86,
+    "checkpoint": "حومش",
+    "city": "جنين",
+    "latitude": 32.3086576338829,
+    "longitude": 35.1797193288803
+  },
+  {
+    "id": 140,
+    "checkpoint": "البنانا",
+    "city": "أريحا - طوباس",
+    "latitude": 31.904157,
+    "longitude": 35.424449
+  },
+  {
+    "id": 119,
+    "checkpoint": "بوابة كفل حارس",
+    "city": "سلفيت",
+    "latitude": 32.1098188685037,
+    "longitude": 35.164355635643
+  },
+  {
+    "id": 42,
+    "checkpoint": "عبدة",
+    "city": "الخليل",
+    "latitude": 31.463427,
+    "longitude": 35.029935
+  },
+  {
+    "id": 58,
+    "checkpoint": "جبع",
+    "city": "القدس",
+    "latitude": 31.854268,
+    "longitude": 35.248904
+  },
+  {
+    "id": 155,
+    "checkpoint": "زعترة",
+    "city": "نابلس",
+    "latitude": 32.115844,
+    "longitude": 35.259048
+  },
+  {
+    "id": 327,
+    "checkpoint": "مخماس",
+    "city": "رام الله",
+    "latitude": 31.872043,
+    "longitude": 35.260787
+  },
+  {
+    "id": 288,
+    "checkpoint": "العيساوية",
+    "city": "القدس",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 222,
+    "checkpoint": "بوابة مردا الشرقية",
+    "city": "سلفيت",
+    "latitude": 32.121396,
+    "longitude": 35.20166
+  },
+  {
+    "id": 331,
+    "checkpoint": "بوابة دير عمار",
+    "city": "رام الله",
+    "latitude": 31.948271,
+    "longitude": 35.094195
+  },
+  {
+    "id": 184,
+    "checkpoint": "بيت ليد المصانع",
+    "city": "طولكرم",
+    "latitude": 32.266929,
+    "longitude": 35.159852
+  },
+  {
+    "id": 289,
+    "checkpoint": "حاجز الجيب",
+    "city": "القدس",
+    "latitude": 31.856869,
+    "longitude": 35.176286
+  },
+  {
+    "id": 358,
+    "checkpoint": "العمور",
+    "city": "الخليل",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 286,
+    "checkpoint": "عناتا - شعفاط",
+    "city": "القدس",
+    "latitude": 31.809232,
+    "longitude": 35.24387
+  },
+  {
+    "id": 11,
+    "checkpoint": "عين سينيا",
+    "city": "رام الله",
+    "latitude": 31.988459,
+    "longitude": 35.227468
+  },
+  {
+    "id": 330,
+    "checkpoint": "بيت سوريك",
+    "city": "رام الله",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 359,
+    "checkpoint": "مسافر يطّا والبادية",
+    "city": "الخليل",
+    "latitude": null,
+    "longitude": null
+  },
+  {
+    "id": 319,
+    "checkpoint": "عيون الحرامية",
+    "city": "رام الله",
+    "latitude": 31.99647,
+    "longitude": 35.250468
+  },
+  {
+    "id": 145,
+    "checkpoint": "دوار الطنيب",
+    "city": "نابلس",
+    "latitude": 32.2654438992101,
+    "longitude": 35.1680009610356
+  },
+  {
+    "id": 90,
+    "checkpoint": "برطعة",
+    "city": "جنين",
+    "latitude": 32.450263,
+    "longitude": 35.117157
+  },
+  {
+    "id": 316,
+    "checkpoint": "اشارات شيلو",
+    "city": "رام الله",
+    "latitude": 32.048387,
+    "longitude": 35.28974
+  }
+]

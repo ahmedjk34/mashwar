@@ -364,17 +364,8 @@ export default function NaturalLanguageRouteModal({
     }
 
     setPrompt(SAMPLE_PROMPT);
-    setIsParsing(true);
     setReport(null);
-
-    if (parseTimerRef.current) {
-      window.clearTimeout(parseTimerRef.current);
-    }
-
-    parseTimerRef.current = window.setTimeout(() => {
-      setReport(generateMockRouteReport(SAMPLE_PROMPT));
-      setIsParsing(false);
-    }, 900);
+    setIsParsing(false);
 
     return () => {
       if (parseTimerRef.current) {

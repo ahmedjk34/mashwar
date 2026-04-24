@@ -1,0 +1,92 @@
+{
+  "routing_city_centers": [
+    {
+      "key": "jenin",
+      "name_ar": "جنين",
+      "name_en": "Jenin",
+      "latitude": 32.4594,
+      "longitude": 35.3009,
+      "aliases_ar": ["جنين"]
+    },
+    {
+      "key": "nablus",
+      "name_ar": "نابلس",
+      "name_en": "Nablus",
+      "latitude": 32.2211,
+      "longitude": 35.2544,
+      "aliases_ar": ["نابلس"]
+    },
+    {
+      "key": "ramallah",
+      "name_ar": "رام الله",
+      "name_en": "Ramallah",
+      "latitude": 31.9038,
+      "longitude": 35.2034,
+      "aliases_ar": ["رام الله", "رام الله والبيرة", "رامالله"]
+    },
+    {
+      "key": "tulkarm",
+      "name_ar": "طولكرم",
+      "name_en": "Tulkarm",
+      "latitude": 32.3104,
+      "longitude": 35.0286,
+      "aliases_ar": ["طولكرم", "طول كرم"]
+    },
+    {
+      "key": "qalqilya",
+      "name_ar": "قلقيلية",
+      "name_en": "Qalqilya",
+      "latitude": 32.1901,
+      "longitude": 34.9706,
+      "aliases_ar": ["قلقيلية", "قلقيليه"]
+    },
+    {
+      "key": "salfit",
+      "name_ar": "سلفيت",
+      "name_en": "Salfit",
+      "latitude": 32.0837,
+      "longitude": 35.1808,
+      "aliases_ar": ["سلفيت"]
+    },
+    {
+      "key": "bethlehem",
+      "name_ar": "بيت لحم",
+      "name_en": "Bethlehem",
+      "latitude": 31.7054,
+      "longitude": 35.2024,
+      "aliases_ar": ["بيت لحم"]
+    },
+    {
+      "key": "hebron",
+      "name_ar": "الخليل",
+      "name_en": "Hebron",
+      "latitude": 31.5326,
+      "longitude": 35.0998,
+      "aliases_ar": ["الخليل", "خليل"]
+    },
+    {
+      "key": "jerusalem",
+      "name_ar": "القدس",
+      "name_en": "Jerusalem",
+      "latitude": 31.7683,
+      "longitude": 35.2137,
+      "aliases_ar": ["القدس", "قدس", "القدس الشريف"]
+    },
+    {
+      "key": "jericho",
+      "name_ar": "أريحا",
+      "name_en": "Jericho",
+      "latitude": 31.8667,
+      "longitude": 35.45,
+      "aliases_ar": ["أريحا", "اريحا"]
+    },
+    {
+      "key": "tubas",
+      "name_ar": "طوباس",
+      "name_en": "Tubas",
+      "latitude": 32.3214,
+      "longitude": 35.3699,
+      "aliases_ar": ["طوباس"]
+    }
+  ]
+}

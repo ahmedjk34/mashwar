@@ -135,7 +135,7 @@ The frontend should treat that as a backend configuration issue, not a user inpu
 | `POST` | `/checkpoints/{checkpoint_id}/predict` | Predict a single checkpoint status at a target datetime |
 | `GET` | `/checkpoints/{checkpoint_id}/forecast` | Return current checkpoint status plus future prediction horizons |
 | `POST` | `/api/routing` | Return a simple car route between two points |
-| `POST` | `/api/routing/v4` | Return checkpoint-aware alternative routes with reranking metadata |
+| `POST` | `/api/routing/v2` | Return checkpoint-aware alternative routes with reranking metadata |
 
 ---
 
@@ -846,7 +846,7 @@ The backend returns the GraphHopper response wrapped in the standard envelope:
 
 ---
 
-## 8. `POST /api/routing/v4`
+## 8. `POST /api/routing/v2`
 
 ### Purpose
 
@@ -870,7 +870,7 @@ V1 remains unchanged at `POST /api/routing`.
 - `origin` and `destination` are required
 - `depart_at` is optional and defaults to the current UTC time
 - `profile` currently only accepts `car`
-- legacy aliases `startPoint` and `endPoint` are accepted for V4 request parsing
+- legacy aliases `startPoint` and `endPoint` are accepted for V2 request parsing
 
 ### Backend Flow
 
@@ -993,7 +993,7 @@ V1 remains unchanged at `POST /api/routing`.
 This endpoint does not return the raw ML label directly in `predicted_status_at_eta`.
 
 - `POST /checkpoints/{checkpoint_id}/predict` returns the model label in `predicted_status`
-- `POST /api/routing/v4` normalizes that label into a routing bucket for ranking and display
+- `POST /api/routing/v2` normalizes that label into a routing bucket for ranking and display
 - the routing buckets are `green`, `yellow`, `red`, and `unknown`
 - raw checkpoint source values are preserved under `current_status_raw`
 

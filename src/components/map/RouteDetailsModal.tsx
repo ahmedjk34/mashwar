@@ -2,12 +2,20 @@
 
 import { useEffect, type ReactNode } from "react";
 
-import type { RoutePath, RoutingRiskLevel, RoutingStatusBucket } from "@/lib/types/map";
+import type {
+  NormalizedRoutes,
+  RoutePath,
+  RoutingRiskLevel,
+  RoutingStatusBucket,
+} from "@/lib/types/map";
+import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 
 interface RouteDetailsModalProps {
   open: boolean;
   route: RoutePath | null;
   departAt: string | null;
+  routeVersion?: string | null;
+  checkpointMatching?: NormalizedRoutes["checkpointMatching"];
   onClose: () => void;
 }
 
@@ -114,37 +122,11 @@ function formatDurationLabel(durationMs: number | null): string {
 }
 
 function formatDateTimeLabel(value: string | null): string {
-  if (!value) {
-    return "n/a";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(parsed);
+  return formatDateTimeInPalestine(value);
 }
 
 function formatArrivalShortLabel(value: string | null): string {
-  if (!value) {
-    return "n/a";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(parsed);
+  return formatDateTimeInPalestine(value);
 }
 
 function formatCoordinatePair(lat: number, lng: number): string {
@@ -161,6 +143,77 @@ function formatConfidence(value: number | null): string {
   }
 
   return `${Math.round(value * 100)}%`;
+}
+
+function formatRouteDirection(value: string | null): string {
+  if (!value) {
+    return "Unknown";
+  }
+
+  switch (value) {
+    case "entering":
+      return "Entering";
+    case "leaving":
+      return "Leaving";
+    case "transit":
+      return "Transit";
+    default:
+      return value;
+  }
+}
+
+function formatSelectedStatusType(value: string | null): string {
+  if (!value) {
+    return "n/a";
+  }
+
+  switch (value) {
+    case "entering":
+      return "Entering side";
+    case "leaving":
+      return "Leaving side";
+    case "worst":
+      return "Worst side";
+    default:
+      return value;
+  }
+}
+
+function formatMatchConfidence(value: string | null): string {
+  if (!value) {
+    return "n/a";
+  }
+
+  switch (value) {
+    case "strong":
+      return "Strong";
+    case "medium":
+      return "Medium";
+    case "weak":
+      return "Weak";
+    default:
+      return value;
+  }
+}
+
+function formatNumberLabel(value: number | null, fractionDigits = 0): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  return value.toFixed(fractionDigits);
+}
+
+function formatDistanceLabel(value: number | null): string {
+  if (value === null || !Number.isFinite(value) || value < 0) {
+    return "n/a";
+  }
+
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)} km`;
+  }
+
+  return `${Math.round(value)} m`;
 }
 
 function formatPercent(value: number | null): string {
@@ -194,6 +247,18 @@ function getRiskSummary(route: RoutePath): string | null {
   }
 
   return route.reasonSummary || null;
+}
+
+function getRouteEtaBreakdownLabel(route: RoutePath): string {
+  const delayMinutes = route.expectedDelayMinutes ?? route.estimatedDelayMinutes;
+
+  if (delayMinutes !== null && Number.isFinite(delayMinutes) && delayMinutes > 0) {
+    return "Base ETA + upstream delay";
+  }
+
+  return route.smartEtaDateTime
+    ? "Smart ETA from accepted checkpoints"
+    : "Legacy travel-time fallback";
 }
 
 function resolveRouteArrivalDateTime(
@@ -311,6 +376,8 @@ export default function RouteDetailsModal({
   open,
   route,
   departAt,
+  routeVersion,
+  checkpointMatching,
   onClose,
 }: RouteDetailsModalProps) {
   useEffect(() => {
@@ -343,6 +410,7 @@ export default function RouteDetailsModal({
   const routeDelayLabel = getRouteDelayLabel(route);
   const routeScoreLabel = getRouteScoreLabel(route);
   const routeSmartEta = getRouteSmartEta(route, departAt);
+  const isV5Route = routeVersion === "v5";
   const orderedCheckpoints = [...route.checkpoints].sort((left, right) => {
     const leftEta = left.effectiveEtaMs ?? left.etaMs;
     const rightEta = right.effectiveEtaMs ?? right.etaMs;
@@ -386,8 +454,8 @@ export default function RouteDetailsModal({
                 Route #{route.rank}
               </h2>
               <p className="mt-2 max-w-2xl text-[13px] leading-6 text-[#94a3b8]">
-                Full route info with journey risk, ETA, and checkpoint conditions now
-                versus when you are expected to reach them.
+                V5 routing keeps only strictly matched checkpoints and reads each one
+                in the direction the route actually approaches it.
               </p>
             </div>
 
@@ -409,8 +477,13 @@ export default function RouteDetailsModal({
                 Route legend
               </span>
               <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-2.5 py-1 text-[11px] text-sky-100">
-                Smart ETA = predicted arrival
+                Smart ETA = predicted arrival from accepted checkpoints
               </span>
+              {isV5Route ? (
+                <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[11px] text-emerald-100">
+                  V5 checkpoint-aware routing
+                </span>
+              ) : null}
               <Pill
                 color={RISK_VISUALS.low.text}
                 backgroundColor={RISK_VISUALS.low.bg}
@@ -445,9 +518,7 @@ export default function RouteDetailsModal({
               </p>
               <p className="mt-2 text-[12px] text-[#94a3b8]">{routeDelayLabel}</p>
               <p className="mt-1 text-[12px] text-[#94a3b8]">
-                {route.expectedDelayMinutes !== null && route.expectedDelayMinutes > 0
-                  ? "includes predicted checkpoint delay"
-                  : "Falls back to the legacy travel-time estimate when Smart ETA is missing."}
+                {getRouteEtaBreakdownLabel(route)}
               </p>
             </div>
 
@@ -511,6 +582,24 @@ export default function RouteDetailsModal({
             </div>
           </div>
 
+          {checkpointMatching ? (
+            <details className="mt-4 rounded-[12px] border border-[#2d3139] bg-white/[0.03] px-4 py-3">
+              <summary className="cursor-pointer list-none text-[12px] font-medium text-[#dbe4f0]">
+                Checkpoint matching metadata
+              </summary>
+              <div className="mt-3 grid gap-2 text-[12px] text-[#94a3b8] sm:grid-cols-2 lg:grid-cols-4">
+                <p>Mode: {checkpointMatching.mode ?? "n/a"}</p>
+                <p>Direction mode: {checkpointMatching.directionMode ?? "n/a"}</p>
+                <p>City source: {checkpointMatching.citySource ?? "n/a"}</p>
+                <p>City inference: {checkpointMatching.cityInference ?? "n/a"}</p>
+                <p>Outer threshold: {formatNumberLabel(checkpointMatching.outerThresholdM)} m</p>
+                <p>Strong match: {formatNumberLabel(checkpointMatching.strongMatchDistanceM)} m</p>
+                <p>Medium match: {formatNumberLabel(checkpointMatching.mediumMatchDistanceM)} m</p>
+                <p>Weak match: {formatNumberLabel(checkpointMatching.weakMatchDistanceM)} m</p>
+              </div>
+            </details>
+          ) : null}
+
           <section className="mt-4 rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
             <div className="flex flex-wrap items-center gap-2">
               <Pill color={risk.text} backgroundColor={risk.bg} borderColor={risk.border}>
@@ -553,7 +642,7 @@ export default function RouteDetailsModal({
                   Checkpoint Timeline
                 </p>
                 <p className="mt-1 text-[13px] text-[#94a3b8]">
-                  Base ETA rolls into effective ETA so you can see how delay carries forward.
+                  Base ETA plus upstream delay rolls into the effective ETA you actually care about.
                 </p>
               </div>
             </div>
@@ -595,11 +684,38 @@ export default function RouteDetailsModal({
                               {index + 1}. {checkpoint.name}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
+                              {checkpoint.city ?? "n/a"}
+                              {checkpoint.checkpointCityGroup
+                                ? ` · raw group: ${checkpoint.checkpointCityGroup}`
+                                : ""}
+                            </p>
+                            <p className="mt-1 text-[12px] text-[#94a3b8]">
                               {formatCoordinatePair(checkpoint.lat, checkpoint.lng)}
                             </p>
                           </div>
 
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Pill
+                              color="#cbd5e1"
+                              backgroundColor="rgba(148, 163, 184, 0.12)"
+                              borderColor="rgba(148, 163, 184, 0.24)"
+                            >
+                              {formatRouteDirection(checkpoint.routeDirection)}
+                            </Pill>
+                            <Pill
+                              color="#cbd5e1"
+                              backgroundColor="rgba(148, 163, 184, 0.12)"
+                              borderColor="rgba(148, 163, 184, 0.24)"
+                            >
+                              {formatSelectedStatusType(checkpoint.selectedStatusType)}
+                            </Pill>
+                            <Pill
+                              color="#cbd5e1"
+                              backgroundColor="rgba(148, 163, 184, 0.12)"
+                              borderColor="rgba(148, 163, 184, 0.24)"
+                            >
+                              Match {formatMatchConfidence(checkpoint.matchConfidence)}
+                            </Pill>
                             <span className="rounded-full border border-[#2d3139] px-2.5 py-1 text-[11px] text-[#cbd5e1]">
                               Reach {formatDateTimeLabel(checkpoint.crossingDateTime)}
                             </span>
@@ -618,7 +734,7 @@ export default function RouteDetailsModal({
                               {formatDurationLabel(baseEtaMs)}
                             </p>
                             <p className="mt-2 text-[12px] text-[#94a3b8]">
-                              The checkpoint ETA before predicted delay is applied.
+                              The checkpoint ETA before upstream delay is applied.
                             </p>
                           </div>
 
@@ -662,7 +778,10 @@ export default function RouteDetailsModal({
                               </Pill>
                             </div>
                             <p className="mt-2 text-[12px] text-[#94a3b8]">
-                              Selected status: {checkpoint.selectedStatusType ?? "n/a"}
+                              Direction-aware side: {formatRouteDirection(checkpoint.routeDirection)}
+                            </p>
+                            <p className="mt-1 text-[12px] text-[#94a3b8]">
+                              Selected status: {formatSelectedStatusType(checkpoint.selectedStatusType)}
                             </p>
                           </div>
                         </div>
@@ -682,6 +801,12 @@ export default function RouteDetailsModal({
                               </Pill>
                             </div>
                             <p className="mt-3 text-[12px] text-[#94a3b8]">
+                              Direction: {formatRouteDirection(checkpoint.routeDirection)}
+                            </p>
+                            <p className="mt-1 text-[12px] text-[#94a3b8]">
+                              Selected status side: {formatSelectedStatusType(checkpoint.selectedStatusType)}
+                            </p>
+                            <p className="mt-1 text-[12px] text-[#94a3b8]">
                               Entering: {checkpoint.currentStatusRaw?.entering_status ?? "n/a"}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
@@ -691,7 +816,7 @@ export default function RouteDetailsModal({
 
                           <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
                             <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              Status At Arrival
+                              Predicted at ETA
                             </p>
                             <div className="mt-2">
                               <Pill
@@ -703,6 +828,12 @@ export default function RouteDetailsModal({
                               </Pill>
                             </div>
                             <p className="mt-3 text-[12px] text-[#94a3b8]">
+                              Direction: {formatRouteDirection(checkpoint.routeDirection)}
+                            </p>
+                            <p className="mt-1 text-[12px] text-[#94a3b8]">
+                              Selected status side: {formatSelectedStatusType(checkpoint.selectedStatusType)}
+                            </p>
+                            <p className="mt-1 text-[12px] text-[#94a3b8]">
                               Forecast source: {checkpoint.forecastSource ?? "n/a"}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
@@ -770,6 +901,22 @@ export default function RouteDetailsModal({
                             })()}
                           </details>
                         ) : null}
+
+                        <details className="mt-3 rounded-[10px] border border-[#2d3139] bg-white/[0.03] px-3 py-2">
+                          <summary className="cursor-pointer list-none text-[12px] font-medium text-[#dbe4f0]">
+                            Match details
+                          </summary>
+                          <div className="mt-3 grid gap-2 text-[12px] text-[#94a3b8] sm:grid-cols-2">
+                            <p>Distance from route: {formatDistanceLabel(checkpoint.distanceFromRouteM)}</p>
+                            <p>Match confidence: {formatMatchConfidence(checkpoint.matchConfidence)}</p>
+                            <p>Projection t: {formatNumberLabel(checkpoint.projectionT, 3)}</p>
+                            <p>Nearest segment: {formatNumberLabel(checkpoint.nearestSegmentIndex)}</p>
+                            <p>Chainage: {formatNumberLabel(checkpoint.chainageM)} m</p>
+                            <p>
+                              Projected point: {checkpoint.projectedPointOnRoute ? formatCoordinatePair(checkpoint.projectedPointOnRoute[1], checkpoint.projectedPointOnRoute[0]) : "n/a"}
+                            </p>
+                          </div>
+                        </details>
                       </article>
                     );
                   });

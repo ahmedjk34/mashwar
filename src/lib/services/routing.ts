@@ -1,9 +1,13 @@
 import { validateRoutePoint } from "@/lib/config/map";
+import { logRoutingDebug } from "@/lib/utils/routing-debug";
+import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 import type {
   LngLatCoordinate,
   NormalizedRoutes,
   RoutePath,
   RoutingRequest,
+  RoutingCheckpointDirection,
+  RoutingCheckpointMatchConfidence,
   RoutingRiskLevel,
   RoutingRouteViability,
   RoutingStatusBucket,
@@ -192,6 +196,21 @@ function normalizeCoordinates(value: unknown): LngLatCoordinate[] {
   });
 }
 
+function normalizeCoordinatePair(value: unknown): LngLatCoordinate | null {
+  if (!Array.isArray(value) || value.length < 2) {
+    return null;
+  }
+
+  const lng = Number(value[0]);
+  const lat = Number(value[1]);
+
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+    return null;
+  }
+
+  return [lng, lat];
+}
+
 function normalizeRoutingStatusBucket(value: unknown): RoutingStatusBucket {
   if (typeof value !== "string") {
     return "unknown";
@@ -235,6 +254,39 @@ function normalizeRiskLevel(value: unknown): RoutingRiskLevel {
   return "unknown";
 }
 
+function normalizeMatchConfidence(
+  value: unknown,
+): RoutingCheckpointMatchConfidence {
+  if (typeof value !== "string") {
+    return "unknown";
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "strong" || normalized === "medium" || normalized === "weak") {
+    return normalized;
+  }
+
+  return "unknown";
+}
+
+function normalizeRouteDirection(value: unknown): RoutingCheckpointDirection {
+  if (typeof value !== "string") {
+    return "unknown";
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "entering" ||
+    normalized === "leaving" ||
+    normalized === "transit" ||
+    normalized === "unknown"
+  ) {
+    return normalized;
+  }
+
+  return "unknown";
+}
+
 function normalizeRouteViability(value: unknown): RoutingRouteViability {
   if (value === "good" || value === "risky" || value === "avoid") {
     return value;
@@ -266,21 +318,30 @@ function normalizeCheckpoint(
       ? normalizedEffectiveEtaMs - expectedDelayMs
       : null) ??
     etaMs;
-  const projectedPointOnRoute = normalizeCoordinates(value.projected_point_on_route);
+  const projectedPointOnRoute = Array.isArray(value.projected_point_on_route)
+    ? (normalizeCoordinatePair(value.projected_point_on_route) ??
+      normalizeCoordinates(value.projected_point_on_route)[0] ??
+      null)
+    : null;
+  const crossingDateTime = toStringOrNull(value.crossing_datetime);
 
   return {
     checkpointId:
       toStringOrNull(value.checkpoint_id) ?? `checkpoint_${index + 1}`,
     name: toStringOrNull(value.name) ?? `Checkpoint ${index + 1}`,
+    city: toStringOrNull(value.city),
+    checkpointCityGroup: toStringOrNull(value.checkpoint_city_group),
     lat: toFiniteNumber(value.lat),
     lng: toFiniteNumber(value.lng),
+    routeDirection: normalizeRouteDirection(value.route_direction),
+    matchConfidence: normalizeMatchConfidence(value.match_confidence),
+    projectionT: toOptionalFiniteNumber(value.projection_t),
     distanceFromRouteM: toFiniteNumber(value.distance_from_route_m),
     nearestSegmentIndex: Math.max(
       0,
       Math.trunc(toFiniteNumber(value.nearest_segment_index)),
     ),
-    projectedPointOnRoute:
-      projectedPointOnRoute.length > 0 ? projectedPointOnRoute : null,
+    projectedPointOnRoute,
     chainageM: toFiniteNumber(value.chainage_m),
     etaMs,
     etaSeconds: Math.max(0, Math.trunc(toFiniteNumber(value.eta_seconds) || etaMs / 1000)),
@@ -288,7 +349,8 @@ function normalizeCheckpoint(
       typeof value.eta_minutes === "number" || typeof value.eta_minutes === "string"
         ? toFiniteNumber(value.eta_minutes)
         : etaMs / 60000,
-    crossingDateTime: toStringOrNull(value.crossing_datetime),
+    crossingDateTime,
+    crossingDateTimePalestine: formatDateTimeInPalestine(crossingDateTime),
     currentStatus: normalizeRoutingStatusBucket(value.current_status),
     currentStatusRaw:
       value.current_status_raw && typeof value.current_status_raw === "object"
@@ -363,6 +425,8 @@ function normalizeRoutePath(
 
       return new Date(departDate.getTime() + smartEtaMs).toISOString();
     })();
+  const departAtPalestine = formatDateTimeInPalestine(departAt);
+  const smartEtaDateTimePalestine = formatDateTimeInPalestine(smartEtaDateTime);
   const riskLevel = normalizeRiskLevel(path.risk_level ?? path.route_viability);
   const riskScore = toOptionalFiniteNumber(path.risk_score);
   const riskConfidence = toOptionalFiniteNumber(path.risk_confidence);
@@ -418,6 +482,7 @@ function normalizeRoutePath(
     smartEtaMs,
     smartEtaMinutes,
     smartEtaDateTime,
+    smartEtaDateTimePalestine,
     expectedDelayMs,
     expectedDelayMinutes,
     riskScore,
@@ -458,6 +523,26 @@ function extractRoutingData(payload: unknown): RoutingV2ResponseDataDto {
   throw new Error("Invalid routing response.");
 }
 
+function normalizeCheckpointMatching(
+  value: RoutingV2ResponseDataDto["checkpoint_matching"],
+): NormalizedRoutes["checkpointMatching"] {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  return {
+    mode: toStringOrNull(value.mode),
+    outerThresholdM: toOptionalFiniteNumber(value.outer_threshold_m),
+    strongMatchDistanceM: toOptionalFiniteNumber(value.strong_match_distance_m),
+    mediumMatchDistanceM: toOptionalFiniteNumber(value.medium_match_distance_m),
+    weakMatchDistanceM: toOptionalFiniteNumber(value.weak_match_distance_m),
+    staticCheckpointSource: toStringOrNull(value.static_checkpoint_source),
+    citySource: toStringOrNull(value.city_source),
+    cityInference: toStringOrNull(value.city_inference),
+    directionMode: toStringOrNull(value.direction_mode),
+  };
+}
+
 async function getErrorMessage(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as {
@@ -482,15 +567,24 @@ export async function getRoute(
   validateRoutePoint(request.origin);
   validateRoutePoint(request.destination);
 
-  const endpoint = `${getGeoApiBaseUrl()}/api/routing/v4`;
+  const endpoint = `${getGeoApiBaseUrl()}/api/routing/v2`;
   const body: RoutingRequest = {
     origin: request.origin,
     destination: request.destination,
     profile: "car",
     ...(request.depart_at ? { depart_at: request.depart_at } : {}),
+    ...(request.origin_city ? { origin_city: request.origin_city } : {}),
+    ...(request.destination_city ? { destination_city: request.destination_city } : {}),
+    ...(request.originCity ? { originCity: request.originCity } : {}),
+    ...(request.destinationCity ? { destinationCity: request.destinationCity } : {}),
   };
 
   try {
+    logRoutingDebug("routing request payload", {
+      endpoint,
+      body,
+    });
+
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -506,12 +600,19 @@ export async function getRoute(
     }
 
     const payload: unknown = await response.json();
+    logRoutingDebug("routing raw response payload", {
+      endpoint,
+      status: response.status,
+      payload,
+    });
+
     const data = extractRoutingData(payload);
 
-    const departAt =
-      typeof data.depart_at === "string" && data.depart_at.trim()
-        ? data.depart_at.trim()
-        : request.depart_at ?? null;
+  const departAt =
+    typeof data.depart_at === "string" && data.depart_at.trim()
+      ? data.depart_at.trim()
+      : request.depart_at ?? null;
+  const departAtPalestine = formatDateTimeInPalestine(departAt);
 
     const routes = Array.isArray(data.routes)
       ? data.routes
@@ -535,21 +636,89 @@ export async function getRoute(
           : null),
     }));
 
+    logRoutingDebug("routing normalized response", {
+      endpoint,
+      request: body,
+      response: {
+        generatedAt:
+          typeof data.generated_at === "string" && data.generated_at.trim()
+            ? data.generated_at.trim()
+            : null,
+        version:
+          typeof data.version === "string" && data.version.trim()
+            ? data.version.trim()
+            : null,
+        departAt:
+          typeof data.depart_at === "string" && data.depart_at.trim()
+            ? data.depart_at.trim()
+            : null,
+        warnings: Array.isArray(data.warnings)
+          ? data.warnings.filter(
+              (warning): warning is string =>
+                typeof warning === "string" && warning.trim().length > 0,
+            )
+          : [],
+        checkpointMatching: normalizeCheckpointMatching(
+          data.checkpoint_matching,
+        ),
+        routeCount: routesWithDelay.length,
+        routes: routesWithDelay.map((route) => ({
+          routeId: route.routeId,
+          rank: route.rank,
+          checkpointCount: route.checkpointCount,
+          routeViability: route.routeViability,
+          worstPredictedStatus: route.worstPredictedStatus,
+          riskScore: route.riskScore,
+          riskLevel: route.riskLevel,
+          riskConfidence: route.riskConfidence,
+          historicalVolatility: route.historicalVolatility,
+          expectedDelayMinutes: route.expectedDelayMinutes,
+          smartEtaDateTime: route.smartEtaDateTime,
+          smartEtaDateTimePalestine: formatDateTimeInPalestine(
+            route.smartEtaDateTime,
+          ),
+          reasonSummary: route.reasonSummary,
+          checkpoints: route.checkpoints.map((checkpoint) => ({
+            checkpointId: checkpoint.checkpointId,
+            name: checkpoint.name,
+            city: checkpoint.city,
+            currentStatus: checkpoint.currentStatus,
+            predictedStatusAtEta: checkpoint.predictedStatusAtEta,
+            routeDirection: checkpoint.routeDirection,
+            matchConfidence: checkpoint.matchConfidence,
+            etaMinutes: checkpoint.etaMinutes,
+            expectedDelayMinutes: checkpoint.expectedDelayMinutes,
+            crossingDateTime: checkpoint.crossingDateTime,
+            crossingDateTimePalestine: formatDateTimeInPalestine(
+              checkpoint.crossingDateTime,
+            ),
+          })),
+        })),
+      },
+    });
+
     return {
       generatedAt:
         typeof data.generated_at === "string" && data.generated_at.trim()
           ? data.generated_at.trim()
           : null,
+      generatedAtPalestine: formatDateTimeInPalestine(
+        typeof data.generated_at === "string" && data.generated_at.trim()
+          ? data.generated_at.trim()
+          : null,
+      ),
       version:
         typeof data.version === "string" && data.version.trim()
           ? data.version.trim()
           : null,
+      checkpointMatching: normalizeCheckpointMatching(data.checkpoint_matching),
       origin: data.origin ?? request.origin,
       destination: data.destination ?? request.destination,
       departAt:
         typeof data.depart_at === "string" && data.depart_at.trim()
           ? data.depart_at.trim()
           : null,
+      departAtPalestine,
       warnings: Array.isArray(data.warnings)
         ? data.warnings.filter(
             (warning): warning is string =>
