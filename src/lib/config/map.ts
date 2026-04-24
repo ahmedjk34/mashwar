@@ -58,12 +58,13 @@ export const USER_LOCATION_LAYER_ID = "user-location-layer";
 export const USER_LOCATION_ACCURACY_LAYER_ID = "user-location-accuracy-layer";
 
 export const ROUTE_STYLE = {
-  MAIN_COLOR: "#3b82f6",
-  ALT_COLOR: "#6b7280",
-  MAIN_WIDTH: 6,
-  ALT_WIDTH: 3,
-  MAIN_OPACITY: 0.9,
-  ALT_OPACITY: 0.5,
+  MAIN_WIDTH: 6.5,
+  MAIN_OPACITY: 1,
+  ALT_WIDTH: 5.5,
+  ALT_OPACITY: 1,
+  OUTLINE_COLOR: "#0f172a",
+  OUTLINE_WIDTH: 10,
+  PALETTE: ["#ef4444", "#2563eb", "#22c55e"] as const,
 } as const;
 
 export const USER_LOCATION_STYLE = {
@@ -126,8 +127,9 @@ export const UNCLUSTERED_RADIUS_EXPRESSION = [
 ] as const;
 
 export const DEMO_ROUTE_REQUEST: RoutingRequest = {
-  startPoint: { lat: 31.9038, lng: 35.2034 },
-  endPoint: { lat: 31.7054, lng: 35.2024 },
+  origin: { lat: 31.9038, lng: 35.2034 },
+  destination: { lat: 31.7054, lng: 35.2024 },
+  profile: "car",
 };
 
 const STATUS_PRIORITY: MapCheckpointStatus[] = [
@@ -306,20 +308,27 @@ export function transformRouteToGeoJSON(
     properties: {},
     geometry: {
       type: "LineString",
-      coordinates: route.points.coordinates,
+      coordinates: route.geometry.coordinates,
     },
   };
+}
+
+export function getRenderableRoutes(routes: NormalizedRoutes): RoutePath[] {
+  if (routes.routes.length > 0) {
+    return routes.routes;
+  }
+
+  return [routes.mainRoute, ...routes.alternativeRoutes].filter(
+    (route): route is RoutePath => Boolean(route),
+  );
 }
 
 export function calculateRouteBounds(
   routes: NormalizedRoutes,
 ): [number, number, number, number] | null {
-  const routePaths = [
-    routes.mainRoute,
-    ...routes.alternativeRoutes,
-  ].filter((route): route is RoutePath => Boolean(route));
+  const routePaths = getRenderableRoutes(routes);
 
-  const coordinates = routePaths.flatMap((route) => route.points.coordinates);
+  const coordinates = routePaths.flatMap((route) => route.geometry.coordinates);
   if (coordinates.length === 0) {
     return null;
   }

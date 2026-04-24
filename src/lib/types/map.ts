@@ -143,49 +143,191 @@ export interface RoutePoint {
   lng: number;
 }
 
-export interface RoutePathDto {
-  distance?: number | string | null;
-  time?: number | string | null;
-  points?: {
+export type RoutingRouteViability = "good" | "risky" | "avoid";
+
+export type RoutingStatusBucket = "green" | "yellow" | "red" | "unknown";
+
+export type RoutingRiskLevel = "low" | "medium" | "high" | "unknown";
+
+export interface RoutingV2Request {
+  origin: RoutePoint;
+  destination: RoutePoint;
+  depart_at?: string;
+  profile: "car";
+}
+
+export interface RoutingV2CheckpointRawStatusDto {
+  entering_status?: string | null;
+  leaving_status?: string | null;
+  entering_status_last_updated?: string | null;
+  leaving_status_last_updated?: string | null;
+  alert_text?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+}
+
+export interface RoutingV2CheckpointDto {
+  checkpoint_id?: number | string | null;
+  name?: string | null;
+  lat?: number | string | null;
+  lng?: number | string | null;
+  distance_from_route_m?: number | string | null;
+  nearest_segment_index?: number | string | null;
+  projected_point_on_route?: unknown;
+  chainage_m?: number | string | null;
+  eta_ms?: number | string | null;
+  eta_seconds?: number | string | null;
+  eta_minutes?: number | string | null;
+  crossing_datetime?: string | null;
+  current_status?: string | null;
+  current_status_raw?: RoutingV2CheckpointRawStatusDto | null;
+  predicted_status_at_eta?: string | null;
+  forecast_confidence?: number | string | null;
+  forecast_source?: string | null;
+  forecast_model_version?: number | string | null;
+  forecast_reason?: string | null;
+  base_eta_ms?: number | string | null;
+  effective_eta_ms?: number | string | null;
+  cumulative_delay_ms_before_checkpoint?: number | string | null;
+  expected_delay_ms?: number | string | null;
+  expected_delay_minutes?: number | string | null;
+  forecast_probabilities?: Record<string, number | string> | null;
+  severity_ratio?: number | string | null;
+  selected_status_type?: string | null;
+}
+
+export interface RoutingV2RouteDto {
+  route_id?: string | null;
+  rank?: number | string | null;
+  original_index?: number | string | null;
+  distance_m?: number | string | null;
+  duration_ms?: number | string | null;
+  duration_minutes?: number | string | null;
+  geometry?: {
     type?: string | null;
     coordinates?: unknown;
   } | null;
-  instructions?: unknown;
+  snapped_waypoints?: unknown;
+  bbox?: unknown;
   ascend?: number | string | null;
   descend?: number | string | null;
-  snapped_waypoints?: unknown;
+  checkpoint_count?: number | string | null;
+  route_score?: number | string | null;
+  route_viability?: string | null;
+  worst_predicted_status?: string | null;
+  reason_summary?: string | null;
+  checkpoints?: RoutingV2CheckpointDto[] | null;
+  smart_eta_ms?: number | string | null;
+  smart_eta_minutes?: number | string | null;
+  smart_eta_datetime?: string | null;
+  expected_delay_ms?: number | string | null;
+  expected_delay_minutes?: number | string | null;
+  risk_score?: number | string | null;
+  risk_level?: string | null;
+  risk_confidence?: number | string | null;
+  risk_components?: unknown;
+  historical_volatility?: number | string | null;
+  graphhopper?: {
+    details?: Record<string, unknown> | null;
+    instructions?: unknown[] | null;
+  } | null;
 }
 
-export interface RoutingResponseDto {
-  paths?: RoutePathDto[] | null;
-  info?: {
-    copyrights?: string[];
-    took?: number;
-  } | null;
+export interface RoutingV2ResponseDataDto {
+  generated_at?: string | null;
+  version?: string | null;
+  origin?: RoutePoint | null;
+  destination?: RoutePoint | null;
+  depart_at?: string | null;
+  warnings?: unknown;
+  graphhopper_info?: Record<string, unknown> | null;
+  routes?: RoutingV2RouteDto[] | null;
 }
 
 export interface RoutingApiEnvelope {
   success?: boolean;
-  data?: RoutingResponseDto | null;
+  data?: RoutingV2ResponseDataDto | null;
+}
+
+export interface RoutingCheckpoint {
+  checkpointId: string;
+  name: string;
+  lat: number;
+  lng: number;
+  distanceFromRouteM: number;
+  nearestSegmentIndex: number;
+  projectedPointOnRoute: LngLatCoordinate[] | null;
+  chainageM: number;
+  etaMs: number;
+  etaSeconds: number;
+  etaMinutes: number;
+  crossingDateTime: string | null;
+  currentStatus: RoutingStatusBucket;
+  currentStatusRaw: RoutingV2CheckpointRawStatusDto | null;
+  predictedStatusAtEta: RoutingStatusBucket;
+  forecastConfidence: number | null;
+  forecastSource: string | null;
+  forecastModelVersion: number | null;
+  forecastReason: string | null;
+  baseEtaMs: number | null;
+  effectiveEtaMs: number | null;
+  cumulativeDelayMsBeforeCheckpoint: number | null;
+  expectedDelayMs: number | null;
+  expectedDelayMinutes: number | null;
+  forecastProbabilities: Record<string, number>;
+  severityRatio: number | null;
+  selectedStatusType: string | null;
 }
 
 export interface RoutePath {
-  distance: number;
-  time: number;
-  points: LineString & {
+  routeId: string;
+  rank: number;
+  originalIndex: number;
+  distanceM: number;
+  durationMs: number;
+  durationMinutes: number;
+  estimatedDelayMinutes: number | null;
+  geometry: LineString & {
     coordinates: LngLatCoordinate[];
   };
-  instructions?: unknown[];
-  ascend?: number;
-  descend?: number;
+  snappedWaypoints: unknown | null;
+  bbox: unknown | null;
+  ascend: number | null;
+  descend: number | null;
+  checkpointCount: number;
+  routeScore: number;
+  routeViability: RoutingRouteViability;
+  worstPredictedStatus: RoutingStatusBucket;
+  reasonSummary: string;
+  checkpoints: RoutingCheckpoint[];
+  smartEtaMs: number | null;
+  smartEtaMinutes: number | null;
+  smartEtaDateTime: string | null;
+  expectedDelayMs: number | null;
+  expectedDelayMinutes: number | null;
+  riskScore: number | null;
+  riskLevel: RoutingRiskLevel;
+  riskConfidence: number | null;
+  riskComponents: string[];
+  historicalVolatility: number | null;
+  graphhopper: {
+    details: Record<string, unknown>;
+    instructions: unknown[];
+  };
 }
 
-export interface RoutingRequest {
-  startPoint: RoutePoint;
-  endPoint: RoutePoint;
-}
+export type RoutingRequest = RoutingV2Request;
 
 export interface NormalizedRoutes {
+  generatedAt: string | null;
+  version: string | null;
+  origin: RoutePoint | null;
+  destination: RoutePoint | null;
+  departAt: string | null;
+  warnings: string[];
+  graphhopperInfo: Record<string, unknown> | null;
+  routes: RoutePath[];
+  selectedRouteId: string | null;
   mainRoute: RoutePath | null;
   alternativeRoutes: RoutePath[];
 }

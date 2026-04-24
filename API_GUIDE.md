@@ -135,6 +135,7 @@ The frontend should treat that as a backend configuration issue, not a user inpu
 | `POST` | `/checkpoints/{checkpoint_id}/predict` | Predict a single checkpoint status at a target datetime |
 | `GET` | `/checkpoints/{checkpoint_id}/forecast` | Return current checkpoint status plus future prediction horizons |
 | `POST` | `/api/routing` | Return a simple car route between two points |
+| `POST` | `/api/routing/v4` | Return checkpoint-aware alternative routes with reranking metadata |
 
 ---
 
@@ -842,6 +843,303 @@ The backend returns the GraphHopper response wrapped in the standard envelope:
 - there is no alternative-route tuning exposed yet
 - routing is server-side only
 - the frontend can consume the GeoJSON path directly because `points_encoded=false`
+
+---
+
+## 8. `POST /api/routing/v4`
+
+### Purpose
+
+Return up to 3 GraphHopper candidate routes, enrich them with nearby checkpoint intelligence, forecast checkpoint risk at the time each checkpoint is actually reached, propagate checkpoint delay forward through the route, rerank the routes, and return a frontend-ready payload with Smart ETA and Journey Risk fields.
+
+V1 remains unchanged at `POST /api/routing`.
+
+### Request Body
+
+```json
+{
+  "origin": { "lat": 32.221, "lng": 35.262 },
+  "destination": { "lat": 32.281, "lng": 35.183 },
+  "depart_at": "2026-04-23T08:00:00Z",
+  "profile": "car"
+}
+```
+
+### Request Notes
+
+- `origin` and `destination` are required
+- `depart_at` is optional and defaults to the current UTC time
+- `profile` currently only accepts `car`
+- legacy aliases `startPoint` and `endPoint` are accepted for V4 request parsing
+
+### Backend Flow
+
+- GraphHopper still generates the routes
+- the backend requests up to 3 alternative routes using `algorithm=alternative_route`
+- GraphHopper flexible mode is required for V2 custom-model routing and route alternatives; free-tier keys cannot produce the 3-route checkpoint-aware response
+- the backend matches checkpoints within `2500m` of each route polyline
+- checkpoint ETA is interpolated from GraphHopper instructions when available
+- checkpoint forecasts are evaluated sequentially, so delay from an earlier checkpoint shifts the arrival time used for downstream checkpoints
+- current checkpoint status is collapsed from entering/leaving using worst severity
+- forecast status is requested for both entering and leaving, then collapsed using worst severity
+- route-level Smart ETA adds the expected delay from matched checkpoints to the raw GraphHopper duration
+- route-level risk scoring uses checkpoint burden, forecast severity, forecast confidence, and historical volatility
+- routes are scored and reranked before the response is returned
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "generated_at": "2026-04-23T08:00:02Z",
+    "version": "v4",
+    "origin": { "lat": 32.221, "lng": 35.262 },
+    "destination": { "lat": 32.281, "lng": 35.183 },
+    "depart_at": "2026-04-23T08:00:00Z",
+    "warnings": [],
+    "graphhopper_info": { "took": 7 },
+    "routes": [
+      {
+        "route_id": "route_1",
+        "rank": 1,
+        "original_index": 0,
+        "distance_m": 41234.5,
+        "duration_ms": 3180000,
+        "duration_minutes": 53.0,
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [[35.262, 32.221], [35.241, 32.236]]
+        },
+        "snapped_waypoints": null,
+        "bbox": null,
+        "ascend": null,
+        "descend": null,
+        "checkpoint_count": 1,
+        "smart_eta_ms": 3480000,
+        "smart_eta_minutes": 58.0,
+        "smart_eta_datetime": "2026-04-23T08:58:00Z",
+        "expected_delay_ms": 300000,
+        "expected_delay_minutes": 5.0,
+        "route_score": 58.0,
+        "risk_score": 8,
+        "risk_level": "low",
+        "risk_confidence": 0.82,
+        "risk_components": {
+          "checkpoint_burden": 0.2,
+          "severity_ratio": 0.0,
+          "confidence_penalty": 0.18,
+          "volatility_ratio": 0.0,
+          "average_forecast_confidence": 0.82
+        },
+        "historical_volatility": 0.0,
+        "route_viability": "good",
+        "worst_predicted_status": "green",
+        "reason_summary": "Low checkpoint burden with favorable forecast windows.",
+        "checkpoints": [
+          {
+            "checkpoint_id": 12,
+            "name": "Huwwara",
+            "lat": 32.24,
+            "lng": 35.23,
+            "distance_from_route_m": 812.3,
+            "nearest_segment_index": 0,
+            "projected_point_on_route": [35.233, 32.239],
+            "chainage_m": 14567.8,
+            "base_eta_ms": 2040000,
+            "effective_eta_ms": 2340000,
+            "cumulative_delay_ms_before_checkpoint": 300000,
+            "eta_ms": 2340000,
+            "eta_seconds": 2340,
+            "eta_minutes": 39.0,
+            "crossing_datetime": "2026-04-23T08:39:00Z",
+            "current_status": "yellow",
+            "current_status_raw": {
+              "entering_status": "أزمة",
+              "leaving_status": "سالك",
+              "entering_status_last_updated": "2026-04-23T07:45:00Z",
+              "leaving_status_last_updated": "2026-04-23T07:45:00Z"
+            },
+            "predicted_status_at_eta": "green",
+            "forecast_confidence": 0.82,
+            "forecast_source": "model",
+            "forecast_model_version": 2,
+            "forecast_reason": null,
+            "forecast_probabilities": {
+              "green": 1.0,
+              "yellow": 0.0,
+              "red": 0.0,
+              "unknown": 0.0
+            },
+            "expected_delay_ms": 0,
+            "expected_delay_minutes": 0.0,
+            "severity_ratio": 0.0,
+            "selected_status_type": "entering",
+            "historical_volatility": 0.0
+          }
+        ],
+        "graphhopper": {
+          "details": {},
+          "instructions": []
+        }
+      }
+    ]
+  }
+}
+```
+
+### Status Clarification
+
+This endpoint does not return the raw ML label directly in `predicted_status_at_eta`.
+
+- `POST /checkpoints/{checkpoint_id}/predict` returns the model label in `predicted_status`
+- `POST /api/routing/v4` normalizes that label into a routing bucket for ranking and display
+- the routing buckets are `green`, `yellow`, `red`, and `unknown`
+- raw checkpoint source values are preserved under `current_status_raw`
+
+So in the routing response, `predicted_status_at_eta: "green"` is valid and expected when the forecasted checkpoint risk is low.
+
+### Field Reference
+
+#### Top-Level Response
+
+| Field | Type | Possible values |
+| --- | --- | --- |
+| `success` | boolean | Always `true` on success |
+| `data` | object | Response payload described below |
+
+#### `data`
+
+| Field | Type | Possible values |
+| --- | --- | --- |
+| `generated_at` | string | ISO 8601 UTC timestamp such as `2026-04-23T08:00:02Z` |
+| `version` | string | Always `"v4"` for this endpoint |
+| `origin` | object | `{ "lat": number, "lng": number }` |
+| `destination` | object | `{ "lat": number, "lng": number }` |
+| `depart_at` | string | ISO 8601 UTC timestamp used for ETA calculations |
+| `warnings` | array of strings | Empty when there are no soft failures; otherwise human-readable warnings |
+| `graphhopper_info` | object or null | Upstream GraphHopper `info` object passthrough; shape is not fixed by this API |
+| `routes` | array of objects | Ranked routes, usually 1 to 3 items |
+
+#### Route Object
+
+| Field | Type | Possible values |
+| --- | --- | --- |
+| `route_id` | string | `route_1`, `route_2`, `route_3`, etc. |
+| `rank` | integer | 1 is the best route after reranking |
+| `original_index` | integer | Zero-based GraphHopper order before reranking |
+| `distance_m` | number | Non-negative route distance in meters |
+| `duration_ms` | integer | Non-negative route duration in milliseconds |
+| `duration_minutes` | number | `duration_ms / 60000` |
+| `geometry` | object | GeoJSON `LineString` with `[lng, lat]` coordinates |
+| `snapped_waypoints` | object or null | Passthrough from GraphHopper; may be null |
+| `bbox` | array or null | Passthrough from GraphHopper; typically `[minLng, minLat, maxLng, maxLat]` when present |
+| `ascend` | number or null | Passthrough from GraphHopper; ascent in meters when present |
+| `descend` | number or null | Passthrough from GraphHopper; descent in meters when present |
+| `checkpoint_count` | integer | Number of matched checkpoints on the route |
+| `smart_eta_ms` | integer | Route ETA after adding cumulative expected checkpoint delay |
+| `smart_eta_minutes` | number | `smart_eta_ms / 60000` |
+| `smart_eta_datetime` | string | ISO 8601 UTC timestamp for the route arrival time after expected checkpoint delay |
+| `expected_delay_ms` | integer | Total expected delay contributed by matched checkpoints |
+| `expected_delay_minutes` | number | `expected_delay_ms / 60000` |
+| `route_score` | number | Lower is better; used for reranking |
+| `risk_score` | number | Composite journey risk score |
+| `risk_level` | string | `low`, `medium`, `high`, or `unknown` |
+| `risk_confidence` | number | Average forecast confidence used in the risk score |
+| `risk_components` | object | Normalized components used to compute `risk_score`; may contain short explanation fields |
+| `historical_volatility` | number | Average checkpoint volatility used in the risk score |
+| `route_viability` | string | `good`, `risky`, or `avoid` |
+| `worst_predicted_status` | string | `green`, `yellow`, `red`, or `unknown` |
+| `reason_summary` | string | Human-readable explanation of the ranking decision |
+| `checkpoints` | array of objects | Matched checkpoints in route order |
+| `graphhopper` | object | Passthrough of the route geometry details and instructions |
+
+#### Route Geometry and GraphHopper Passthrough
+
+| Field | Type | Possible values |
+| --- | --- | --- |
+| `geometry.type` | string | Always `"LineString"` |
+| `geometry.coordinates` | array | Array of `[lng, lat]` coordinate pairs |
+| `graphhopper.details` | object | Upstream detail buckets keyed by GraphHopper detail name |
+| `graphhopper.instructions` | array | Upstream instruction objects from GraphHopper |
+
+GraphHopper detail keys currently requested by the backend are:
+
+- `road_class`
+- `road_environment`
+- `road_access`
+- `street_name`
+- `time`
+- `distance`
+
+#### Checkpoint Object
+
+| Field | Type | Possible values |
+| --- | --- | --- |
+| `checkpoint_id` | integer | Numeric checkpoint ID from the live checkpoint catalog |
+| `name` | string | Checkpoint name, or `Checkpoint {id}` when the source name is missing |
+| `lat` | number | Latitude in decimal degrees |
+| `lng` | number | Longitude in decimal degrees |
+| `distance_from_route_m` | number | Non-negative distance from the route polyline in meters |
+| `nearest_segment_index` | integer | Zero-based segment index on the matched route polyline |
+| `projected_point_on_route` | array | `[lng, lat]` projection of the checkpoint onto the route |
+| `chainage_m` | number | Distance along the route polyline to the matched point |
+| `base_eta_ms` | integer | ETA from route start to the checkpoint before checkpoint delay propagation |
+| `effective_eta_ms` | integer | ETA used for forecasting after adding cumulative prior delay |
+| `cumulative_delay_ms_before_checkpoint` | integer | Delay already accumulated before this checkpoint |
+| `eta_ms` | integer | Estimated travel time from route start to the checkpoint |
+| `eta_seconds` | integer | `eta_ms / 1000`, rounded |
+| `eta_minutes` | number | `eta_ms / 60000` |
+| `crossing_datetime` | string | ISO 8601 UTC timestamp for the expected crossing time |
+| `current_status` | string | `green`, `yellow`, `red`, or `unknown` |
+| `current_status_raw` | object | Raw upstream checkpoint status values and timestamps |
+| `predicted_status_at_eta` | string | `green`, `yellow`, `red`, or `unknown` |
+| `forecast_confidence` | number or null | Confidence score between `0` and `1` when a forecast is available |
+| `forecast_source` | string | Usually `model` or `baseline`; `fallback_unavailable` when no forecast service is available |
+| `forecast_model_version` | integer or null | Currently `2` when forecast data comes from Level 2, otherwise null |
+| `forecast_reason` | string or null | Null in the normal path; `"No forecast service available"` in the fallback path |
+| `forecast_probabilities` | object | Normalized `green` / `yellow` / `red` / `unknown` probability vector used for delay estimation |
+| `expected_delay_ms` | integer | Expected delay contributed by this checkpoint |
+| `expected_delay_minutes` | number | `expected_delay_ms / 60000` |
+| `severity_ratio` | number | Normalized severity mass used by the risk model |
+| `selected_status_type` | string or null | The entering/leaving prediction chosen for the delay calculation |
+| `historical_volatility` | number | Checkpoint volatility proxy from historical status distribution |
+
+#### Raw Status Values
+
+`current_status_raw` preserves the upstream checkpoint payload before normalization.
+
+| Raw value | Normalized value | Meaning |
+| --- | --- | --- |
+| `سالك` | `green` | Open / flowing |
+| `أزمة` or `ازمة` | `yellow` | Congested / busy |
+| `مغلق` | `red` | Closed / blocked |
+| anything else or missing | `unknown` | Unrecognized or unavailable |
+
+#### Route-Level Value Map
+
+| Field | Values |
+| --- | --- |
+| `route_viability` | `good` when the route has no severe forecast risk, `risky` when it has yellow or unknown forecast risk, high composite risk, or a red current status, `avoid` when any checkpoint is forecast red |
+| `worst_predicted_status` | The highest-severity checkpoint forecast on that route, using the same `green` / `yellow` / `red` / `unknown` scale |
+| `warnings` | Free-form warning strings such as fewer-than-3-routes, malformed GraphHopper paths, or checkpoint catalog warnings |
+
+### Status Codes
+
+- `200 OK`
+- `422 Unprocessable Entity` for invalid coordinates, invalid profile, or malformed input
+- `502 Bad Gateway` if GraphHopper fails or no usable candidate route can be normalized
+- `503 Service Unavailable` if GraphHopper is not configured on the server
+
+### Frontend Notes
+
+- render routes in reranked order using `rank`
+- preserve `original_index` if you want to compare against GraphHopper raw ordering
+- geometry remains in `[lng, lat]` order
+- `checkpoints` is always present, even when empty
+- `predicted_status_at_eta` is a routing bucket, not the raw ML label
+- `current_status_raw` is the raw checkpoint payload; `current_status` is the normalized routing bucket
+- `warnings` may explain degraded cases such as fewer than 3 routes or unavailable live status
 
 ---
 

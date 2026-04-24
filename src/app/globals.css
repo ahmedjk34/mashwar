@@ -80,14 +80,14 @@ select {
 
 .mashwar-panel {
   backdrop-filter: blur(12px);
-  background: transparent;
+  background: rgba(17, 19, 24, 0.74);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
 
 .mashwar-panel-elevated {
-  background: transparent;
+  background: rgba(26, 29, 36, 0.68);
 }
 
 .mashwar-chip {
@@ -144,4 +144,16 @@ select {
 
 .mashwar-surface {
   background: transparent;
+}
+
+.mashwar-route-hover-popup .maplibregl-popup-content {
+  background: rgba(11, 15, 20, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+  padding: 10px 12px;
+}
+
+.mashwar-route-hover-popup .maplibregl-popup-tip {
+  border-top-color: rgba(11, 15, 20, 0.94);
 }

@@ -30,6 +30,15 @@ import type {
 } from "@/lib/types/map";
 
 const EMPTY_ROUTES: NormalizedRoutes = {
+  generatedAt: null,
+  version: null,
+  origin: null,
+  destination: null,
+  departAt: null,
+  warnings: [],
+  graphhopperInfo: null,
+  routes: [],
+  selectedRouteId: null,
   mainRoute: null,
   alternativeRoutes: [],
 };
@@ -393,10 +402,7 @@ export default function MapHome() {
     setRouteError(null);
     setRouteFrom(null);
     setRouteTo(null);
-    setRoutes({
-      mainRoute: null,
-      alternativeRoutes: [],
-    });
+    setRoutes(EMPTY_ROUTES);
   }
 
   function handleRetryCheckpoints(): void {
@@ -601,8 +607,9 @@ export default function MapHome() {
       void (async () => {
         try {
           const nextRoutes = await getRoute({
-            startPoint: resolvedFrom,
-            endPoint: resolvedTo,
+            origin: resolvedFrom,
+            destination: resolvedTo,
+            profile: "car",
           });
           setRoutes(nextRoutes);
         } catch (error) {
@@ -624,6 +631,7 @@ export default function MapHome() {
       <MapView
         checkpoints={checkpoints}
         routes={routes}
+        departAt={routes.departAt}
         userLocation={userLocation}
         onCheckpointSelect={handleCheckpointSelect}
       />

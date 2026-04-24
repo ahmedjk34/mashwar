@@ -12,9 +12,11 @@ import {
 import MapView from "@/components/map/MapView";
 import LocationSyncIcon from "@/components/map/LocationSyncIcon";
 import MashwarNaturalLanguageRouteModal from "@/components/map/MashwarNaturalLanguageRouteModal";
+import RouteDetailsModal from "@/components/map/RouteDetailsModal";
 import {
   DEMO_ROUTE_REQUEST,
   hasValidCoordinates,
+  getRenderableRoutes,
   getWorstStatus,
 } from "@/lib/config/map";
 import { getCheckpoints } from "@/lib/services/checkpoints";
@@ -31,6 +33,15 @@ import type {
 } from "@/lib/types/map";
 
 const EMPTY_ROUTES: NormalizedRoutes = {
+  generatedAt: null,
+  version: null,
+  origin: null,
+  destination: null,
+  departAt: null,
+  warnings: [],
+  graphhopperInfo: null,
+  routes: [],
+  selectedRouteId: null,
   mainRoute: null,
   alternativeRoutes: [],
 };
@@ -109,6 +120,31 @@ const STATUS_VISUALS: Record<
     softBg: "rgba(148, 163, 184, 0.12)",
   },
 };
+
+function formatDateTimeLabel(value: string | null): string {
+  if (!value) {
+    return "n/a";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(parsed);
+}
+
+function formatCoordinatePair(lat: number, lng: number): string {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return "n/a";
+  }
+
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
 
 function getConfidenceTone(confidence: number | null): {
   color: string;
@@ -491,6 +527,7 @@ export default function MashwarHome() {
   const [routeError, setRouteError] = useState<string | null>(null);
   const [isLoadingCheckpoints, setIsLoadingCheckpoints] = useState(true);
   const [routes, setRoutes] = useState<NormalizedRoutes>(EMPTY_ROUTES);
+  const [routeDetailsRouteId, setRouteDetailsRouteId] = useState<string | null>(null);
   const [isRoutePending, startRouteTransition] = useTransition();
   const [checkpointReloadNonce, setCheckpointReloadNonce] = useState(0);
   const [routeFrom, setRouteFrom] = useState<
@@ -563,6 +600,17 @@ export default function MashwarHome() {
     return new Map(checkpoints.map((checkpoint) => [checkpoint.id, checkpoint]));
   }, [checkpoints]);
 
+  const routePaths = useMemo(() => getRenderableRoutes(routes), [routes]);
+  const routeDetailsRoute = useMemo(() => {
+    if (!routeDetailsRouteId) {
+      return null;
+    }
+
+    return (
+      routePaths.find((route) => route.routeId === routeDetailsRouteId) ?? null
+    );
+  }, [routeDetailsRouteId, routePaths]);
+
   const selectedCheckpointStatus = selectedCheckpoint
     ? getWorstStatus(
         selectedCheckpoint.enteringStatus,
@@ -598,6 +646,7 @@ export default function MashwarHome() {
         try {
           const nextRoutes = await getRoute(DEMO_ROUTE_REQUEST);
           setRoutes(nextRoutes);
+          setRouteDetailsRouteId(null);
         } catch (error) {
           setRouteError(
             error instanceof Error
@@ -612,7 +661,23 @@ export default function MashwarHome() {
   function handleClearRoute(): void {
     setRouteError(null);
     setRoutes(EMPTY_ROUTES);
+    setRouteDetailsRouteId(null);
   }
+
+  const handleSelectRoute = useCallback((routeId: string) => {
+    setRoutes((current) => ({
+      ...current,
+      selectedRouteId: routeId,
+    }));
+  }, []);
+
+  const handleOpenRouteDetails = useCallback(
+    (routeId: string) => {
+      handleSelectRoute(routeId);
+      setRouteDetailsRouteId(routeId);
+    },
+    [handleSelectRoute],
+  );
 
   function handleRouteButtonClick(): void {
     if (routes.mainRoute) {
@@ -651,10 +716,12 @@ export default function MashwarHome() {
       void (async () => {
         try {
           const nextRoutes = await getRoute({
-            startPoint: resolvedFrom,
-            endPoint: resolvedTo,
+            origin: resolvedFrom,
+            destination: resolvedTo,
+            profile: "car",
           });
           setRoutes(nextRoutes);
+          setRouteDetailsRouteId(null);
         } catch (error) {
           setRouteError(
             error instanceof Error
@@ -882,6 +949,7 @@ export default function MashwarHome() {
       <MapView
         checkpoints={checkpoints}
         routes={routes}
+        departAt={routes.departAt}
         userLocation={userLocation}
         routeEndpoints={{
           from: routeFromPoint,
@@ -890,6 +958,8 @@ export default function MashwarHome() {
         placementMode={endpointPlacementMode}
         onMapPlacement={handlePlaceEndpoint}
         onCheckpointSelect={handleCheckpointSelect}
+        onRouteSelect={handleSelectRoute}
+        onRouteOpen={handleOpenRouteDetails}
       />
 
       <aside className="pointer-events-auto absolute left-4 top-4 z-20 flex w-[420px] flex-col gap-3">
@@ -973,8 +1043,8 @@ export default function MashwarHome() {
               disabled={isRoutePending}
               className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-[#3b82f6] px-4 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#4f8df7] disabled:cursor-wait disabled:opacity-70"
             >
-              <span>{routes.mainRoute ? "Route" : "Route"}</span>
-              {routes.mainRoute ? (
+              <span>{routePaths.length > 0 ? "Clear" : "Route"}</span>
+              {routePaths.length > 0 ? (
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/12 text-[12px] leading-none">
                   ×
                 </span>
@@ -993,6 +1063,24 @@ export default function MashwarHome() {
                 </span>
               ) : null}
             </div>
+
+            {routePaths.length > 0 ? (
+              <div className="mt-4 rounded-[10px] border border-[#2d3139] bg-white/[0.02] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                      ROUTES ON MAP
+                    </p>
+                    <p className="mt-1 text-[13px] text-[#cbd5e1]">
+                      All returned routes are drawn on the map. Hover any route for ETA and journey risk, then click it to open the full route info modal.
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-[#2d3139] px-3 py-1 text-[11px] text-[#cbd5e1]">
+                    {routePaths.length} route{routePaths.length === 1 ? "" : "s"} active
+                  </span>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="border-t border-white/8" />
@@ -1223,6 +1311,12 @@ export default function MashwarHome() {
       <MashwarNaturalLanguageRouteModal
         open={isNaturalRouteModalOpen}
         onClose={() => setIsNaturalRouteModalOpen(false)}
+      />
+      <RouteDetailsModal
+        open={Boolean(routeDetailsRoute)}
+        route={routeDetailsRoute}
+        departAt={routes.departAt}
+        onClose={() => setRouteDetailsRouteId(null)}
       />
     </main>
   );
