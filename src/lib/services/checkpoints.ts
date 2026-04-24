@@ -2,22 +2,12 @@ import {
   hasValidCoordinates,
   normalizeCheckpointStatus,
 } from "@/lib/config/map";
+import { getGeoApiBaseUrl } from "@/lib/services/geo-api";
 import type {
   CheckpointApiEnvelope,
   CheckpointApiRecord,
   MapCheckpoint,
 } from "@/lib/types/map";
-
-function getGeoApiBaseUrl(): string {
-  const baseUrl = process.env.NEXT_PUBLIC_GEO_API_URL?.trim();
-  if (!baseUrl) {
-    throw new Error(
-      "NEXT_PUBLIC_GEO_API_URL is required to fetch current checkpoints.",
-    );
-  }
-
-  return baseUrl.replace(/\/+$/, "");
-}
 
 function toNumber(value: number | string | null | undefined): number | null {
   if (typeof value === "number") {
@@ -92,6 +82,11 @@ export function normalizeCheckpointRecord(
       record.leavingStatusLastUpdated,
     ),
     alertText: firstNonEmptyString(record.alert_text),
+    rawStatus: currentStatus,
+    currentStatusLabel: currentStatus,
+    uncertaintyScore: record.uncertainty_score ?? record.uncertaintyScore ?? null,
+    uncertainty: record.uncertainty ?? null,
+    prediction: record.prediction ?? null,
   };
 }
 
@@ -136,7 +131,7 @@ function extractCheckpointRecords(payload: unknown): CheckpointApiRecord[] {
 }
 
 export async function getCheckpoints(): Promise<MapCheckpoint[]> {
-  const endpoint = `${getGeoApiBaseUrl()}/checkpoints/current-status`;
+  const endpoint = `${getGeoApiBaseUrl("current checkpoints")}/checkpoints/current-status`;
 
   try {
     const response = await fetch(endpoint, {

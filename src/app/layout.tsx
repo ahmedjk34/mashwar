@@ -1,16 +1,22 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans_Arabic } from "next/font/google";
+import { Cairo, JetBrains_Mono, Syne } from "next/font/google";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 
-const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
-  variable: "--font-ibm-arabic",
+const syne = Syne({
+  variable: "--font-syne",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+});
+
+const cairo = Cairo({
+  variable: "--font-cairo",
   subsets: ["arabic", "latin"],
   weight: ["400", "500", "700"],
 });
 
-const ibmPlexMono = IBM_Plex_Mono({
-  variable: "--font-ibm-mono",
+const jetBrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
   weight: ["400", "500"],
 });
@@ -27,8 +33,9 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
-      className={`${ibmPlexSansArabic.variable} ${ibmPlexMono.variable} h-full antialiased`}
+      lang="ar"
+      dir="rtl"
+      className={`${syne.variable} ${cairo.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

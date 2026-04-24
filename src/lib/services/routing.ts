@@ -1,4 +1,5 @@
 import { validateRoutePoint } from "@/lib/config/map";
+import { getGeoApiBaseUrl } from "@/lib/services/geo-api";
 import { logRoutingDebug } from "@/lib/utils/routing-debug";
 import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 import type {
@@ -17,17 +18,6 @@ import type {
   RoutingTradeoffExplainerDto,
   RoutingTradeoffExplainerRouteDto,
 } from "@/lib/types/map";
-
-function getGeoApiBaseUrl(): string {
-  const baseUrl = process.env.NEXT_PUBLIC_GEO_API_URL?.trim();
-  if (!baseUrl) {
-    throw new Error(
-      "NEXT_PUBLIC_GEO_API_URL is required to fetch routing data.",
-    );
-  }
-
-  return baseUrl.replace(/\/+$/, "");
-}
 
 function toFiniteNumber(value: number | string | null | undefined): number {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -793,7 +783,7 @@ export async function getRoute(
   validateRoutePoint(request.origin);
   validateRoutePoint(request.destination);
 
-  const endpoint = `${getGeoApiBaseUrl()}/api/routing/v2`;
+  const endpoint = `${getGeoApiBaseUrl("routing data")}/api/routing/v2`;
   const body: RoutingRequest = {
     origin: request.origin,
     destination: request.destination,

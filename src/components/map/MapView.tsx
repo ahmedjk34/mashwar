@@ -1,5 +1,6 @@
 "use client";
 
+import type { FeatureCollection, LineString } from "geojson";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 
@@ -15,6 +16,12 @@ import {
   CLUSTER_RADIUS_EXPRESSION,
   DEFAULT_ZOOM,
   DEFAULT_MAP_GLYPHS_URL,
+  HEATMAP_COLOR_EXPRESSION,
+  HEATMAP_CORRIDOR_GLOW_LAYER_ID,
+  HEATMAP_CORRIDOR_MAIN_LAYER_ID,
+  HEATMAP_CORRIDOR_SOURCE_ID,
+  HEATMAP_GLOW_WIDTH_EXPRESSION,
+  HEATMAP_MAIN_WIDTH_EXPRESSION,
   getMapTileUrlTemplate,
   getRenderableRoutes,
   MAX_ZOOM,
@@ -32,6 +39,7 @@ import {
   UNCLUSTERED_RADIUS_EXPRESSION,
 } from "@/lib/config/map";
 import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
+import type { HeatmapSegmentProperties } from "@/lib/types/heatmap";
 import type {
   MapCheckpoint,
   NormalizedRoutes,
@@ -50,6 +58,8 @@ interface MapViewProps {
     from: RoutePoint | null;
     to: RoutePoint | null;
   };
+  heatmapEnabled?: boolean;
+  heatmapSegments?: FeatureCollection<LineString, HeatmapSegmentProperties>;
   placementMode?: "from" | "to" | null;
   onMapPlacement?: (point: RoutePoint) => void;
   onCheckpointSelect?: (checkpoint: MapCheckpoint | null) => void;
@@ -138,21 +148,21 @@ function getRouteToneStyles(tone: "good" | "warning" | "danger") {
   switch (tone) {
     case "good":
       return {
-        text: "#166534",
-        border: "rgba(34, 197, 94, 0.22)",
-        background: "rgba(34, 197, 94, 0.12)",
+        text: "var(--risk-low)",
+        border: "var(--risk-low)",
+        background: "var(--risk-low-bg)",
       };
     case "danger":
       return {
-        text: "#b91c1c",
-        border: "rgba(239, 68, 68, 0.22)",
-        background: "rgba(239, 68, 68, 0.12)",
+        text: "var(--risk-high)",
+        border: "var(--risk-high)",
+        background: "var(--risk-high-bg)",
       };
     default:
       return {
-        text: "#b45309",
-        border: "rgba(245, 158, 11, 0.22)",
-        background: "rgba(245, 158, 11, 0.12)",
+        text: "var(--risk-med)",
+        border: "var(--risk-med)",
+        background: "var(--risk-med-bg)",
       };
   }
 }
@@ -400,6 +410,8 @@ export default function MapView({
   departAt,
   userLocation,
   routeEndpoints,
+  heatmapEnabled = false,
+  heatmapSegments = { type: "FeatureCollection", features: [] },
   placementMode,
   onMapPlacement,
   onCheckpointSelect,
@@ -915,6 +927,86 @@ export default function MapView({
 
     existingSource.setData(checkpointFeatureCollection);
   }, [checkpointFeatureCollection, mapLoaded]);
+
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded) {
+      return;
+    }
+
+    const map = mapRef.current;
+    const existingSource = map.getSource(
+      HEATMAP_CORRIDOR_SOURCE_ID,
+    ) as GeoJSONSource | undefined;
+    const beforeLayerId = map.getLayer(CHECKPOINT_CLUSTER_LAYER_ID)
+      ? CHECKPOINT_CLUSTER_LAYER_ID
+      : undefined;
+
+    if (!existingSource) {
+      map.addSource(HEATMAP_CORRIDOR_SOURCE_ID, {
+        type: "geojson",
+        data: heatmapSegments,
+      });
+
+      map.addLayer(
+        {
+          id: HEATMAP_CORRIDOR_GLOW_LAYER_ID,
+          type: "line",
+          source: HEATMAP_CORRIDOR_SOURCE_ID,
+          layout: {
+            visibility: heatmapEnabled ? "visible" : "none",
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": HEATMAP_COLOR_EXPRESSION as any,
+            "line-width": HEATMAP_GLOW_WIDTH_EXPRESSION as any,
+            "line-opacity": 0.3,
+            "line-blur": 4,
+          },
+        },
+        beforeLayerId,
+      );
+
+      map.addLayer(
+        {
+          id: HEATMAP_CORRIDOR_MAIN_LAYER_ID,
+          type: "line",
+          source: HEATMAP_CORRIDOR_SOURCE_ID,
+          layout: {
+            visibility: heatmapEnabled ? "visible" : "none",
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": HEATMAP_COLOR_EXPRESSION as any,
+            "line-width": HEATMAP_MAIN_WIDTH_EXPRESSION as any,
+            "line-opacity": 0.9,
+          },
+        },
+        beforeLayerId,
+      );
+
+      return;
+    }
+
+    existingSource.setData(heatmapSegments);
+
+    if (map.getLayer(HEATMAP_CORRIDOR_GLOW_LAYER_ID)) {
+      map.setLayoutProperty(
+        HEATMAP_CORRIDOR_GLOW_LAYER_ID,
+        "visibility",
+        heatmapEnabled ? "visible" : "none",
+      );
+    }
+
+    if (map.getLayer(HEATMAP_CORRIDOR_MAIN_LAYER_ID)) {
+      map.setLayoutProperty(
+        HEATMAP_CORRIDOR_MAIN_LAYER_ID,
+        "visibility",
+        heatmapEnabled ? "visible" : "none",
+      );
+    }
+  }, [heatmapEnabled, heatmapSegments, mapLoaded]);
 
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) {

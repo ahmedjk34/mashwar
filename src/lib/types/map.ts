@@ -39,6 +39,15 @@ export interface CheckpointApiRecord {
   enteringStatusLastUpdated?: string | null;
   leaving_status_last_updated?: string | null;
   leavingStatusLastUpdated?: string | null;
+  uncertainty_score?: number | string | null;
+  uncertaintyScore?: number | string | null;
+  uncertainty?: {
+    score?: number | string | null;
+  } | null;
+  prediction?: {
+    uncertainty_score?: number | string | null;
+    uncertaintyScore?: number | string | null;
+  } | null;
 }
 
 export interface CheckpointApiEnvelope {
@@ -65,6 +74,16 @@ export interface MapCheckpoint {
   enteringStatusLastUpdated: string | null;
   leavingStatusLastUpdated: string | null;
   alertText: string | null;
+  rawStatus?: string | null;
+  currentStatusLabel?: string | null;
+  uncertaintyScore?: number | string | null;
+  uncertainty?: {
+    score?: number | string | null;
+  } | null;
+  prediction?: {
+    uncertainty_score?: number | string | null;
+    uncertaintyScore?: number | string | null;
+  } | null;
 }
 
 export interface UserLocation {

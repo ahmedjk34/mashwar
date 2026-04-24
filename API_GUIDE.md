@@ -18,6 +18,7 @@ The backend is a FastAPI app and currently supports:
 - single checkpoint status prediction
 - checkpoint forecast timelines for fixed horizons
 - simple routing via GraphHopper
+- heatmap corridor network caching and SSE streaming
 
 ---
 
@@ -73,6 +74,11 @@ Validation errors include extra detail:
 
 The frontend should support all three shapes.
 
+Important:
+
+- `GET /heatmap` is intentionally a raw response and does not use the success envelope
+- `GET /heatmap/stream` is an SSE stream and sends raw event payloads
+
 ---
 
 ## Authentication
@@ -112,15 +118,17 @@ If Supabase is unreachable or misconfigured, the frontend should expect:
 
 ## GraphHopper Configuration
 
-The routing endpoint reads its API key from:
+The backend reads routing configuration from:
 
-- `GRAPHHOPPER_API_KEY`
+- `GRAPHHOPPER_BASE_URL`
+- `GRAPHHOPPER_API_KEY` optional
+- `GRAPHHOPPER_TIMEOUT_SECONDS`
 
-If this variable is missing, the routing endpoint returns:
+Important:
 
-- `503 Service Unavailable`
-
-The frontend should treat that as a backend configuration issue, not a user input issue.
+- the deployed Mashwar setup can use a self-hosted GraphHopper server on your own VPS
+- in self-hosted mode, `GRAPHHOPPER_API_KEY` is optional and no key is sent unless explicitly configured
+- hosted GraphHopper setups can still provide `GRAPHHOPPER_API_KEY`
 
 ---
 
@@ -134,6 +142,8 @@ The frontend should treat that as a backend configuration issue, not a user inpu
 | `GET` | `/checkpoints/{checkpoint_id}` | Fetch one checkpoint row |
 | `POST` | `/checkpoints/{checkpoint_id}/predict` | Predict a single checkpoint status at a target datetime |
 | `GET` | `/checkpoints/{checkpoint_id}/forecast` | Return current checkpoint status plus future prediction horizons |
+| `GET` | `/heatmap` | Return cached heatmap corridor GeoJSON when available |
+| `GET` | `/heatmap/stream` | Stream cached or newly built heatmap corridors over SSE |
 | `POST` | `/api/routing` | Return a simple car route between two points |
 | `POST` | `/api/routing/v2` | Return checkpoint-aware alternative routes with reranking metadata |
 
@@ -196,6 +206,135 @@ Health probe for uptime and deployment checks.
 
 - use for readiness or uptime checks
 - if this fails, the app process is unhealthy or unreachable
+
+---
+
+## Heatmap Endpoints
+
+### `GET /heatmap`
+
+Purpose:
+
+- return the cached heatmap corridor GeoJSON if it already exists
+- otherwise tell the client to use `GET /heatmap/stream`
+
+Cache validity:
+
+- file path: `API/data/heatmap/corridors.geojson`
+- must parse as JSON
+- must be a GeoJSON `FeatureCollection`
+- must contain a non-empty `features` array
+
+Cached response:
+
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "12-45",
+        "from_checkpoint_id": 12,
+        "to_checkpoint_id": 45,
+        "from_checkpoint_name": "حوارة",
+        "to_checkpoint_name": "زعترة",
+        "distance_m": 8200
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[35.2, 32.1], [35.21, 32.11]]
+      }
+    }
+  ]
+}
+```
+
+Cache-miss response:
+
+```json
+{
+  "cached": false,
+  "message": "Heatmap network cache not found. Use /heatmap/stream to build and stream it."
+}
+```
+
+Notes:
+
+- this route intentionally returns a raw payload, not the standard success envelope
+- geometry is static only; no checkpoint uncertainty coloring is returned here
+
+### `GET /heatmap/stream`
+
+Purpose:
+
+- stream cached corridors immediately when the cache already exists
+- or build the corridor network, stream progress in real time, and persist the final cache
+
+Media type:
+
+- `text/event-stream`
+
+Headers:
+
+- `Cache-Control: no-cache`
+- `Connection: keep-alive`
+- `X-Accel-Buffering: no`
+
+SSE format:
+
+```text
+data: {json}
+
+```
+
+Cache and resume files:
+
+- final cache: `API/data/heatmap/corridors.geojson`
+- resumable state: `API/data/heatmap/build_state.json`
+
+Build behavior:
+
+- checkpoint source: `src/data/checkpoints.json`
+- connect each checkpoint to its closest `HEATMAP_NEIGHBOR_COUNT` neighbors
+- deduplicate pairs using sorted pair ids like `12-45`
+- route pairs through GraphHopper with bounded concurrency
+- retry upstream failures up to `HEATMAP_RETRY_COUNT`
+- skip routes whose routed distance exceeds `straight_line_distance * HEATMAP_MAX_ROUTE_STRETCH`
+- update `build_state.json` after every built, skipped, or failed pair
+- resume from `build_state.json` if the process was interrupted before final GeoJSON write
+
+Supported event types:
+
+- `start`
+- `route_built`
+- `route_skipped`
+- `route_failed`
+- `progress`
+- `done`
+- `error`
+
+Event shape notes:
+
+- `start` includes `cached: true` when replaying cache and `cached: false` when building
+- `completed` counts all terminal pairs: built, skipped, and failed
+- `percentage` is `completed / total * 100`
+- `route_built.corridor.geometry.coordinates` are GeoJSON `[lng, lat]`
+
+Environment variables used by the heatmap builder:
+
+- `GRAPHHOPPER_BASE_URL`
+- `GRAPHHOPPER_API_KEY` optional
+- `GRAPHHOPPER_TIMEOUT_SECONDS`
+- `HEATMAP_NEIGHBOR_COUNT`
+- `HEATMAP_BUILD_CONCURRENCY`
+- `HEATMAP_MAX_ROUTE_STRETCH`
+- `HEATMAP_RETRY_COUNT`
+
+Self-hosted GraphHopper note:
+
+- when using your own VPS GraphHopper server, `GRAPHHOPPER_API_KEY` is optional
+- the backend only forwards a `key` query parameter when the env var is explicitly set
 
 ---
 

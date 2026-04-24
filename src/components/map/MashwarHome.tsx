@@ -14,6 +14,8 @@ import LocationSyncIcon from "@/components/map/LocationSyncIcon";
 import MashwarNaturalLanguageRouteModal from "@/components/map/MashwarNaturalLanguageRouteModal";
 import RouteDetailsModal from "@/components/map/RouteDetailsModal";
 import TradeoffExplainerModal from "@/components/map/TradeoffExplainerModal";
+import { buildCorridorSegments } from "@/lib/heatmap/corridorSegments";
+import { normalizeCheckpointId } from "@/lib/heatmap/normalizeCheckpoint";
 import {
   DEMO_ROUTE_REQUEST,
   hasValidCoordinates,
@@ -22,8 +24,19 @@ import {
 } from "@/lib/config/map";
 import { getCheckpoints } from "@/lib/services/checkpoints";
 import { getCheckpointForecast } from "@/lib/services/forecast";
+import {
+  createEmptyHeatmapBuildProgress,
+  fetchHeatmapCache,
+  mergeHeatmapProgress,
+  streamHeatmapNetwork,
+} from "@/lib/services/heatmap";
 import { getRoute } from "@/lib/services/routing";
 import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
+import type {
+  HeatmapBuildProgress,
+  HeatmapCorridorFeature,
+  HeatmapSegmentFeatureCollection,
+} from "@/lib/types/heatmap";
 import type {
   CheckpointForecastStatusType,
   MapCheckpoint,
@@ -83,47 +96,47 @@ const STATUS_VISUALS: Record<
   سالك: {
     ar: "سالك",
     en: "OPEN",
-    dot: "#22c55e",
-    border: "#166534",
-    bg: "#0d1f15",
-    text: "#86efac",
-    softBg: "rgba(34, 197, 94, 0.12)",
+    dot: "var(--risk-low)",
+    border: "var(--risk-low)",
+    bg: "var(--risk-low-bg)",
+    text: "var(--clr-green-soft)",
+    softBg: "var(--risk-low-bg)",
   },
   "أزمة متوسطة": {
     ar: "أزمة متوسطة",
     en: "SLOW",
-    dot: "#f59e0b",
-    border: "#92400e",
-    bg: "#241a09",
-    text: "#fbbf24",
-    softBg: "rgba(245, 158, 11, 0.12)",
+    dot: "var(--risk-med)",
+    border: "var(--risk-med)",
+    bg: "var(--risk-med-bg)",
+    text: "var(--risk-med)",
+    softBg: "var(--risk-med-bg)",
   },
   "أزمة خانقة": {
     ar: "أزمة خانقة",
     en: "HEAVY",
-    dot: "#f97316",
-    border: "#c2410c",
-    bg: "#261307",
-    text: "#fdba74",
-    softBg: "rgba(249, 115, 22, 0.12)",
+    dot: "var(--risk-high)",
+    border: "var(--risk-high)",
+    bg: "var(--risk-high-bg)",
+    text: "var(--clr-white)",
+    softBg: "var(--risk-high-bg)",
   },
   مغلق: {
     ar: "مغلق",
     en: "CLOSED",
-    dot: "#ef4444",
-    border: "#b91c1c",
-    bg: "#1f0a0a",
-    text: "#fca5a5",
-    softBg: "rgba(239, 68, 68, 0.12)",
+    dot: "var(--risk-high)",
+    border: "var(--risk-high)",
+    bg: "var(--risk-high-bg)",
+    text: "var(--clr-white)",
+    softBg: "var(--risk-high-bg)",
   },
   "غير معروف": {
     ar: "غير معروف",
     en: "UNKNOWN",
-    dot: "#94a3b8",
-    border: "#475569",
-    bg: "#12151a",
-    text: "#cbd5e1",
-    softBg: "rgba(148, 163, 184, 0.12)",
+    dot: "var(--clr-slate)",
+    border: "var(--glass-border-mid)",
+    bg: "var(--glass-bg-mid)",
+    text: "var(--clr-sand)",
+    softBg: "var(--glass-bg-mid)",
   },
 };
 
@@ -144,18 +157,18 @@ function getConfidenceTone(confidence: number | null): {
   label: string;
 } {
   if (confidence === null) {
-    return { color: "#6b7280", label: "n/a" };
+    return { color: "var(--clr-slate)", label: "n/a" };
   }
 
   if (confidence > 90) {
-    return { color: "#86efac", label: `${Math.round(confidence * 100)}%` };
+    return { color: "var(--clr-green-soft)", label: `${Math.round(confidence * 100)}%` };
   }
 
   if (confidence >= 80) {
-    return { color: "#22c55e", label: `${Math.round(confidence * 100)}%` };
+    return { color: "var(--risk-low)", label: `${Math.round(confidence * 100)}%` };
   }
 
-  return { color: "#f59e0b", label: `${Math.round(confidence * 100)}%` };
+  return { color: "var(--risk-med)", label: `${Math.round(confidence * 100)}%` };
 }
 
 function formatForecastConfidence(value: number | null): string {
@@ -367,7 +380,7 @@ function StatusPill({
 
   return (
     <span
-      className={`mashwar-pill inline-flex items-center gap-2 border ${compact ? "px-2.5 py-1" : "px-3 py-1.5"}`}
+      className={`mashwar-pill inline-flex items-center gap-[var(--space-2)] border ${compact ? "px-[10px] py-[3px]" : "px-[12px] py-[6px]"}`}
       style={{
         backgroundColor: visual.bg,
         color: visual.text,
@@ -394,8 +407,8 @@ function ConfidenceBadge({
 
   return (
     <span
-      className={`mashwar-pill inline-flex items-center rounded-full bg-transparent px-3 py-1 ${className}`}
-      style={{ color: tone.color, border: "1px solid rgba(255,255,255,0.08)" }}
+      className={`mashwar-pill inline-flex items-center rounded-full px-3 py-1 ${className}`}
+      style={{ color: tone.color, borderColor: "var(--glass-border)" }}
     >
       <span className="mashwar-mono text-[12px] font-semibold tracking-[0.08em]">
         {tone.label}
@@ -430,7 +443,11 @@ function EndpointChip({
           onActivate();
         }
       }}
-      className={`relative rounded-[8px] border px-3 py-2.5 transition-all duration-150 hover:bg-white/5 ${isActive ? "border-[#3b82f6] bg-white/5" : "border-[#2d3139] bg-transparent"}`}
+      dir="rtl"
+      className={`glass-card relative px-3 py-2.5 transition-all duration-[var(--duration-base)] ease-out ${isActive ? "mashwar-card-raised" : ""}`}
+      style={{
+        borderColor: isActive ? "var(--clr-green-bright)" : "var(--glass-border)",
+      }}
     >
       <button
         type="button"
@@ -438,19 +455,19 @@ function EndpointChip({
           event.stopPropagation();
           onClear();
         }}
-        className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-transparent text-[#6b7280] transition hover:border-white/10 hover:bg-white/5 hover:text-[#f9fafb]"
+        className="mashwar-icon-button absolute left-2 top-2 inline-flex h-5 w-5 items-center justify-center border border-transparent text-[var(--clr-slate)]"
         aria-label={`Clear ${label}`}
       >
         <span className="text-[15px] leading-none">×</span>
       </button>
-      <p className="mashwar-mono text-[10px] uppercase tracking-[0.26em] text-[#6b7280]">
+      <p className="mashwar-mono text-[10px] uppercase tracking-[0.26em] text-[var(--clr-slate)]">
         {label}
       </p>
-      <div className="mt-2 min-h-[26px] pr-6 text-[15px] font-medium text-[#f9fafb] mashwar-rtl">
+      <div className="mashwar-arabic mt-2 min-h-[26px] pl-6 text-[15px] font-medium text-[var(--clr-white)]">
         {value || "غير محدد"}
       </div>
       {helper ? (
-        <p className="mt-1 text-[10px] text-[#60a5fa]">{helper}</p>
+        <p className="mashwar-arabic mt-1 text-[10px] text-[var(--clr-green-soft)]">{helper}</p>
       ) : null}
     </div>
   );
@@ -467,23 +484,23 @@ function MapStatChip({
 }) {
   const toneClass =
     tone === "green"
-      ? "text-[#22c55e]"
+      ? "text-[var(--risk-low)]"
       : tone === "amber"
-        ? "text-[#f59e0b]"
-        : "text-[#cbd5e1]";
+        ? "text-[var(--risk-med)]"
+        : "text-[var(--clr-sand)]";
 
   const dotColor =
     tone === "green"
-      ? "#22c55e"
+      ? "var(--risk-low)"
       : tone === "amber"
-        ? "#f59e0b"
-        : "#64748b";
+        ? "var(--risk-med)"
+        : "var(--clr-slate)";
 
   return (
-    <span className="mashwar-pill inline-flex items-center gap-2 border border-[#2d3139] bg-transparent px-3 py-1.5 text-[11px] text-[#cbd5e1]">
+    <span className="mashwar-pill inline-flex items-center gap-2 px-3 py-1.5 text-[11px] text-[var(--clr-sand)]">
       <span className="h-2 w-2 rounded-full" style={{ backgroundColor: dotColor }} />
       <span className={`mashwar-mono ${toneClass}`}>{value}</span>
-      <span className="text-[#94a3b8]">{label}</span>
+      <span className="text-[var(--clr-slate)]">{label}</span>
     </span>
   );
 }
@@ -502,19 +519,26 @@ function ForecastEntry({
   const topLabel = row.entering && row.leaving ? "Both" : row.entering ? "Entering" : "Leaving";
 
   return (
-    <article className="rounded-[8px] border border-white/5 bg-transparent p-3 transition-all duration-150 hover:bg-white/5">
+    <article className="glass-card p-3 transition-all duration-[var(--duration-base)] ease-out hover:bg-[var(--glass-bg-raised)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="mashwar-pill border border-[#2148b6]/40 bg-transparent px-2.5 py-1 text-[11px] text-[#60a5fa]">
+            <span
+              className="mashwar-pill px-2.5 py-1 text-[11px]"
+              style={{
+                color: "var(--clr-green-soft)",
+                borderColor: "var(--clr-green-bright)",
+                backgroundColor: "var(--clr-green-dim)",
+              }}
+            >
               <span className="mashwar-mono">{getForecastHorizonLabel(row.horizon)}</span>
             </span>
-            <span className="mashwar-mono text-[10px] uppercase tracking-[0.18em] text-[#6b7280]">
+            <span className="mashwar-mono text-[10px] uppercase tracking-[0.18em] text-[var(--clr-slate)]">
               {formatForecastDateTime(row.targetDateTime)}
             </span>
           </div>
         </div>
-        <span className="mashwar-mono text-[10px] uppercase tracking-[0.18em] text-[#6b7280]">
+        <span className="mashwar-mono text-[10px] uppercase tracking-[0.18em] text-[var(--clr-slate)]">
           {topLabel}
         </span>
       </div>
@@ -528,20 +552,27 @@ function ForecastEntry({
           return (
             <div
               key={direction}
-              className={`rounded-[8px] border border-white/5 bg-transparent p-2.5 ${item ? "" : "opacity-55"}`}
+              className={`glass-card p-2.5 ${item ? "" : "opacity-55"}`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="mashwar-mono text-[9px] uppercase tracking-[0.18em] text-[#6b7280]">
+                <span className="mashwar-mono text-[9px] uppercase tracking-[0.18em] text-[var(--clr-slate)]">
                   {getDirectionalStatusLabel(direction)}
                 </span>
                 <StatusPill status={item?.prediction.predictedStatus ?? "غير معروف"} compact />
               </div>
 
               <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-[18px] font-bold" style={{ color: item ? visual.text : "#94a3b8" }}>
+                <span
+                  className="mashwar-arabic text-[18px] font-bold"
+                  style={{ color: item ? visual.text : "var(--clr-slate)" }}
+                  dir="rtl"
+                >
                   {item ? visual.ar : "—"}
                 </span>
-                <span className="mashwar-mono text-[11px]" style={{ color: tone?.color ?? "#94a3b8" }}>
+                <span
+                  className="mashwar-mono text-[11px]"
+                  style={{ color: tone?.color ?? "var(--clr-slate)" }}
+                >
                   {item ? formatForecastConfidence(item.prediction.confidence) : "n/a"}
                 </span>
               </div>
@@ -550,6 +581,186 @@ function ForecastEntry({
         })}
       </div>
     </article>
+  );
+}
+
+function formatHeatmapProgressLabel(progress: HeatmapBuildProgress): string {
+  if (progress.total <= 0) {
+    return "0%";
+  }
+
+  return `${progress.percentage}%`;
+}
+
+function HeatmapToggle({
+  enabled,
+  loading,
+  onToggle,
+}: {
+  enabled: boolean;
+  loading: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="glass-card flex w-full items-center justify-between gap-3 px-3 py-3 text-right transition-all duration-[var(--duration-base)] ease-out hover:bg-[var(--glass-bg-raised)]"
+      style={{
+        borderColor: enabled ? "var(--clr-green-bright)" : "var(--glass-border)",
+        backgroundColor: enabled ? "var(--clr-green-dim)" : undefined,
+      }}
+    >
+      <div className="min-w-0">
+        <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[var(--clr-slate)]">
+          UNCERTAINTY
+        </p>
+        <p dir="rtl" className="mashwar-arabic mt-1 text-[14px] font-semibold text-[var(--clr-white)]">
+          عدم اليقين
+        </p>
+        <p className="mt-1 text-[11px] text-[var(--clr-slate)]">
+          Uncertainty Network
+        </p>
+      </div>
+
+      <span
+        className="mashwar-pill inline-flex items-center gap-2 px-3 py-1 text-[11px]"
+        style={{
+          borderColor: enabled ? "var(--clr-green-bright)" : "var(--glass-border)",
+          color: enabled ? "var(--clr-green-soft)" : "var(--clr-sand)",
+          backgroundColor: enabled ? "rgba(34, 197, 94, 0.12)" : "var(--glass-bg-mid)",
+        }}
+      >
+        {loading ? <span className="mashwar-live-dot" /> : null}
+        <span className="mashwar-mono">{enabled ? "ON" : "OFF"}</span>
+      </span>
+    </button>
+  );
+}
+
+function HeatmapLegendPanel({
+  progress,
+  isBuilding,
+  isLoading,
+  error,
+  corridorCount,
+}: {
+  progress: HeatmapBuildProgress;
+  isBuilding: boolean;
+  isLoading: boolean;
+  error: string | null;
+  corridorCount: number;
+}) {
+  const progressWidth =
+    progress.total > 0 ? `${Math.min(100, Math.max(0, progress.percentage))}%` : "0%";
+  const statusLabel = error
+    ? "تعذر تحميل شبكة عدم اليقين"
+    : isBuilding
+      ? "جاري بناء الشبكة..."
+      : isLoading
+        ? "جارٍ تحميل الشبكة..."
+        : corridorCount > 0
+          ? "تم بناء الشبكة"
+          : "بانتظار البيانات";
+
+  return (
+    <section
+      className="mashwar-panel p-[var(--panel-padding)]"
+      style={{ animation: "mashwar-panel-in-left 220ms ease-out" }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[var(--clr-slate)]">
+            UNCERTAINTY NETWORK
+          </p>
+          <h3 dir="rtl" className="mashwar-arabic mashwar-display mt-2 text-[var(--text-md)] text-[var(--clr-white)]">
+            شبكة عدم اليقين
+          </h3>
+          <p className="mt-2 text-[12px] text-[var(--clr-slate)]">
+            Shows movement reliability between checkpoints
+          </p>
+          <p dir="rtl" className="mashwar-arabic mt-1 text-[12px] text-[var(--clr-slate)]">
+            توضح مدى استقرار الحركة بين الحواجز
+          </p>
+        </div>
+
+        <span className="mashwar-pill px-3 py-1 text-[11px]">
+          <span className="mashwar-mono">{corridorCount}</span>
+          <span>corridors</span>
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        {[
+          { labelAr: "مستقر", labelEn: "Stable", color: "#22c55e" },
+          { labelAr: "متوسط", labelEn: "Uncertain", color: "#facc15" },
+          { labelAr: "متقلب", labelEn: "Volatile", color: "#ef4444" },
+        ].map((item) => (
+          <div key={item.labelEn} className="glass-card flex items-center justify-between gap-3 px-3 py-2">
+            <div className="flex items-center gap-3">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+              <span dir="rtl" className="mashwar-arabic text-[13px] text-[var(--clr-white)]">
+                {item.labelAr}
+              </span>
+            </div>
+            <span className="mashwar-mono text-[10px] uppercase tracking-[0.18em] text-[var(--clr-slate)]">
+              {item.labelEn}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="glass-card mt-4 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p dir="rtl" className="mashwar-arabic text-[13px] text-[var(--clr-white)]">
+              {statusLabel}
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--clr-slate)]">
+              {progress.completed} / {progress.total || "?"} corridors
+            </p>
+          </div>
+          <span className="mashwar-pill px-3 py-1 text-[11px]">
+            <span className="mashwar-mono">{formatHeatmapProgressLabel(progress)}</span>
+          </span>
+        </div>
+
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/8">
+          <div
+            className="h-full rounded-full transition-all duration-300 ease-out"
+            style={{
+              width: progressWidth,
+              background:
+                "linear-gradient(90deg, #22c55e 0%, #facc15 50%, #ef4444 100%)",
+            }}
+          />
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+          <span className="mashwar-pill px-3 py-1">
+            built <span className="mashwar-mono">{progress.built}</span>
+          </span>
+          <span className="mashwar-pill px-3 py-1">
+            skipped <span className="mashwar-mono">{progress.skipped}</span>
+          </span>
+          <span className="mashwar-pill px-3 py-1">
+            failed <span className="mashwar-mono">{progress.failed}</span>
+          </span>
+        </div>
+
+        {error ? (
+          <p
+            className="mt-3 rounded-[var(--radius-md)] border px-3 py-2 text-[12px] text-[var(--clr-white)]"
+            style={{
+              borderColor: "var(--risk-high)",
+              backgroundColor: "var(--risk-high-bg)",
+            }}
+          >
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -572,6 +783,19 @@ export default function MashwarHome() {
   const [routeDetailsRouteId, setRouteDetailsRouteId] = useState<string | null>(null);
   const [isRoutePending, startRouteTransition] = useTransition();
   const [checkpointReloadNonce, setCheckpointReloadNonce] = useState(0);
+  const [heatmapEnabled, setHeatmapEnabled] = useState(false);
+  const [corridorsRaw, setCorridorsRaw] = useState<HeatmapCorridorFeature[]>([]);
+  const [corridorSegments, setCorridorSegments] =
+    useState<HeatmapSegmentFeatureCollection>({
+      type: "FeatureCollection",
+      features: [],
+    });
+  const [isHeatmapLoading, setIsHeatmapLoading] = useState(false);
+  const [isHeatmapBuilding, setIsHeatmapBuilding] = useState(false);
+  const [buildProgress, setBuildProgress] = useState<HeatmapBuildProgress>(
+    createEmptyHeatmapBuildProgress(),
+  );
+  const [heatmapError, setHeatmapError] = useState<string | null>(null);
   const [routeFrom, setRouteFrom] = useState<
     | { kind: "current-location" }
     | { kind: "checkpoint"; checkpointId: string }
@@ -588,6 +812,7 @@ export default function MashwarHome() {
   >(null);
   const checkpointForecastRequestNonce = useRef(0);
   const selectedCheckpointIdRef = useRef<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -639,8 +864,17 @@ export default function MashwarHome() {
   }, [checkpoints]);
 
   const checkpointsById = useMemo(() => {
-    return new Map(checkpoints.map((checkpoint) => [checkpoint.id, checkpoint]));
+    return new Map(
+      checkpoints.map((checkpoint) => [
+        normalizeCheckpointId(checkpoint.id) ?? checkpoint.id,
+        checkpoint,
+      ]),
+    );
   }, [checkpoints]);
+
+  useEffect(() => {
+    setCorridorSegments(buildCorridorSegments(corridorsRaw, checkpointsById));
+  }, [corridorsRaw, checkpointsById]);
 
   const routePaths = useMemo(() => getRenderableRoutes(routes), [routes]);
   const routeDetailsRoute = useMemo(() => {
@@ -680,6 +914,130 @@ export default function MashwarHome() {
   const routeToPoint =
     resolveRouteEndpointInfo(routeTo, checkpointsById, userLocation)?.point ??
     null;
+
+  const closeHeatmapStream = useCallback(() => {
+    eventSourceRef.current?.close();
+    eventSourceRef.current = null;
+  }, []);
+
+  const ensureHeatmapNetworkLoaded = useCallback(async () => {
+    if (corridorsRaw.length > 0) {
+      return;
+    }
+
+    if (eventSourceRef.current) {
+      return;
+    }
+
+    setIsHeatmapLoading(true);
+    setHeatmapError(null);
+
+    try {
+      const payload = await fetchHeatmapCache();
+
+      if ("type" in payload) {
+        setCorridorsRaw(payload.features);
+        setBuildProgress((current) => {
+          const next = createEmptyHeatmapBuildProgress();
+          next.built = payload.features.length;
+          next.completed = payload.features.length;
+          next.total = payload.features.length;
+          next.percentage = payload.features.length > 0 ? 100 : 0;
+          next.cached = true;
+          return current.total > next.total ? current : next;
+        });
+        setIsHeatmapBuilding(false);
+        setIsHeatmapLoading(false);
+        return;
+      }
+
+      setIsHeatmapBuilding(true);
+      setBuildProgress(createEmptyHeatmapBuildProgress());
+
+      const source = streamHeatmapNetwork({
+        onStart: (event) => {
+          setBuildProgress((current) => mergeHeatmapProgress(current, event));
+          setIsHeatmapBuilding(!(event.cached ?? false));
+        },
+        onRouteBuilt: (corridor, event) => {
+          setCorridorsRaw((current) => {
+            if (current.some((item) => item.properties.id === corridor.properties.id)) {
+              return current;
+            }
+
+            return [...current, corridor];
+          });
+          setBuildProgress((current) => {
+            const merged = mergeHeatmapProgress(current, event);
+            return {
+              ...merged,
+              built: Math.max(
+                merged.built,
+                current.built + (event.corridor ? 1 : 0),
+              ),
+            };
+          });
+        },
+        onRouteSkipped: (event) => {
+          setBuildProgress((current) => {
+            const merged = mergeHeatmapProgress(current, event);
+            return { ...merged, skipped: Math.max(merged.skipped, current.skipped + 1) };
+          });
+        },
+        onRouteFailed: (event) => {
+          setBuildProgress((current) => {
+            const merged = mergeHeatmapProgress(current, event);
+            return { ...merged, failed: Math.max(merged.failed, current.failed + 1) };
+          });
+        },
+        onProgress: (event) => {
+          setBuildProgress((current) => mergeHeatmapProgress(current, event));
+        },
+        onDone: (event) => {
+          setBuildProgress((current) => mergeHeatmapProgress(current, event));
+          setIsHeatmapLoading(false);
+          setIsHeatmapBuilding(false);
+          closeHeatmapStream();
+        },
+        onError: (message, event) => {
+          if (event) {
+            setBuildProgress((current) => mergeHeatmapProgress(current, event));
+          }
+          setHeatmapError(message);
+          setIsHeatmapLoading(false);
+          setIsHeatmapBuilding(false);
+          closeHeatmapStream();
+        },
+      });
+
+      eventSourceRef.current = source;
+    } catch (error) {
+      setHeatmapError(
+        error instanceof Error ? error.message : "تعذر تحميل شبكة عدم اليقين",
+      );
+      setIsHeatmapBuilding(false);
+      setIsHeatmapLoading(false);
+      closeHeatmapStream();
+    }
+  }, [closeHeatmapStream, corridorsRaw.length]);
+
+  useEffect(() => {
+    return () => {
+      closeHeatmapStream();
+    };
+  }, [closeHeatmapStream]);
+
+  useEffect(() => {
+    if (!heatmapEnabled) {
+      return;
+    }
+
+    if (corridorsRaw.length > 0 || eventSourceRef.current) {
+      return;
+    }
+
+    void ensureHeatmapNetworkLoaded();
+  }, [corridorsRaw.length, ensureHeatmapNetworkLoaded, heatmapEnabled]);
 
   function handleLoadDemoRoute(): void {
     setRouteError(null);
@@ -814,6 +1172,18 @@ export default function MashwarHome() {
   function handleRetryCheckpoints(): void {
     setCheckpointReloadNonce((current) => current + 1);
   }
+
+  const handleToggleHeatmap = useCallback(() => {
+    setHeatmapEnabled((current) => {
+      const next = !current;
+
+      if (next) {
+        void ensureHeatmapNetworkLoaded();
+      }
+
+      return next;
+    });
+  }, [ensureHeatmapNetworkLoaded]);
 
   const handleSyncLocation = useCallback(() => {
     setLocationError(null);
@@ -1021,8 +1391,8 @@ export default function MashwarHome() {
         : "Ready";
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-transparent text-[#f9fafb]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(34,197,94,0.08),transparent_30%),radial-gradient(circle_at_80%_10%,rgba(59,130,246,0.08),transparent_26%),radial-gradient(circle_at_bottom,rgba(239,68,68,0.06),transparent_24%)]" />
+    <main className="relative min-h-screen overflow-hidden bg-transparent text-[var(--clr-white)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,var(--clr-green-dim),transparent_28%),radial-gradient(circle_at_82%_12%,var(--glass-bg-raised),transparent_26%),radial-gradient(circle_at_bottom,var(--clr-red-soft),transparent_22%)]" />
 
       <MapView
         checkpoints={checkpoints}
@@ -1033,6 +1403,8 @@ export default function MashwarHome() {
           from: routeFromPoint,
           to: routeToPoint,
         }}
+        heatmapEnabled={heatmapEnabled}
+        heatmapSegments={corridorSegments}
         placementMode={endpointPlacementMode}
         onMapPlacement={handlePlaceEndpoint}
         onCheckpointSelect={handleCheckpointSelect}
@@ -1040,40 +1412,58 @@ export default function MashwarHome() {
         onRouteOpen={handleOpenRouteDetails}
       />
 
-      <aside className="pointer-events-auto absolute left-4 top-4 z-20 flex w-[420px] flex-col gap-3">
-        <section className="mashwar-panel relative overflow-hidden">
+      <div
+        aria-hidden="true"
+        className="mashwar-column-shell pointer-events-none absolute left-[var(--space-3)] top-[var(--space-3)] bottom-[var(--space-3)] z-10 w-[min(calc(100vw-var(--space-6)),calc(var(--panel-width)+var(--space-5)))]"
+      />
+
+      <aside className="pointer-events-auto absolute left-[var(--space-4)] top-[var(--space-4)] z-20 flex w-[min(calc(100vw-var(--space-8)),var(--panel-width))] flex-col gap-[var(--space-3)]">
+        <section className="mashwar-panel">
           <button
             type="button"
             onClick={handleSyncLocation}
             disabled={isSyncingLocation}
-            className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#2d3139] bg-transparent text-[#cbd5e1] transition hover:border-[#3b82f6] hover:bg-white/5 hover:text-[#f9fafb] disabled:cursor-wait disabled:opacity-55"
+            className="mashwar-icon-button absolute left-[var(--space-4)] top-[var(--space-4)] inline-flex h-10 w-10 items-center justify-center disabled:cursor-wait disabled:opacity-55"
             aria-label={isSyncingLocation ? "Syncing location" : "Sync location"}
           >
             <LocationSyncIcon className={`h-5 w-5 ${isSyncingLocation ? "animate-pulse" : ""}`} />
           </button>
 
-          <div className="p-4 pr-16">
+          <div className="p-[var(--panel-padding)] pl-16">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <p className="mashwar-mono text-[10px] uppercase tracking-[0.34em] text-[#6b7280]">
-                  ROUTING
+                <p className="mashwar-mono text-[10px] uppercase tracking-[0.34em] text-[var(--clr-slate)]">
+                  MOVEMENT
                 </p>
-                <h2 className="mt-2 mashwar-rtl text-[18px] font-bold text-[#f9fafb]">
+                <h2 dir="rtl" className="mashwar-arabic mashwar-display mt-2 text-[var(--text-lg)] text-[var(--clr-white)]">
                   من - إلى
                 </h2>
               </div>
 
-              <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold ${endpointPlacementMode ? "border-[#3b82f6] bg-transparent text-[#bfdbfe]" : "border-white/10 bg-transparent text-[#d1fae5]"}`}>
-                <span className={`h-2 w-2 rounded-full ${endpointPlacementMode ? "bg-[#3b82f6]" : "bg-[#22c55e] shadow-[0_0_0_0_rgba(34,197,94,0.45)] animate-pulse"}`} />
+              <span
+                className="mashwar-pill px-3 py-1 text-[11px] font-semibold"
+                style={{
+                  borderColor: endpointPlacementMode
+                    ? "var(--clr-green-bright)"
+                    : "var(--glass-border)",
+                  color: endpointPlacementMode
+                    ? "var(--clr-green-soft)"
+                    : "var(--clr-sand)",
+                  backgroundColor: endpointPlacementMode
+                    ? "var(--clr-green-dim)"
+                    : "var(--glass-bg-mid)",
+                }}
+              >
+                <span className={endpointPlacementMode ? "mashwar-live-dot" : "mashwar-live-dot"} />
                 <span className="mashwar-mono">{placementBadgeLabel}</span>
               </span>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="mt-[var(--space-4)] grid gap-[var(--space-3)]">
               <EndpointChip
                 label="من"
                 value={routeFromLabel}
-                helper={endpointPlacementMode === "from" ? "Tap anywhere on the map" : undefined}
+                helper={endpointPlacementMode === "from" ? "اضغط على أي نقطة في الخريطة" : undefined}
                 isActive={endpointPlacementMode === "from"}
                 onActivate={() => handleActivateEndpointPlacement("from")}
                 onClear={() => setRouteFrom(null)}
@@ -1081,19 +1471,19 @@ export default function MashwarHome() {
               <EndpointChip
                 label="إلى"
                 value={routeToLabel}
-                helper={endpointPlacementMode === "to" ? "Tap anywhere on the map" : undefined}
+                helper={endpointPlacementMode === "to" ? "اضغط على أي نقطة في الخريطة" : undefined}
                 isActive={endpointPlacementMode === "to"}
                 onActivate={() => handleActivateEndpointPlacement("to")}
                 onClear={() => setRouteTo(null)}
               />
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-[var(--space-3)] flex flex-wrap gap-[var(--space-2)]">
               <button
                 type="button"
                 onClick={handleUseCurrentLocationAsOrigin}
                 disabled={!userLocation}
-                className="rounded-[6px] border border-[#2d3139] bg-transparent px-3 py-2 text-[11px] text-[#cbd5e1] transition-all duration-150 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-45"
+                className="mashwar-action px-3 py-2 text-[11px] disabled:cursor-not-allowed"
               >
                 الحالي
               </button>
@@ -1101,7 +1491,7 @@ export default function MashwarHome() {
                 type="button"
                 onClick={handleUseSelectedCheckpointAsOrigin}
                 disabled={!selectedCheckpoint}
-                className="rounded-[6px] border border-[#2d3139] bg-transparent px-3 py-2 text-[11px] text-[#cbd5e1] transition-all duration-150 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-45"
+                className="mashwar-action px-3 py-2 text-[11px] disabled:cursor-not-allowed"
               >
                 استخدم كمن
               </button>
@@ -1109,7 +1499,7 @@ export default function MashwarHome() {
                 type="button"
                 onClick={handleUseSelectedCheckpointAsDestination}
                 disabled={!selectedCheckpoint}
-                className="rounded-[6px] border border-[#2d3139] bg-transparent px-3 py-2 text-[11px] text-[#cbd5e1] transition-all duration-150 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-45"
+                className="mashwar-action px-3 py-2 text-[11px] disabled:cursor-not-allowed"
               >
                 استخدم كإلى
               </button>
@@ -1119,9 +1509,9 @@ export default function MashwarHome() {
               type="button"
               onClick={handleRouteButtonClick}
               disabled={isRoutePending}
-              className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[8px] bg-[#3b82f6] px-4 text-sm font-semibold text-white transition-all duration-150 hover:bg-[#4f8df7] disabled:cursor-wait disabled:opacity-70"
+              className="mashwar-action mashwar-action-primary mt-[var(--space-3)] flex h-10 w-full items-center justify-center gap-2 px-4 text-sm font-semibold disabled:cursor-wait disabled:opacity-70"
             >
-              <span>{routePaths.length > 0 ? "Clear" : "Route"}</span>
+              <span>{routePaths.length > 0 ? "مسح المسار" : "ابدأ التوجيه"}</span>
               {routePaths.length > 0 ? (
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/12 text-[12px] leading-none">
                   ×
@@ -1129,50 +1519,50 @@ export default function MashwarHome() {
               ) : null}
             </button>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-[#6b7280]">
+            <div className="mt-[var(--space-3)] flex flex-wrap items-center gap-[var(--space-2)] text-[11px] text-[var(--clr-slate)]">
               {routeError ? (
-                <span className="rounded-full border border-[#2d3139] bg-transparent px-3 py-1 text-[#fca5a5]">
+                <span className="mashwar-pill px-3 py-1 text-[var(--clr-white)]" style={{ borderColor: "var(--risk-high)", backgroundColor: "var(--risk-high-bg)" }}>
                   {routeError}
                 </span>
               ) : null}
               {locationError ? (
-                <span className="rounded-full border border-[#2d3139] bg-transparent px-3 py-1 text-[#fca5a5]">
+                <span className="mashwar-pill px-3 py-1 text-[var(--clr-white)]" style={{ borderColor: "var(--risk-high)", backgroundColor: "var(--risk-high-bg)" }}>
                   {locationError}
                 </span>
               ) : null}
             </div>
 
             {routePaths.length > 0 ? (
-              <div className="mt-4 rounded-[10px] border border-[#2d3139] bg-white/[0.02] p-3">
+              <div className="glass-card mt-[var(--space-4)] p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[var(--clr-slate)]">
                       ROUTES ON MAP
                     </p>
-                    <p className="mt-1 text-[13px] text-[#cbd5e1]">
-                      All returned routes are drawn on the map. Hover any route for ETA and journey risk, then click it to open the full route info modal.
+                    <p className="mt-1 text-[13px] text-[var(--clr-sand)]">
+                      كل المسارات المعادة تظهر فوق الخريطة. مرر فوق أي مسار لرؤية الوقت والمخاطر ثم اضغط لفتح التفاصيل.
                     </p>
                   </div>
-                  <span className="rounded-full border border-[#2d3139] px-3 py-1 text-[11px] text-[#cbd5e1]">
-                    {routePaths.length} route{routePaths.length === 1 ? "" : "s"} active
+                  <span className="mashwar-pill px-3 py-1 text-[11px]">
+                    {routePaths.length} ACTIVE
                   </span>
                 </div>
               </div>
             ) : null}
           </div>
 
-          <div className="border-t border-white/8" />
+          <div className="border-t border-[var(--glass-border)]" />
 
-          <div className="space-y-4 p-4">
+          <div className="space-y-[var(--space-4)] p-[var(--panel-padding)]">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-[15px] font-medium text-[#f9fafb]">
-                  West Bank Map
+                <h3 className="mashwar-display text-[var(--text-md)] text-[var(--clr-white)]">
+                  لوحة الحركة
                 </h3>
-                <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-[#2d3139] bg-transparent px-3 py-1.5 text-[11px] text-[#cbd5e1]">
-                  <span className="h-2 w-2 rounded-full bg-[#22c55e]" />
+                <div className="mashwar-pill mt-[var(--space-2)] px-3 py-1.5 text-[11px]">
+                  <span className="mashwar-live-dot" />
                   <span className="mashwar-mono">{checkpoints.length}</span>
-                  <span>checkpoints loaded</span>
+                  <span>CHECKPOINTS</span>
                 </div>
               </div>
             </div>
@@ -1194,58 +1584,62 @@ export default function MashwarHome() {
               <button
                 type="button"
                 onClick={() => setIsNaturalRouteModalOpen(true)}
-                className="rounded-[6px] border border-[#2d3139] bg-transparent px-3 py-2 text-sm text-[#f9fafb] transition-all duration-150 hover:bg-white/5"
+                className="mashwar-action px-3 py-2 text-sm"
               >
-                Natural Route Brief
+                موجز المسار الذكي
               </button>
               <button
                 type="button"
                 onClick={handleLoadDemoRoute}
                 disabled={isRoutePending}
-                className="rounded-[6px] border border-[#2d3139] bg-transparent px-3 py-2 text-sm text-[#f9fafb] transition-all duration-150 hover:bg-white/5 disabled:cursor-wait disabled:opacity-55"
+                className="mashwar-action px-3 py-2 text-sm disabled:cursor-wait"
               >
-                Load Demo Route
+                تحميل مسار تجريبي
               </button>
             </div>
+
+            <HeatmapToggle
+              enabled={heatmapEnabled}
+              loading={isHeatmapLoading || isHeatmapBuilding}
+              onToggle={handleToggleHeatmap}
+            />
 
             <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px]">
               <button
                 type="button"
                 onClick={handleRetryCheckpoints}
-                className="text-[#6b7280] underline-offset-4 transition hover:text-[#e5e7eb] hover:underline"
+                className="mashwar-link-button underline-offset-4 hover:underline"
               >
-                Retry Checkpoints
+                إعادة تحميل الحواجز
               </button>
               <button
                 type="button"
                 onClick={handleSyncLocation}
                 disabled={isSyncingLocation}
-                className="text-[#6b7280] underline-offset-4 transition hover:text-[#e5e7eb] hover:underline disabled:cursor-wait disabled:opacity-55"
+                className="mashwar-link-button underline-offset-4 hover:underline disabled:cursor-wait disabled:opacity-55"
               >
-                {isSyncingLocation ? "Syncing Location..." : "Sync Location"}
+                {isSyncingLocation ? "جارٍ مزامنة الموقع..." : "مزامنة الموقع"}
               </button>
             </div>
 
-            <div className="space-y-2 text-[12px] leading-6 text-[#94a3b8]">
+            <div className="space-y-2 text-[12px] leading-6 text-[var(--clr-slate)]">
               {isLoadingCheckpoints ? (
-                <p>Loading checkpoint intelligence from the Geo API.</p>
+                <p className="mashwar-arabic">جارٍ تحميل ذكاء الحركة من واجهة الحواجز.</p>
               ) : (
-                <p>Clustered checkpoint points are live and ready for selection.</p>
+                <p className="mashwar-arabic">نقاط الحواجز الحية جاهزة للاختيار فوق الخريطة.</p>
               )}
 
               {!isLoadingCheckpoints && checkpointError ? (
-                <p className="text-[#fca5a5]">{checkpointError}</p>
+                <p className="text-[var(--clr-white)]" style={{ color: "var(--risk-high)" }}>{checkpointError}</p>
               ) : null}
 
               {!isLoadingCheckpoints && routeError ? (
-                <p className="text-[#fca5a5]">{routeError}</p>
+                <p className="text-[var(--clr-white)]" style={{ color: "var(--risk-high)" }}>{routeError}</p>
               ) : null}
 
               {!isLoadingCheckpoints && checkpointsWithoutCoordinates.length > 0 ? (
-                <p>
-                  {checkpointsWithoutCoordinates.length} checkpoint
-                  {checkpointsWithoutCoordinates.length === 1 ? "" : "s"} are missing
-                  coordinates and stay out of the map layer.
+                <p className="mashwar-arabic">
+                  يوجد {checkpointsWithoutCoordinates.length} حاجز بدون إحداثيات، لذلك لن يظهر داخل طبقة الخريطة.
                 </p>
               ) : null}
             </div>
@@ -1253,20 +1647,32 @@ export default function MashwarHome() {
         </section>
       </aside>
 
-      <aside className="pointer-events-auto absolute left-4 top-[31rem] z-30 w-[420px]">
+      {heatmapEnabled ? (
+        <aside className="pointer-events-auto absolute left-[var(--space-4)] bottom-[var(--space-4)] z-20 w-[min(calc(100vw-var(--space-8)),var(--panel-width))]">
+          <HeatmapLegendPanel
+            progress={buildProgress}
+            isBuilding={isHeatmapBuilding}
+            isLoading={isHeatmapLoading}
+            error={heatmapError}
+            corridorCount={corridorsRaw.length}
+          />
+        </aside>
+      ) : null}
+
+      <aside className="pointer-events-auto absolute left-[var(--space-4)] top-[calc(var(--space-4)+32rem)] z-30 w-[min(calc(100vw-var(--space-8)),var(--panel-width))]">
         {selectedCheckpoint ? (
           <section
             className="mashwar-panel max-h-[calc(100dvh-32rem)] overflow-hidden"
             style={{ animation: "mashwar-panel-in-left 220ms ease-out" }}
           >
             <div className="mashwar-scroll max-h-[calc(100dvh-32rem)] overflow-y-auto">
-              <div className="border-b border-white/8 p-4">
+              <div className="border-b border-[var(--glass-border)] p-[var(--panel-padding)]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.34em] text-[#6b7280]">
+                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.34em] text-[var(--clr-slate)]">
                       CHECKPOINT
                     </p>
-                    <h2 className="mt-2 mashwar-rtl text-[22px] font-bold text-[#f9fafb]">
+                    <h2 dir="rtl" className="mashwar-arabic mashwar-display mt-2 text-[var(--text-lg)] text-[var(--clr-white)]">
                       {selectedCheckpoint.name}
                     </h2>
                     <div className="mt-3">
@@ -1277,7 +1683,7 @@ export default function MashwarHome() {
                   <button
                     type="button"
                     onClick={() => handleCheckpointSelect(null)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#2d3139] text-[#6b7280] transition hover:bg-white/5 hover:text-[#f9fafb]"
+                    className="mashwar-icon-button inline-flex h-8 w-8 items-center justify-center text-[var(--clr-slate)]"
                     aria-label="Close checkpoint panel"
                   >
                     ×
@@ -1285,21 +1691,21 @@ export default function MashwarHome() {
                 </div>
               </div>
 
-              <div className="space-y-4 p-4">
-                <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-[var(--space-4)] p-[var(--panel-padding)]">
+                <div className="grid gap-[var(--space-3)]">
                   {([
                     ["ENTERING", selectedCheckpoint.enteringStatus, enteringVisual],
                     ["LEAVING", selectedCheckpoint.leavingStatus, leavingVisual],
                   ] as const).map(([label, status, visual]) => (
                     <section
                       key={label}
-                      className="rounded-[8px] border border-white/6 bg-transparent p-3"
+                      className="glass-card p-3"
                     >
-                      <p className="mashwar-mono text-[9px] uppercase tracking-[0.28em] text-[#6b7280]">
+                      <p className="mashwar-mono text-[9px] uppercase tracking-[0.28em] text-[var(--clr-slate)]">
                         {label}
                       </p>
                       <p
-                        className="mt-2 text-[18px] font-bold"
+                        className="mashwar-arabic mt-2 text-[18px] font-bold"
                         style={{ color: visual.text }}
                         dir="rtl"
                       >
@@ -1313,14 +1719,14 @@ export default function MashwarHome() {
                         <button
                           type="button"
                           onClick={handleUseSelectedCheckpointAsOrigin}
-                          className="rounded-[6px] border border-[#2d3139] px-2.5 py-1 text-[11px] text-[#cbd5e1] transition hover:bg-white/5"
+                          className="mashwar-action px-2.5 py-1 text-[11px]"
                         >
                           استخدم كمن
                         </button>
                         <button
                           type="button"
                           onClick={handleUseSelectedCheckpointAsDestination}
-                          className="rounded-[6px] border border-[#2d3139] px-2.5 py-1 text-[11px] text-[#cbd5e1] transition hover:bg-white/5"
+                          className="mashwar-action px-2.5 py-1 text-[11px]"
                         >
                           استخدم كإلى
                         </button>
@@ -1329,35 +1735,35 @@ export default function MashwarHome() {
                   ))}
                 </div>
 
-                <section className="rounded-[8px] border border-white/6 bg-transparent p-3">
+                <section className="glass-card p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                      <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[var(--clr-slate)]">
                         FORECAST
                       </p>
                     </div>
-                    <span className="mashwar-pill inline-flex items-center gap-2 border border-[#14532d] bg-transparent px-3 py-1 text-[#86efac]">
-                      <span className="h-2 w-2 rounded-full bg-[#22c55e]" />
-                      Updated
+                    <span className="mashwar-pill inline-flex items-center gap-2 px-3 py-1 text-[var(--clr-green-soft)]" style={{ borderColor: "var(--risk-low)", backgroundColor: "var(--risk-low-bg)" }}>
+                      <span className="mashwar-live-dot" />
+                      UPDATED
                     </span>
                   </div>
 
                   {travelWindow && buildTravelWindowEntries(travelWindow).length > 0 ? (
-                    <div className="mt-4 rounded-[8px] border border-white/6 bg-transparent p-3">
+                    <div className="glass-card mt-[var(--space-4)] p-3">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                          <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[var(--clr-slate)]">
                             TRAVEL WINDOW
                           </p>
                         </div>
-                        <div className="flex flex-wrap gap-2 text-[10px] text-[#94a3b8]">
+                        <div className="flex flex-wrap gap-2 text-[10px] text-[var(--clr-slate)]">
                           {travelWindow.referenceTime ? (
-                            <span className="rounded-full border border-[#2d3139] px-2.5 py-1">
+                            <span className="mashwar-pill px-2.5 py-1">
                               Reference {formatForecastDateTime(travelWindow.referenceTime)}
                             </span>
                           ) : null}
                           {travelWindow.scope ? (
-                            <span className="rounded-full border border-[#2d3139] px-2.5 py-1">
+                            <span className="mashwar-pill px-2.5 py-1">
                               Scope {travelWindow.scope}
                             </span>
                           ) : null}
@@ -1368,69 +1774,69 @@ export default function MashwarHome() {
                         {buildTravelWindowEntries(travelWindow).map((entry) => (
                           <article
                             key={entry.kind}
-                            className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-3"
+                            className="glass-card p-3"
                           >
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div>
-                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[#6b7280]">
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[var(--clr-slate)]">
                                   {entry.kind.toUpperCase()}
                                 </p>
-                                <h4 className="mt-1 text-[14px] font-semibold text-[#f9fafb]">
+                                <h4 className="mashwar-display mt-1 text-[14px] font-semibold text-[var(--clr-white)]">
                                   {entry.label}
                                 </h4>
                               </div>
-                              <span className="rounded-full border border-[#2d3139] px-2.5 py-1 text-[11px] text-[#cbd5e1]">
+                              <span className="mashwar-pill px-2.5 py-1 text-[11px]">
                                 {entry.item?.windowLabel ?? "n/a"}
                               </span>
                             </div>
 
                             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                              <div className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-2.5">
-                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[#6b7280]">
+                              <div className="glass-card p-2.5">
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[var(--clr-slate)]">
                                   Day
                                 </p>
-                                <p className="mt-1 text-[13px] font-semibold text-[#f9fafb]">
+                                <p className="mt-1 text-[13px] font-semibold text-[var(--clr-white)]">
                                   {entry.item?.dayOfWeek ?? "n/a"}
                                 </p>
                               </div>
-                              <div className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-2.5">
-                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[#6b7280]">
+                              <div className="glass-card p-2.5">
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[var(--clr-slate)]">
                                   Hour
                                 </p>
-                                <p className="mt-1 text-[13px] font-semibold text-[#f9fafb]">
+                                <p className="mashwar-data mt-1 text-[13px] font-semibold text-[var(--clr-white)]">
                                   {formatTravelWindowHour(entry.item?.hour ?? null)}
                                 </p>
                               </div>
-                              <div className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-2.5 xl:col-span-2">
-                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[#6b7280]">
+                              <div className="glass-card p-2.5 xl:col-span-2">
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[var(--clr-slate)]">
                                   Target time
                                 </p>
-                                <p className="mt-1 text-[13px] font-semibold text-[#f9fafb]">
+                                <p className="mashwar-data mt-1 text-[13px] font-semibold text-[var(--clr-white)]">
                                   {formatForecastDateTime(entry.item?.targetDateTime ?? null)}
                                 </p>
                               </div>
                             </div>
 
                             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                              <div className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-2.5">
-                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[#6b7280]">
+                              <div className="glass-card p-2.5">
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[var(--clr-slate)]">
                                   Entering
                                 </p>
-                                <p className="mt-1 text-[13px] font-semibold text-[#f9fafb]">
+                                <p className="mashwar-arabic mt-1 text-[13px] font-semibold text-[var(--clr-white)]">
                                   {entry.item?.enteringPrediction?.predictedStatus ?? "n/a"}
                                 </p>
-                                <p className="mt-1 text-[11px] text-[#94a3b8]">
+                                <p className="mashwar-data mt-1 text-[11px] text-[var(--clr-slate)]">
                                   Confidence {formatForecastConfidence(entry.item?.enteringPrediction?.confidence ?? null)}
                                 </p>
                               </div>
-                              <div className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-2.5">
-                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[#6b7280]">
+                              <div className="glass-card p-2.5">
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[var(--clr-slate)]">
                                   Leaving
                                 </p>
-                                <p className="mt-1 text-[13px] font-semibold text-[#f9fafb]">
+                                <p className="mashwar-arabic mt-1 text-[13px] font-semibold text-[var(--clr-white)]">
                                   {entry.item?.leavingPrediction?.predictedStatus ?? "n/a"}
                                 </p>
-                                <p className="mt-1 text-[11px] text-[#94a3b8]">
+                                <p className="mashwar-data mt-1 text-[11px] text-[var(--clr-slate)]">
                                   Confidence {formatForecastConfidence(entry.item?.leavingPrediction?.confidence ?? null)}
                                 </p>
                               </div>
@@ -1441,13 +1847,13 @@ export default function MashwarHome() {
                     </div>
                   ) : null}
 
-                  <p className="mt-2 mashwar-mono text-[10px] uppercase tracking-[0.22em] text-[#f59e0b]">
+                  <p className="mt-2 mashwar-mono text-[10px] uppercase tracking-[0.22em] text-[var(--risk-med)]">
                     Captured{" "}
                     {formatForecastDateTime(
                       selectedCheckpointForecast?.request.asOf ?? null,
                     )}
                   </p>
-                  <p className="mt-2 text-[12px] text-[#94a3b8]">
+                  <p className="mt-2 text-[12px] text-[var(--clr-slate)]">
                     {forecastRows.length > 0
                       ? `${forecastRows.length} horizons with entering and leaving predictions`
                       : isForecastLoading
@@ -1456,13 +1862,13 @@ export default function MashwarHome() {
                   </p>
 
                   {forecastError ? (
-                    <p className="mt-3 rounded-[8px] border border-[#2d3139] bg-transparent px-3 py-2 text-[12px] text-[#fca5a5]">
+                    <p className="mashwar-pill mt-3 rounded-[var(--radius-md)] px-3 py-2 text-[12px] text-[var(--clr-white)]" style={{ borderColor: "var(--risk-high)", backgroundColor: "var(--risk-high-bg)" }}>
                       {forecastError}
                     </p>
                   ) : null}
 
                   {isForecastLoading ? (
-                    <p className="mt-3 rounded-[8px] border border-[#2d3139] bg-transparent px-3 py-2 text-[12px] text-[#cbd5e1]">
+                    <p className="glass-card mt-3 px-3 py-2 text-[12px] text-[var(--clr-sand)]">
                       Forecasting checkpoint behavior.
                     </p>
                   ) : null}
@@ -1473,7 +1879,7 @@ export default function MashwarHome() {
                         <ForecastEntry key={row.horizon} row={row} />
                       ))
                     ) : (
-                      <div className="rounded-[8px] border border-dashed border-white/6 bg-transparent px-3 py-3 text-[12px] text-[#64748b]">
+                      <div className="glass-card border-dashed px-3 py-3 text-[12px] text-[var(--clr-slate)]">
                         No forecast rows returned for this checkpoint yet.
                       </div>
                     )}

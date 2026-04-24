@@ -56,6 +56,11 @@ export const ROUTE_ALT_2_LAYER_ID = "route-alt-2-layer";
 export const USER_LOCATION_SOURCE_ID = "user-location-source";
 export const USER_LOCATION_LAYER_ID = "user-location-layer";
 export const USER_LOCATION_ACCURACY_LAYER_ID = "user-location-accuracy-layer";
+export const HEATMAP_CORRIDOR_SOURCE_ID = "mashwar-uncertainty-corridors";
+export const HEATMAP_CORRIDOR_GLOW_LAYER_ID =
+  "mashwar-uncertainty-corridors-glow";
+export const HEATMAP_CORRIDOR_MAIN_LAYER_ID =
+  "mashwar-uncertainty-corridors-main";
 
 export const ROUTE_STYLE = {
   MAIN_WIDTH: 6.5,
@@ -64,42 +69,78 @@ export const ROUTE_STYLE = {
   ALT_OPACITY: 1,
   OUTLINE_COLOR: "#0f172a",
   OUTLINE_WIDTH: 10,
-  PALETTE: ["#ef4444", "#2563eb", "#22c55e"] as const,
+  PALETTE: ["#006233", "#f59e0b", "#ee2a35"] as const,
 } as const;
 
 export const USER_LOCATION_STYLE = {
-  DOT_COLOR: "#2563eb",
+  DOT_COLOR: "#00a651",
   DOT_BORDER_COLOR: "#ffffff",
-  ACCURACY_FILL: "#3b82f633",
-  ACCURACY_BORDER: "#3b82f680",
+  ACCURACY_FILL: "#00a65133",
+  ACCURACY_BORDER: "#00a65180",
 } as const;
 
+export const HEATMAP_COLOR_EXPRESSION = [
+  "step",
+  ["get", "score"],
+  "#22c55e",
+  30,
+  "#facc15",
+  60,
+  "#f97316",
+  80,
+  "#ef4444",
+] as const;
+
+export const HEATMAP_MAIN_WIDTH_EXPRESSION = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  8,
+  2,
+  11,
+  4,
+  14,
+  7,
+] as const;
+
+export const HEATMAP_GLOW_WIDTH_EXPRESSION = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  8,
+  8,
+  11,
+  14,
+  14,
+  22,
+] as const;
+
 export const STATUS_COLORS: Record<MapCheckpointStatus, string> = {
-  سالك: "#22c55e",
-  "أزمة متوسطة": "#fbbf24",
-  "أزمة خانقة": "#f97316",
-  مغلق: "#ef4444",
+  سالك: "#00a651",
+  "أزمة متوسطة": "#f59e0b",
+  "أزمة خانقة": "#ee2a35",
+  مغلق: "#ee2a35",
   "غير معروف": "#94a3b8",
 };
 
 export const STATUS_BORDERS: Record<MapCheckpointStatus, string> = {
-  سالك: "#15803d",
-  "أزمة متوسطة": "#d97706",
-  "أزمة خانقة": "#ea580c",
-  مغلق: "#dc2626",
+  سالك: "#006233",
+  "أزمة متوسطة": "#f59e0b",
+  "أزمة خانقة": "#c41f29",
+  مغلق: "#c41f29",
   "غير معروف": "#64748b",
 };
 
 export const CLUSTER_COLOR_EXPRESSION = [
   "step",
   ["get", "point_count"],
-  "#93c5fd",
+  "#b8e6ce",
   25,
-  "#60a5fa",
+  "#00a651",
   75,
-  "#3b82f6",
+  "#006233",
   150,
-  "#2563eb",
+  "#ee2a35",
 ] as const;
 
 export const CLUSTER_RADIUS_EXPRESSION = [
