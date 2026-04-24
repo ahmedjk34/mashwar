@@ -1,5 +1,7 @@
-import type { Metadata } from "next";
 import { Cairo, JetBrains_Mono, Syne } from "next/font/google";
+import type { ReactNode } from "react";
+import { getLocale } from "next-intl/server";
+
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./globals.css";
 
@@ -21,23 +23,17 @@ const jetBrainsMono = JetBrains_Mono({
   weight: ["400", "500"],
 });
 
-export const metadata: Metadata = {
-  title: "Mashwar",
-  description: "West Bank map base built with Next.js and MapLibre.",
-};
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const locale = await getLocale();
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
   return (
     <html
-      lang="ar"
-      dir="rtl"
+      lang={locale}
+      dir={locale === "ar" ? "rtl" : "ltr"}
       className={`${syne.variable} ${cairo.variable} ${jetBrainsMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">{children}</body>
     </html>
   );
 }

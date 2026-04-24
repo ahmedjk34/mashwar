@@ -1,18 +1,22 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  DirectionStatusTile,
+  FusedDirectionsStatusTile,
+} from "@/components/map/checkpoint/CheckpointStatusTiles";
+import ForecastHorizonCard, {
+  type ForecastRow,
+} from "@/components/map/checkpoint/ForecastHorizonCard";
+import LocaleToggle from "@/components/map/LocaleToggle";
 import MapView from "@/components/map/MapView";
 import MashwarNaturalLanguageRouteModal from "@/components/map/MashwarNaturalLanguageRouteModal";
+import RouteBuildingOverlay from "@/components/map/RouteBuildingOverlay";
 import RouteDetailsModal from "@/components/map/RouteDetailsModal";
 import TradeoffExplainerModal from "@/components/map/TradeoffExplainerModal";
+import { checkpointFlowSubkey, safeCheckpointFlowLabel } from "@/i18n/message-key-map";
+import { translateServiceError } from "@/lib/i18n/translate-service-error";
 import { buildCorridorSegments } from "@/lib/heatmap/corridorSegments";
 import { normalizeCheckpointId } from "@/lib/heatmap/normalizeCheckpoint";
 import { hasValidCoordinates, getRenderableRoutes, getWorstStatus } from "@/lib/config/map";
@@ -21,6 +25,7 @@ import { getCheckpointForecast } from "@/lib/services/forecast";
 import { fetchHeatmapCache, streamHeatmapNetwork } from "@/lib/services/heatmap";
 import { reverseGeocodeShortLabel } from "@/lib/services/nominatimReverseGeocode";
 import { getRoute } from "@/lib/services/routing";
+import { formatForecastDateTimePalestine } from "@/lib/utils/forecast-datetime";
 import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 import type {
   HeatmapCorridorFeature,
@@ -37,9 +42,10 @@ import type {
   RoutePoint,
   UserLocation,
 } from "@/lib/types/map";
+import { useLocale, useTranslations } from "next-intl";
 import { FaFire } from "react-icons/fa";
 import { IoChevronDown, IoClose, IoSearch } from "react-icons/io5";
-import { MdMyLocation } from "react-icons/md";
+import { MdMyLocation, MdSwapHoriz } from "react-icons/md";
 
 const EMPTY_ROUTES: NormalizedRoutes = {
   generatedAt: null,
@@ -65,163 +71,6 @@ const FORECAST_HORIZON_ORDER = [
 ] as const;
 
 type ForecastDirection = "entering" | "leaving";
-
-interface ForecastRow {
-  horizon: string;
-  targetDateTime: string | null;
-  entering: NormalizedCheckpointForecast["predictions"]["entering"][number] | null;
-  leaving: NormalizedCheckpointForecast["predictions"]["leaving"][number] | null;
-}
-
-const STATUS_VISUALS: Record<
-  MapCheckpointStatus,
-  {
-    ar: string;
-    en: string;
-    dot: string;
-    border: string;
-    bg: string;
-    text: string;
-    softBg: string;
-  }
-> = {
-  سالك: {
-    ar: "سالك",
-    en: "OPEN",
-    dot: "var(--risk-low)",
-    border: "var(--risk-low)",
-    bg: "var(--risk-low-bg)",
-    text: "var(--clr-green-soft)",
-    softBg: "var(--risk-low-bg)",
-  },
-  "أزمة متوسطة": {
-    ar: "أزمة متوسطة",
-    en: "SLOW",
-    dot: "var(--risk-med)",
-    border: "var(--risk-med)",
-    bg: "var(--risk-med-bg)",
-    text: "var(--risk-med)",
-    softBg: "var(--risk-med-bg)",
-  },
-  "أزمة خانقة": {
-    ar: "أزمة خانقة",
-    en: "HEAVY",
-    dot: "var(--risk-high)",
-    border: "var(--risk-high)",
-    bg: "var(--risk-high-bg)",
-    text: "var(--clr-white)",
-    softBg: "var(--risk-high-bg)",
-  },
-  مغلق: {
-    ar: "مغلق",
-    en: "CLOSED",
-    dot: "var(--risk-high)",
-    border: "var(--risk-high)",
-    bg: "var(--risk-high-bg)",
-    text: "var(--clr-white)",
-    softBg: "var(--risk-high-bg)",
-  },
-  "غير معروف": {
-    ar: "غير معروف",
-    en: "UNKNOWN",
-    dot: "var(--clr-slate)",
-    border: "var(--glass-border-mid)",
-    bg: "var(--glass-bg-mid)",
-    text: "var(--clr-sand)",
-    softBg: "var(--glass-bg-mid)",
-  },
-};
-
-function getConfidenceTone(confidence: number | null): {
-  color: string;
-  label: string;
-} {
-  if (confidence === null) {
-    return { color: "var(--clr-slate)", label: "n/a" };
-  }
-
-  if (confidence > 90) {
-    return { color: "var(--clr-green-soft)", label: `${Math.round(confidence * 100)}%` };
-  }
-
-  if (confidence >= 80) {
-    return { color: "var(--risk-low)", label: `${Math.round(confidence * 100)}%` };
-  }
-
-  return { color: "var(--risk-med)", label: `${Math.round(confidence * 100)}%` };
-}
-
-function formatForecastConfidence(value: number | null): string {
-  if (value === null) {
-    return "n/a";
-  }
-
-  return `${Math.round(value * 100)}%`;
-}
-
-function formatForecastDateTime(value: string | null): string {
-  if (!value) {
-    return "Pending";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  const parts = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "Asia/Hebron",
-  }).formatToParts(parsed);
-
-  const month = parts.find((part) => part.type === "month")?.value?.toUpperCase();
-  const day = parts.find((part) => part.type === "day")?.value;
-  const year = parts.find((part) => part.type === "year")?.value;
-  const hour = parts.find((part) => part.type === "hour")?.value;
-  const minute = parts.find((part) => part.type === "minute")?.value;
-  const dayPeriod = parts.find((part) => part.type === "dayPeriod")?.value;
-
-  if (!month || !day || !year || !hour || !minute || !dayPeriod) {
-    return value;
-  }
-
-  return `${month} ${day}, ${year}, ${hour}:${minute} ${dayPeriod}`;
-}
-
-/** Short horizon label for stacked forecast cards (Arabic-first UI). */
-function getForecastHorizonTitleAr(horizon: string): string {
-  switch (horizon) {
-    case "plus_30m":
-      return "خلال ٣٠ دقيقة";
-    case "plus_1h":
-      return "خلال ساعة";
-    case "plus_2h":
-      return "خلال ساعتين";
-    case "next_day_8am":
-      return "غدًا حوالي ٨ صباحًا";
-    default:
-      return horizon;
-  }
-}
-
-function forecastCoverageLabelAr(row: ForecastRow): string {
-  if (row.entering && row.leaving) {
-    return "دخول وخروج";
-  }
-  if (row.entering) {
-    return "دخول فقط";
-  }
-  return "خروج فقط";
-}
-
-function travelWindowHeadlineAr(kind: "best" | "worst"): string {
-  return kind === "best" ? "أفضل وقت للعبور" : "أسوأ وقت للعبور";
-}
 
 function buildForecastRows(
   forecast: NormalizedCheckpointForecast | null,
@@ -270,9 +119,12 @@ function buildForecastRows(
   return orderedKeys.map((key) => rows.get(key) as ForecastRow);
 }
 
-function formatTravelWindowHour(value: number | null): string {
+function formatTravelWindowHour(
+  value: number | null,
+  tCommon: (key: string, values?: Record<string, string | number>) => string,
+): string {
   if (value === null || !Number.isFinite(value)) {
-    return "n/a";
+    return tCommon("notAvailable");
   }
 
   return `${`${Math.trunc(value)}`.padStart(2, "0")}:00`;
@@ -280,6 +132,7 @@ function formatTravelWindowHour(value: number | null): string {
 
 function buildTravelWindowEntries(
   travelWindow: NormalizedCheckpointTravelWindow | null,
+  tHeadline: (key: "best" | "worst") => string,
 ): Array<{
   kind: "best" | "worst";
   label: string;
@@ -298,7 +151,7 @@ function buildTravelWindowEntries(
   if (travelWindow.best) {
     entries.push({
       kind: "best",
-      label: "Best time to cross",
+      label: tHeadline("best"),
       item: travelWindow.best,
     });
   }
@@ -306,7 +159,7 @@ function buildTravelWindowEntries(
   if (travelWindow.worst) {
     entries.push({
       kind: "worst",
-      label: "Worst time to cross",
+      label: tHeadline("worst"),
       item: travelWindow.worst,
     });
   }
@@ -333,6 +186,8 @@ function replaceCheckpointInCollection(
 
 type EndpointOrigin = "gps" | "map" | "checkpoint" | null;
 
+type SelectionT = (key: string, values?: Record<string, string | number>) => string;
+
 function formatSelectionLabel(
   selection:
     | { kind: "current-location" }
@@ -341,25 +196,28 @@ function formatSelectionLabel(
     | null,
   checkpointsById: Map<string, MapCheckpoint>,
   userLocation: UserLocation | null,
+  tSelection: SelectionT,
 ): string {
   if (!selection) {
-    return "غير محدد";
+    return tSelection("unset");
   }
 
   if (selection.kind === "current-location") {
-    return userLocation ? "الحالي" : "غير محدد";
+    return userLocation ? tSelection("current") : tSelection("unset");
   }
 
   if (selection.kind === "map-point") {
-    return "مثبت على الخريطة";
+    return tSelection("pinnedOnMap");
   }
 
   const checkpoint = checkpointsById.get(selection.checkpointId);
   if (!checkpoint) {
-    return "غير محدد";
+    return tSelection("unset");
   }
 
-  return checkpoint.city ? `${checkpoint.name} · ${checkpoint.city}` : checkpoint.name;
+  return checkpoint.city
+    ? tSelection("nameWithCity", { name: checkpoint.name, city: checkpoint.city })
+    : checkpoint.name;
 }
 
 function getRowLabelForEndpoint(
@@ -371,173 +229,25 @@ function getRowLabelForEndpoint(
   geocodeLabel: string | null,
   checkpointsById: Map<string, MapCheckpoint>,
   userLocation: UserLocation | null,
+  tSelection: SelectionT,
 ): string {
   if (!selection) {
-    return "غير محدد";
+    return tSelection("unset");
   }
 
   if (selection.kind === "checkpoint") {
-    return formatSelectionLabel(selection, checkpointsById, userLocation);
+    return formatSelectionLabel(selection, checkpointsById, userLocation, tSelection);
   }
 
   if (selection.kind === "current-location") {
     if (!userLocation) {
-      return "غير محدد";
+      return tSelection("unset");
     }
 
-    return geocodeLabel ?? "الحالي";
+    return geocodeLabel ?? tSelection("current");
   }
 
-  return geocodeLabel ?? "غير محدد";
-}
-
-function DirectionStatusTile({
-  titleAr,
-  titleEn,
-  status,
-}: {
-  titleAr: string;
-  titleEn: string;
-  status: MapCheckpointStatus;
-}) {
-  const visual = STATUS_VISUALS[status] ?? STATUS_VISUALS["غير معروف"];
-
-  return (
-    <div
-      className="relative overflow-hidden rounded-[var(--radius-lg)] border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
-      style={{ borderInlineStartWidth: 3, borderInlineStartColor: visual.border }}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 text-end" dir="rtl">
-          <p className="mashwar-arabic text-[13px] font-semibold leading-tight text-[var(--clr-white)]">
-            {titleAr}
-          </p>
-          <p className="mashwar-mono mt-0.5 text-[9px] uppercase tracking-[0.16em] text-[var(--clr-slate)]" dir="ltr">
-            {titleEn}
-          </p>
-        </div>
-        <span
-          className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/10"
-          style={{ backgroundColor: visual.dot }}
-          aria-hidden
-        />
-      </div>
-      <p
-        className="mashwar-arabic mt-3 text-end text-[20px] font-bold leading-snug tracking-tight"
-        style={{ color: visual.text }}
-        dir="rtl"
-      >
-        {status}
-      </p>
-      <p className="mashwar-mono mt-1 text-end text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--clr-slate)] opacity-80" dir="ltr">
-        {visual.en}
-      </p>
-    </div>
-  );
-}
-
-function FusedDirectionsStatusTile({ status }: { status: MapCheckpointStatus }) {
-  const visual = STATUS_VISUALS[status] ?? STATUS_VISUALS["غير معروف"];
-
-  return (
-    <div
-      className="relative overflow-hidden rounded-[var(--radius-lg)] border border-[var(--glass-border)] bg-gradient-to-b from-[var(--glass-bg-raised)] to-[var(--glass-bg-mid)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-      style={{ borderTopWidth: 3, borderTopColor: visual.border }}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2" dir="rtl">
-        <div className="text-end">
-          <p className="mashwar-arabic text-[11px] font-semibold text-[var(--clr-sand)]">الاتجاهان</p>
-          <p className="mashwar-mono mt-0.5 text-[9px] uppercase tracking-[0.18em] text-[var(--clr-slate)]" dir="ltr">
-            Entering · leaving
-          </p>
-        </div>
-        <span
-          className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/10"
-          style={{ backgroundColor: visual.dot }}
-          aria-hidden
-        />
-      </div>
-      <p
-        className="mashwar-arabic mt-4 text-center text-[clamp(1.35rem,4.5vw,1.75rem)] font-bold leading-tight"
-        style={{ color: visual.text }}
-        dir="rtl"
-      >
-        {status}
-      </p>
-      <p className="mashwar-mono mt-1 text-center text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--clr-slate)]" dir="ltr">
-        {visual.en}
-      </p>
-    </div>
-  );
-}
-
-function ForecastDirectionCell({
-  titleAr,
-  titleEn,
-  item,
-}: {
-  titleAr: string;
-  titleEn: string;
-  item: ForecastRow["entering"];
-}) {
-  const status = item?.prediction.predictedStatus ?? "غير معروف";
-  const visual = STATUS_VISUALS[status] ?? STATUS_VISUALS["غير معروف"];
-  const tone = item ? getConfidenceTone(item.prediction.confidence) : null;
-
-  return (
-    <div
-      className={`rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--glass-bg)]/80 p-2.5 ${item ? "" : "opacity-55"}`}
-      style={{ borderInlineStartWidth: 2, borderInlineStartColor: visual.border }}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 text-end" dir="rtl">
-          <p className="mashwar-arabic text-[12px] font-semibold text-[var(--clr-sand)]">{titleAr}</p>
-          <p className="mashwar-mono text-[9px] uppercase tracking-[0.14em] text-[var(--clr-slate)]" dir="ltr">
-            {titleEn}
-          </p>
-        </div>
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: visual.dot }} aria-hidden />
-      </div>
-      <p
-        className="mashwar-arabic mt-2 text-end text-[15px] font-bold leading-snug"
-        style={{ color: item ? visual.text : "var(--clr-slate)" }}
-        dir="rtl"
-      >
-        {item ? status : "—"}
-      </p>
-      {item ? (
-        <p className="mashwar-mono mt-1 text-end text-[10px]" style={{ color: tone?.color ?? "var(--clr-slate)" }} dir="rtl">
-          ثقة {formatForecastConfidence(item.prediction.confidence)}
-        </p>
-      ) : (
-        <p className="mashwar-mono mt-1 text-end text-[10px] text-[var(--clr-slate)]">—</p>
-      )}
-    </div>
-  );
-}
-
-function ForecastHorizonCard({ row }: { row: ForecastRow }) {
-  return (
-    <article className="rounded-[var(--radius-lg)] border border-[var(--glass-border)] bg-[var(--glass-bg-mid)]/95 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-      <div className="flex flex-wrap items-end justify-between gap-2 border-b border-[var(--glass-border)] pb-2.5">
-        <div className="min-w-0 text-end" dir="rtl">
-          <h4 className="mashwar-arabic text-[15px] font-bold leading-snug text-[var(--clr-white)]">
-            {getForecastHorizonTitleAr(row.horizon)}
-          </h4>
-          <p className="mashwar-mono mt-0.5 text-[10px] text-[var(--clr-slate)]" dir="ltr">
-            {formatForecastDateTime(row.targetDateTime)}
-          </p>
-        </div>
-        <span className="mashwar-arabic shrink-0 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-1 text-[10px] text-[var(--clr-sand)]">
-          {forecastCoverageLabelAr(row)}
-        </span>
-      </div>
-      <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <ForecastDirectionCell titleAr="دخول" titleEn="Entering" item={row.entering} />
-        <ForecastDirectionCell titleAr="خروج" titleEn="Leaving" item={row.leaving} />
-      </div>
-    </article>
-  );
+  return geocodeLabel ?? tSelection("unset");
 }
 
 const DEFAULT_GEO_OPTIONS: PositionOptions = {
@@ -571,7 +281,7 @@ export default function MashwarHome() {
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routes, setRoutes] = useState<NormalizedRoutes>(EMPTY_ROUTES);
   const [routeDetailsRouteId, setRouteDetailsRouteId] = useState<string | null>(null);
-  const [isRoutePending, startRouteTransition] = useTransition();
+  const [isRouteLoading, setIsRouteLoading] = useState(false);
   const [heatmapEnabled, setHeatmapEnabled] = useState(false);
   const [corridorsRaw, setCorridorsRaw] = useState<HeatmapCorridorFeature[]>([]);
   const [corridorSegments, setCorridorSegments] =
@@ -601,6 +311,27 @@ export default function MashwarHome() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const fromGeocodeNonce = useRef(0);
   const toGeocodeNonce = useRef(0);
+
+  const locale = useLocale();
+  const tCommon = useTranslations("common");
+  const tErrors = useTranslations("errors");
+  const tRoute = useTranslations("home.route");
+  const tSelection = useTranslations("home.selection");
+  const tPlacement = useTranslations("home.placement");
+  const tPanel = useTranslations("checkpoint.panel");
+  const tFlow = useTranslations("checkpoint.flow");
+  const tFloat = useTranslations("home.floating");
+  const tForecastTravelHeadline = useTranslations("forecast.travelHeadline");
+
+  const errorBannerText = useMemo(() => {
+    const parts = [
+      routeError,
+      locationError,
+      checkpointError,
+      heatmapEnabled ? heatmapError : null,
+    ].filter(Boolean) as string[];
+    return parts.map((p) => translateServiceError(p, tErrors)).join(tCommon("errorJoiner"));
+  }, [routeError, locationError, checkpointError, heatmapError, heatmapEnabled, tCommon, tErrors]);
 
   useEffect(() => {
     let cancelled = false;
@@ -665,6 +396,11 @@ export default function MashwarHome() {
     [selectedCheckpointForecast],
   );
   const travelWindow = selectedCheckpointForecast?.travelWindow ?? null;
+
+  const travelWindowEntries = useMemo(
+    () => buildTravelWindowEntries(travelWindow, (k) => tForecastTravelHeadline(k)),
+    [travelWindow, tForecastTravelHeadline],
+  );
 
   const routeFromPoint =
     resolveRouteEndpointInfo(routeFrom, checkpointsById, userLocation)?.point ??
@@ -872,28 +608,27 @@ export default function MashwarHome() {
     }
 
     setRouteError(null);
+    setIsRouteLoading(true);
 
-    startRouteTransition(() => {
-      void (async () => {
-        try {
-          const nextRoutes = await getRoute({
-            origin: resolvedFrom.point,
-            destination: resolvedTo.point,
-            ...(resolvedFrom.city ? { origin_city: resolvedFrom.city } : {}),
-            ...(resolvedTo.city ? { destination_city: resolvedTo.city } : {}),
-            profile: "car",
-          });
-          setRoutes(nextRoutes);
-          setRouteDetailsRouteId(null);
-        } catch (error) {
-          setRouteError(
-            error instanceof Error
-              ? error.message
-              : "Unable to load route data.",
-          );
-        }
-      })();
-    });
+    void (async () => {
+      try {
+        const nextRoutes = await getRoute({
+          origin: resolvedFrom.point,
+          destination: resolvedTo.point,
+          ...(resolvedFrom.city ? { origin_city: resolvedFrom.city } : {}),
+          ...(resolvedTo.city ? { destination_city: resolvedTo.city } : {}),
+          profile: "car",
+        });
+        setRoutes(nextRoutes);
+        setRouteDetailsRouteId(null);
+      } catch (error) {
+        setRouteError(
+          error instanceof Error ? error.message : "Unable to load route data.",
+        );
+      } finally {
+        setIsRouteLoading(false);
+      }
+    })();
   }
 
   const handleToggleHeatmap = useCallback(() => {
@@ -1267,19 +1002,28 @@ export default function MashwarHome() {
     fromGeocodeLabel,
     checkpointsById,
     userLocation,
+    tSelection,
   );
   const routeToBaseLabel = getRowLabelForEndpoint(
     routeTo,
     toGeocodeLabel,
     checkpointsById,
     userLocation,
+    tSelection,
   );
+
+  const worstFlowLabel =
+    selectedCheckpointStatus !== null
+      ? tFlow(checkpointFlowSubkey(selectedCheckpointStatus))
+      : "";
 
   const fromGpsSet = routeFrom?.kind === "current-location";
   const toGpsSet = toOrigin === "gps" && routeTo?.kind === "map-point";
 
   return (
     <main className="fixed inset-0 z-0 h-[100dvh] w-screen overflow-hidden bg-transparent text-[var(--clr-white)]">
+      <RouteBuildingOverlay open={isRouteLoading} />
+
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,var(--clr-green-dim),transparent_28%),radial-gradient(circle_at_82%_12%,var(--glass-bg-raised),transparent_26%),radial-gradient(circle_at_bottom,var(--clr-red-soft),transparent_22%)]" />
 
       <div className="absolute inset-0 h-full w-full">
@@ -1302,7 +1046,7 @@ export default function MashwarHome() {
         />
       </div>
 
-      <div className="fixed left-1/2 top-5 z-[1100] flex w-[min(calc(100vw-24px),720px)] -translate-x-1/2 flex-col items-stretch gap-2">
+      <div className="fixed left-1/2 top-5 z-[1100] flex w-[min(calc(100vw-24px),864px)] -translate-x-1/2 flex-col items-stretch gap-2">
         <div
           className="overflow-hidden rounded-full border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
           style={{
@@ -1310,19 +1054,22 @@ export default function MashwarHome() {
             backdropFilter: "blur(12px)",
           }}
         >
-          <div className="flex w-full max-w-full items-center justify-between gap-2 overflow-x-hidden px-2 py-1.5">
+          <div
+            dir="ltr"
+            className="flex w-full max-w-full items-center justify-between gap-2 overflow-x-hidden px-2 py-1.5"
+          >
             <button
               type="button"
               onClick={handleRouteButtonClick}
-              disabled={isRoutePending}
-              className="mashwar-arabic order-1 shrink-0 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_2px_12px_rgba(5,150,105,0.35)] transition hover:bg-emerald-500 hover:shadow-[0_4px_18px_rgba(5,150,105,0.45)] active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
+              disabled={isRouteLoading}
+              className="mashwar-arabic shrink-0 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_2px_12px_rgba(5,150,105,0.35)] transition hover:bg-emerald-500 hover:shadow-[0_4px_18px_rgba(5,150,105,0.45)] active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
             >
-              {routePaths.length > 0 ? "مسح المسار" : "ابدأ التوجيه"}
+              {routePaths.length > 0 ? tRoute("clear") : tRoute("start")}
             </button>
 
             <div
               dir="rtl"
-              className="order-2 flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-1.5"
+              className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-1.5"
             >
               <div
                 className={`flex min-w-0 shrink items-center gap-0.5 rounded-full bg-white/5 px-1 py-0.5 transition-all duration-300 ease-out ${
@@ -1339,7 +1086,7 @@ export default function MashwarHome() {
                   className="flex min-w-0 max-w-[min(30vw,160px)] flex-1 flex-col rounded-full px-2 py-1.5 text-end transition hover:bg-white/8"
                 >
                   <span className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-white/45">
-                    من
+                    {tRoute("from")}
                   </span>
                   <div className="flex min-w-0 items-center justify-end gap-1">
                     {fromResolving ? (
@@ -1362,7 +1109,7 @@ export default function MashwarHome() {
                     type="button"
                     onClick={handleClearFrom}
                     className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:bg-white/12 hover:text-white"
-                    aria-label="مسح نقطة الانطلاق"
+                    aria-label={tRoute("clearFromAria")}
                   >
                     <IoClose className="h-3.5 w-3.5" aria-hidden />
                   </button>
@@ -1374,11 +1121,9 @@ export default function MashwarHome() {
                 onClick={handleGpsAsFrom}
                 disabled={gpsLoading.from}
                 title={
-                  gpsErrorField === "from"
-                    ? "تعذر تحديد موقعك"
-                    : "استخدام موقعي كنقطة انطلاق"
+                  gpsErrorField === "from" ? tErrors("geoUnavailable") : tRoute("gpsFromTitle")
                 }
-                aria-label="استخدام موقعي كنقطة انطلاق"
+                aria-label={tRoute("gpsFromAria")}
                 className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border shadow-inner transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(20,20,20,0.92)] active:scale-[0.96] disabled:cursor-wait ${
                   gpsErrorField === "from" ? "mashwar-gps-shake" : ""
                 } ${
@@ -1410,11 +1155,11 @@ export default function MashwarHome() {
                 type="button"
                 onClick={handleSwapEndpoints}
                 disabled={swapAnimating}
-                className="mashwar-arabic shrink-0 rounded-full border border-white/12 bg-white/[0.06] px-2 py-1.5 text-base font-bold text-white/70 transition hover:border-white/22 hover:bg-white/10 hover:text-white disabled:cursor-wait disabled:opacity-50"
-                title="تبديل المن والى"
-                aria-label="تبديل المن والى"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-sky-400/40 bg-sky-500/15 text-sky-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:border-sky-300/70 hover:bg-sky-500/25 hover:text-white disabled:cursor-wait disabled:opacity-50"
+                title={tRoute("swapEndpointsTitle")}
+                aria-label={tRoute("swapEndpointsAria")}
               >
-                ↕
+                <MdSwapHoriz className="h-6 w-6" aria-hidden />
               </button>
 
               <div
@@ -1432,7 +1177,7 @@ export default function MashwarHome() {
                   className="flex min-w-0 max-w-[min(30vw,160px)] flex-1 flex-col rounded-full px-2 py-1.5 text-end transition hover:bg-white/8"
                 >
                   <span className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-white/45">
-                    إلى
+                    {tRoute("to")}
                   </span>
                   <div className="flex min-w-0 items-center justify-end gap-1">
                     {toResolving ? (
@@ -1455,7 +1200,7 @@ export default function MashwarHome() {
                     type="button"
                     onClick={handleClearTo}
                     className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:bg-white/12 hover:text-white"
-                    aria-label="مسح الوجهة"
+                    aria-label={tRoute("clearToAria")}
                   >
                     <IoClose className="h-3.5 w-3.5" aria-hidden />
                   </button>
@@ -1466,12 +1211,8 @@ export default function MashwarHome() {
                 type="button"
                 onClick={handleGpsAsTo}
                 disabled={gpsLoading.to}
-                title={
-                  gpsErrorField === "to"
-                    ? "تعذر تحديد موقعك"
-                    : "استخدام موقعي كوجهة"
-                }
-                aria-label="استخدام موقعي كوجهة"
+                title={gpsErrorField === "to" ? tErrors("geoUnavailable") : tRoute("gpsToTitle")}
+                aria-label={tRoute("gpsToAria")}
                 className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border shadow-inner transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/75 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(20,20,20,0.92)] active:scale-[0.96] disabled:cursor-wait ${
                   gpsErrorField === "to" ? "mashwar-gps-shake" : ""
                 } ${
@@ -1506,9 +1247,7 @@ export default function MashwarHome() {
           checkpointError ||
           (heatmapEnabled && heatmapError) ? (
             <div className="border-t border-white/10 px-3 py-2 text-center text-[11px] text-red-200">
-              {[routeError, locationError, checkpointError, heatmapEnabled ? heatmapError : null]
-                .filter(Boolean)
-                .join(" · ")}
+              {errorBannerText}
             </div>
           ) : null}
         </div>
@@ -1517,54 +1256,70 @@ export default function MashwarHome() {
           <p
             className="mashwar-arabic pointer-events-none mx-auto rounded-full border border-emerald-500/35 bg-[rgba(16,24,20,0.92)] px-4 py-2 text-center text-[12px] font-medium text-emerald-100 shadow-[0_8px_28px_rgba(0,0,0,0.35)]"
             style={{ backdropFilter: "blur(10px)" }}
-            dir="rtl"
+            dir={locale === "ar" ? "rtl" : "ltr"}
           >
-            انقر على الخريطة لتحديد نقطة الانطلاق
+            {tPlacement("hintFrom")}
           </p>
         ) : endpointPlacementMode === "to" ? (
           <p
             className="mashwar-arabic pointer-events-none mx-auto rounded-full border border-red-500/35 bg-[rgba(24,16,18,0.92)] px-4 py-2 text-center text-[12px] font-medium text-red-100 shadow-[0_8px_28px_rgba(0,0,0,0.35)]"
             style={{ backdropFilter: "blur(10px)" }}
-            dir="rtl"
+            dir={locale === "ar" ? "rtl" : "ltr"}
           >
-            انقر على الخريطة لتحديد الوجهة
+            {tPlacement("hintTo")}
           </p>
         ) : null}
       </div>
 
-      <div className="fixed right-5 top-5 z-[1100] flex flex-col gap-2.5">
+      <div className="fixed right-4 top-5 z-[1100] flex flex-col items-end gap-2 sm:right-5">
         <button
           type="button"
           onClick={handleSmartRouterCardClick}
-          title="موجز المسار الذكي"
+          title={tFloat("smartRouterTitle")}
+          aria-label={tFloat("smartRouterAria")}
           aria-pressed={smartRouterOn}
-          className={`inline-flex h-12 w-12 items-center justify-center rounded-xl border text-lg shadow-lg transition duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,12,12,0.9)] active:scale-[0.96] ${
+          className={`inline-flex max-w-[9.5rem] items-center gap-2 rounded-xl border px-2 py-1.5 shadow-lg transition duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,12,12,0.9)] active:scale-[0.98] sm:max-w-[10.5rem] ${
             smartRouterOn
               ? "border-emerald-400/90 bg-emerald-500/[0.14] text-emerald-100 shadow-[0_0_0_1px_rgba(52,211,153,0.45),0_0_20px_rgba(16,185,129,0.22)]"
               : "border-white/12 bg-[rgba(20,20,20,0.88)] text-white/85 hover:border-emerald-400/40 hover:bg-emerald-500/[0.1] hover:text-emerald-50 hover:shadow-[0_0_0_1px_rgba(52,211,153,0.2),0_8px_24px_rgba(0,0,0,0.35)]"
           }`}
           style={{ backdropFilter: "blur(10px)" }}
+          dir={locale === "ar" ? "rtl" : "ltr"}
         >
-          <IoSearch className="h-5 w-5" aria-hidden />
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/50">
+            <IoSearch className="h-4 w-4" aria-hidden />
+          </span>
+          <span className="mashwar-arabic min-w-0 flex-1 text-end text-[10px] font-semibold leading-snug sm:text-[11px]">
+            {tFloat("smartRouterCta")}
+          </span>
         </button>
 
         <button
           type="button"
           onClick={handleToggleHeatmap}
-          title="خريطة حرارية"
+          title={tFloat("heatmapTitle")}
+          aria-label={tFloat("heatmapAria")}
           aria-pressed={heatmapEnabled}
-          className={`inline-flex h-12 w-12 items-center justify-center rounded-xl border text-lg shadow-lg transition duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,12,12,0.9)] active:scale-[0.96] ${
+          className={`inline-flex max-w-[9.5rem] items-center gap-2 rounded-xl border px-2 py-1.5 shadow-lg transition duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,12,12,0.9)] active:scale-[0.98] sm:max-w-[10.5rem] ${
             heatmapEnabled
               ? "border-amber-400/90 bg-amber-500/[0.14] text-amber-100 shadow-[0_0_0_1px_rgba(251,191,36,0.45),0_0_20px_rgba(245,158,11,0.2)]"
               : "border-white/12 bg-[rgba(20,20,20,0.88)] text-white/85 hover:border-amber-400/40 hover:bg-amber-500/[0.1] hover:text-amber-50 hover:shadow-[0_0_0_1px_rgba(251,191,36,0.2),0_8px_24px_rgba(0,0,0,0.35)]"
           }`}
           style={{ backdropFilter: "blur(10px)" }}
+          dir={locale === "ar" ? "rtl" : "ltr"}
         >
-          <FaFire
-            className={`h-5 w-5 ${isHeatmapLoading || isHeatmapBuilding ? "animate-pulse" : ""}`}
-            aria-hidden
-          />
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/50">
+            <FaFire
+              className={`h-4 w-4 ${isHeatmapLoading || isHeatmapBuilding ? "animate-pulse" : ""}`}
+              aria-hidden
+            />
+          </span>
+          <span className="mashwar-arabic min-w-0 flex-1 text-end text-[10px] font-semibold leading-snug sm:text-[11px]">
+            {tFloat("heatmapCta")}
+          </span>
         </button>
+
+        <LocaleToggle />
       </div>
 
       <aside className="pointer-events-auto fixed inset-x-0 bottom-0 z-[1050] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:bottom-6 sm:left-4 sm:right-4 sm:mx-auto sm:max-w-2xl sm:px-0 sm:pb-6 sm:pt-0">
@@ -1577,14 +1332,17 @@ export default function MashwarHome() {
               <header className="border-b border-[var(--glass-border)] p-[var(--panel-padding)] pb-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="mashwar-arabic text-[11px] font-semibold leading-none text-[var(--clr-sand)]" dir="rtl">
-                      معلومات الحاجز
+                    <p
+                      className="mashwar-arabic text-[11px] font-semibold leading-none text-[var(--clr-sand)]"
+                      dir={locale === "ar" ? "rtl" : "ltr"}
+                    >
+                      {tPanel("kicker")}
                     </p>
                     <p className="mashwar-mono mt-1 text-[9px] uppercase tracking-[0.22em] text-[var(--clr-slate)]">
-                      Checkpoint
+                      {tPanel("kickerMono")}
                     </p>
                     <h2
-                      dir="rtl"
+                      dir={locale === "ar" ? "rtl" : "ltr"}
                       className="mashwar-arabic mashwar-display mt-3 text-[clamp(1.25rem,4.2vw,1.5rem)] leading-tight text-[var(--clr-white)]"
                     >
                       {selectedCheckpoint.name}
@@ -1594,7 +1352,7 @@ export default function MashwarHome() {
                     type="button"
                     onClick={() => handleCheckpointSelect(null)}
                     className="mashwar-icon-button inline-flex h-10 w-10 shrink-0 items-center justify-center text-[var(--clr-slate)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(10,12,16,0.9)]"
-                    aria-label="إغلاق لوحة الحاجز"
+                    aria-label={tPanel("closeAria")}
                   >
                     <IoClose className="h-5 w-5" aria-hidden />
                   </button>
@@ -1604,23 +1362,18 @@ export default function MashwarHome() {
               <div className="space-y-4 p-[var(--panel-padding)]">
                 <section aria-labelledby="checkpoint-now-heading">
                   <h3 id="checkpoint-now-heading" className="sr-only">
-                    الوضع الحالي
+                    {tPanel("currentSrOnly")}
                   </h3>
 
                   {selectedCheckpoint.enteringStatus !== selectedCheckpoint.leavingStatus ? (
                     <div
                       role="status"
                       className="mb-3 flex items-start gap-2.5 rounded-[var(--radius-md)] border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2.5"
-                      dir="rtl"
+                      dir={locale === "ar" ? "rtl" : "ltr"}
                     >
                       <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-400" aria-hidden />
                       <p className="mashwar-arabic min-w-0 text-[12px] leading-snug text-[var(--clr-sand)]">
-                        <span className="font-semibold text-[var(--clr-white)]">تنبيه:</span> حالة الدخول تختلف عن
-                        الخروج. راجع البطاقتين أدناه؛ أسوأ الحالتين هي{" "}
-                        <span className="text-[var(--clr-white)]">
-                          {STATUS_VISUALS[selectedCheckpointStatus ?? "غير معروف"].ar}
-                        </span>
-                        .
+                        {tPanel("mismatchAlert", { worst: worstFlowLabel })}
                       </p>
                     </div>
                   ) : null}
@@ -1629,16 +1382,8 @@ export default function MashwarHome() {
                     <FusedDirectionsStatusTile status={selectedCheckpoint.enteringStatus} />
                   ) : (
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <DirectionStatusTile
-                        titleAr="دخول"
-                        titleEn="Entering"
-                        status={selectedCheckpoint.enteringStatus}
-                      />
-                      <DirectionStatusTile
-                        titleAr="خروج"
-                        titleEn="Leaving"
-                        status={selectedCheckpoint.leavingStatus}
-                      />
+                      <DirectionStatusTile direction="entering" status={selectedCheckpoint.enteringStatus} />
+                      <DirectionStatusTile direction="leaving" status={selectedCheckpoint.leavingStatus} />
                     </div>
                   )}
 
@@ -1648,11 +1393,14 @@ export default function MashwarHome() {
                       onClick={handleUseSelectedCheckpointAsOrigin}
                       className="mashwar-action mashwar-action-primary flex min-h-[48px] flex-col items-center justify-center gap-0.5 px-4 py-3 text-center"
                     >
-                      <span className="mashwar-arabic text-[13px] font-semibold leading-tight" dir="rtl">
-                        نقطة الانطلاق
+                      <span
+                        className="mashwar-arabic text-[13px] font-semibold leading-tight"
+                        dir={locale === "ar" ? "rtl" : "ltr"}
+                      >
+                        {tPanel("routeFromCta")}
                       </span>
                       <span className="mashwar-mono text-[9px] font-medium uppercase tracking-[0.14em] opacity-80">
-                        Route from here
+                        {tPanel("routeFromSub")}
                       </span>
                     </button>
                     <button
@@ -1660,11 +1408,14 @@ export default function MashwarHome() {
                       onClick={handleUseSelectedCheckpointAsDestination}
                       className="mashwar-action flex min-h-[48px] flex-col items-center justify-center gap-0.5 px-4 py-3 text-center"
                     >
-                      <span className="mashwar-arabic text-[13px] font-semibold leading-tight" dir="rtl">
-                        الوجهة
+                      <span
+                        className="mashwar-arabic text-[13px] font-semibold leading-tight"
+                        dir={locale === "ar" ? "rtl" : "ltr"}
+                      >
+                        {tPanel("routeToCta")}
                       </span>
                       <span className="mashwar-mono text-[9px] font-medium uppercase tracking-[0.14em] text-[var(--clr-slate)]">
-                        Route to here
+                        {tPanel("routeToSub")}
                       </span>
                     </button>
                   </div>
@@ -1675,15 +1426,15 @@ export default function MashwarHome() {
                   aria-labelledby="checkpoint-forecast-heading"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--glass-border)] pb-3">
-                    <div className="min-w-0" dir="rtl">
+                    <div className="min-w-0" dir={locale === "ar" ? "rtl" : "ltr"}>
                       <h3
                         id="checkpoint-forecast-heading"
                         className="mashwar-arabic text-[15px] font-bold text-[var(--clr-white)]"
                       >
-                        التوقعات
+                        {tPanel("forecastTitle")}
                       </h3>
                       <p className="mashwar-mono mt-0.5 text-[9px] uppercase tracking-[0.18em] text-[var(--clr-slate)]">
-                        Forecast
+                        {tPanel("forecastMono")}
                       </p>
                     </div>
                     <span
@@ -1691,22 +1442,31 @@ export default function MashwarHome() {
                       style={{ borderColor: "var(--risk-low)", backgroundColor: "var(--risk-low-bg)" }}
                     >
                       <span className="mashwar-live-dot" aria-hidden />
-                      <span className="mashwar-mono uppercase tracking-[0.12em]">Live</span>
+                      <span className="mashwar-mono uppercase tracking-[0.12em]">{tPanel("live")}</span>
                     </span>
                   </div>
 
-                  <p className="mashwar-arabic mt-3 text-[11px] leading-relaxed text-[var(--clr-slate)]" dir="rtl">
-                    آخر تحديث للبيانات:{" "}
+                  <p
+                    className="mashwar-arabic mt-3 text-[11px] leading-relaxed text-[var(--clr-slate)]"
+                    dir={locale === "ar" ? "rtl" : "ltr"}
+                  >
+                    {tPanel("lastDataUpdate")}{" "}
                     <span className="mashwar-mono font-medium text-[var(--clr-sand)]" dir="ltr">
-                      {formatForecastDateTime(selectedCheckpointForecast?.request.asOf ?? null)}
+                      {formatForecastDateTimePalestine(
+                        selectedCheckpointForecast?.request.asOf ?? null,
+                        tCommon,
+                      )}
                     </span>
                   </p>
 
-                  {travelWindow && buildTravelWindowEntries(travelWindow).length > 0 ? (
+                  {travelWindow && travelWindowEntries.length > 0 ? (
                     <details className="group mt-4 rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--glass-bg-mid)]/80 open:bg-[var(--glass-bg-mid)]">
                       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-[var(--radius-sm)] px-3 py-2.5 text-[var(--clr-white)] marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--glass-bg-mid)] [&::-webkit-details-marker]:hidden">
-                        <span className="mashwar-arabic text-[13px] font-semibold" dir="rtl">
-                          نافذة السفر
+                        <span
+                          className="mashwar-arabic text-[13px] font-semibold"
+                          dir={locale === "ar" ? "rtl" : "ltr"}
+                        >
+                          {tPanel("travelWindowSummary")}
                         </span>
                         <IoChevronDown
                           className="h-4 w-4 shrink-0 text-[var(--clr-slate)] transition duration-200 group-open:rotate-180"
@@ -1717,16 +1477,16 @@ export default function MashwarHome() {
                         <div className="flex flex-wrap gap-2">
                           {travelWindow.referenceTime ? (
                             <span className="mashwar-pill px-2.5 py-1 text-[10px]">
-                              <span className="mashwar-arabic" dir="rtl">
-                                مرجع{" "}
+                              <span className="mashwar-arabic" dir={locale === "ar" ? "rtl" : "ltr"}>
+                                {tPanel("pillReference")}{" "}
                               </span>
-                              {formatForecastDateTime(travelWindow.referenceTime)}
+                              {formatForecastDateTimePalestine(travelWindow.referenceTime, tCommon)}
                             </span>
                           ) : null}
                           {travelWindow.scope ? (
                             <span className="mashwar-pill px-2.5 py-1 text-[10px]">
-                              <span className="mashwar-arabic" dir="rtl">
-                                النطاق{" "}
+                              <span className="mashwar-arabic" dir={locale === "ar" ? "rtl" : "ltr"}>
+                                {tPanel("pillScope")}{" "}
                               </span>
                               {travelWindow.scope}
                             </span>
@@ -1734,73 +1494,121 @@ export default function MashwarHome() {
                         </div>
 
                         <div className="mt-3 space-y-3">
-                          {buildTravelWindowEntries(travelWindow).map((entry) => (
+                          {travelWindowEntries.map((entry) => (
                             <article
                               key={entry.kind}
                               className="rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--glass-bg)]/90 p-3"
                             >
                               <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div dir="rtl" className="min-w-0 text-end">
+                                <div dir={locale === "ar" ? "rtl" : "ltr"} className="min-w-0 text-end">
                                   <p className="mashwar-arabic text-[14px] font-bold text-[var(--clr-white)]">
-                                    {travelWindowHeadlineAr(entry.kind)}
+                                    {tForecastTravelHeadline(entry.kind)}
                                   </p>
-                                  <p className="mashwar-mono mt-0.5 text-[9px] uppercase tracking-[0.14em] text-[var(--clr-slate)]" dir="ltr">
-                                    {entry.kind === "best" ? "Best window" : "Worst window"}
+                                  <p
+                                    className="mashwar-mono mt-0.5 text-[9px] uppercase tracking-[0.14em] text-[var(--clr-slate)]"
+                                    dir="ltr"
+                                  >
+                                    {entry.kind === "best" ? tPanel("bestWindow") : tPanel("worstWindow")}
                                   </p>
                                 </div>
                                 <span className="mashwar-pill max-w-[55%] truncate px-2.5 py-1 text-[10px]">
-                                  {entry.item?.windowLabel ?? "—"}
+                                  {entry.item?.windowLabel ?? tCommon("dash")}
                                 </span>
                               </div>
 
                               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                                 <div className="rounded-[var(--radius-sm)] border border-[var(--glass-border)] bg-[var(--glass-bg-mid)]/90 p-2">
-                                  <p className="mashwar-arabic text-[9px] text-[var(--clr-slate)]" dir="rtl">
-                                    اليوم
+                                  <p
+                                    className="mashwar-arabic text-[9px] text-[var(--clr-slate)]"
+                                    dir={locale === "ar" ? "rtl" : "ltr"}
+                                  >
+                                    {tPanel("day")}
                                   </p>
                                   <p className="mashwar-mono mt-1 text-[11px] font-semibold text-[var(--clr-white)]">
-                                    {entry.item?.dayOfWeek ?? "—"}
+                                    {entry.item?.dayOfWeek ?? tCommon("dash")}
                                   </p>
                                 </div>
                                 <div className="rounded-[var(--radius-sm)] border border-[var(--glass-border)] bg-[var(--glass-bg-mid)]/90 p-2">
-                                  <p className="mashwar-arabic text-[9px] text-[var(--clr-slate)]" dir="rtl">
-                                    الساعة
+                                  <p
+                                    className="mashwar-arabic text-[9px] text-[var(--clr-slate)]"
+                                    dir={locale === "ar" ? "rtl" : "ltr"}
+                                  >
+                                    {tPanel("hour")}
                                   </p>
                                   <p className="mashwar-data mt-1 text-[11px] font-semibold text-[var(--clr-white)]">
-                                    {formatTravelWindowHour(entry.item?.hour ?? null)}
+                                    {formatTravelWindowHour(entry.item?.hour ?? null, tCommon)}
                                   </p>
                                 </div>
                                 <div className="col-span-2 rounded-[var(--radius-sm)] border border-[var(--glass-border)] bg-[var(--glass-bg-mid)]/90 p-2 sm:col-span-2">
-                                  <p className="mashwar-arabic text-[9px] text-[var(--clr-slate)]" dir="rtl">
-                                    الموعد المستهدف
+                                  <p
+                                    className="mashwar-arabic text-[9px] text-[var(--clr-slate)]"
+                                    dir={locale === "ar" ? "rtl" : "ltr"}
+                                  >
+                                    {tPanel("targetSlot")}
                                   </p>
                                   <p className="mashwar-data mt-1 text-[11px] font-semibold text-[var(--clr-white)]">
-                                    {formatForecastDateTime(entry.item?.targetDateTime ?? null)}
+                                    {formatForecastDateTimePalestine(entry.item?.targetDateTime ?? null, tCommon)}
                                   </p>
                                 </div>
                               </div>
 
                               <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                                 <div className="rounded-[var(--radius-sm)] border border-[var(--glass-border)] bg-[var(--glass-bg)]/80 p-2.5">
-                                  <p className="mashwar-arabic text-[10px] font-semibold text-[var(--clr-sand)]" dir="rtl">
-                                    دخول
+                                  <p
+                                    className="mashwar-arabic text-[10px] font-semibold text-[var(--clr-sand)]"
+                                    dir={locale === "ar" ? "rtl" : "ltr"}
+                                  >
+                                    {tPanel("entering")}
                                   </p>
-                                  <p className="mashwar-arabic mt-1 text-[13px] font-semibold text-[var(--clr-white)]" dir="rtl">
-                                    {entry.item?.enteringPrediction?.predictedStatus ?? "—"}
+                                  <p
+                                    className="mashwar-arabic mt-1 text-[13px] font-semibold text-[var(--clr-white)]"
+                                    dir={locale === "ar" ? "rtl" : "ltr"}
+                                  >
+                                    {entry.item?.enteringPrediction?.predictedStatus
+                                      ? safeCheckpointFlowLabel(
+                                          entry.item.enteringPrediction.predictedStatus,
+                                          tFlow,
+                                        )
+                                      : tCommon("dash")}
                                   </p>
-                                  <p className="mashwar-arabic mt-1 text-[10px] text-[var(--clr-slate)]" dir="rtl">
-                                    ثقة {formatForecastConfidence(entry.item?.enteringPrediction?.confidence ?? null)}
+                                  <p
+                                    className="mashwar-arabic mt-1 text-[10px] text-[var(--clr-slate)]"
+                                    dir={locale === "ar" ? "rtl" : "ltr"}
+                                  >
+                                    {`${tPanel("confidencePrefix")} ${tCommon("percent", {
+                                      value: Math.round(
+                                        (entry.item?.enteringPrediction?.confidence ?? 0) * 100,
+                                      ),
+                                    })}`}
                                   </p>
                                 </div>
                                 <div className="rounded-[var(--radius-sm)] border border-[var(--glass-border)] bg-[var(--glass-bg)]/80 p-2.5">
-                                  <p className="mashwar-arabic text-[10px] font-semibold text-[var(--clr-sand)]" dir="rtl">
-                                    خروج
+                                  <p
+                                    className="mashwar-arabic text-[10px] font-semibold text-[var(--clr-sand)]"
+                                    dir={locale === "ar" ? "rtl" : "ltr"}
+                                  >
+                                    {tPanel("leaving")}
                                   </p>
-                                  <p className="mashwar-arabic mt-1 text-[13px] font-semibold text-[var(--clr-white)]" dir="rtl">
-                                    {entry.item?.leavingPrediction?.predictedStatus ?? "—"}
+                                  <p
+                                    className="mashwar-arabic mt-1 text-[13px] font-semibold text-[var(--clr-white)]"
+                                    dir={locale === "ar" ? "rtl" : "ltr"}
+                                  >
+                                    {entry.item?.leavingPrediction?.predictedStatus
+                                      ? safeCheckpointFlowLabel(
+                                          entry.item.leavingPrediction.predictedStatus,
+                                          tFlow,
+                                        )
+                                      : tCommon("dash")}
                                   </p>
-                                  <p className="mashwar-arabic mt-1 text-[10px] text-[var(--clr-slate)]" dir="rtl">
-                                    ثقة {formatForecastConfidence(entry.item?.leavingPrediction?.confidence ?? null)}
+                                  <p
+                                    className="mashwar-arabic mt-1 text-[10px] text-[var(--clr-slate)]"
+                                    dir={locale === "ar" ? "rtl" : "ltr"}
+                                  >
+                                    {`${tPanel("confidencePrefix")} ${tCommon("percent", {
+                                      value: Math.round(
+                                        (entry.item?.leavingPrediction?.confidence ?? 0) * 100,
+                                      ),
+                                    })}`}
                                   </p>
                                 </div>
                               </div>
@@ -1811,28 +1619,34 @@ export default function MashwarHome() {
                     </details>
                   ) : null}
 
-                  <p className="mashwar-arabic mt-3 text-[12px] leading-snug text-[var(--clr-slate)]" dir="rtl">
+                  <p
+                    className="mashwar-arabic mt-3 text-[12px] leading-snug text-[var(--clr-slate)]"
+                    dir={locale === "ar" ? "rtl" : "ltr"}
+                  >
                     {forecastRows.length > 0
-                      ? `${forecastRows.length} فترات زمنية (دخول وخروج).`
+                      ? tPanel("forecastPeriods", { count: forecastRows.length })
                       : isForecastLoading
-                        ? "جاري تحميل التوقعات…"
-                        : "بانتظار بيانات الخط الزمني للتوقعات."}
+                        ? tPanel("forecastLoading")
+                        : tPanel("forecastWaiting")}
                   </p>
 
                   {forecastError ? (
                     <p
                       className="mashwar-arabic mt-3 rounded-[var(--radius-md)] border px-3 py-2.5 text-[12px] leading-snug text-[var(--clr-white)]"
                       style={{ borderColor: "var(--risk-high)", backgroundColor: "var(--risk-high-bg)" }}
-                      dir="rtl"
+                      dir={locale === "ar" ? "rtl" : "ltr"}
                       role="alert"
                     >
-                      {forecastError}
+                      {translateServiceError(forecastError, tErrors)}
                     </p>
                   ) : null}
 
                   {isForecastLoading ? (
-                    <p className="mashwar-arabic mt-3 rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--glass-bg-mid)] px-3 py-2.5 text-[12px] text-[var(--clr-sand)]" dir="rtl">
-                      جاري تقدير سلوك الحاجز…
+                    <p
+                      className="mashwar-arabic mt-3 rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--glass-bg-mid)] px-3 py-2.5 text-[12px] text-[var(--clr-sand)]"
+                      dir={locale === "ar" ? "rtl" : "ltr"}
+                    >
+                      {tPanel("forecastEstimating")}
                     </p>
                   ) : null}
 
@@ -1841,8 +1655,11 @@ export default function MashwarHome() {
                       forecastRows.map((row) => <ForecastHorizonCard key={row.horizon} row={row} />)
                     ) : (
                       <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--glass-border)] px-3 py-4 text-center">
-                        <p className="mashwar-arabic text-[12px] text-[var(--clr-slate)]" dir="rtl">
-                          لا توجد صفوف توقع لهذا الحاجز بعد.
+                        <p
+                          className="mashwar-arabic text-[12px] text-[var(--clr-slate)]"
+                          dir={locale === "ar" ? "rtl" : "ltr"}
+                        >
+                          {tPanel("forecastEmpty")}
                         </p>
                       </div>
                     )}

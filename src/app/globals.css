@@ -417,6 +417,22 @@ select {
   border-top-color: var(--glass-bg-raised);
 }
 
+@keyframes mashwar-route-dot-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.55;
+  }
+  40% {
+    transform: translateY(-10px);
+    opacity: 1;
+  }
+}
+
+.mashwar-route-loading-dot {
+  animation: mashwar-route-dot-bounce 0.9s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
