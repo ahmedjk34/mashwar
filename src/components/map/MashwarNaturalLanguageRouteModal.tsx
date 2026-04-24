@@ -571,7 +571,7 @@ export default function MashwarNaturalLanguageRouteModal({
       : tCommon("dash");
 
   return (
-    <div className="fixed inset-0 z-50" aria-hidden={!isVisible}>
+    <div className="fixed inset-0 z-[3000]" aria-hidden={!isVisible}>
       <button
         type="button"
         aria-label={t("closeBackdropAria")}
@@ -598,7 +598,7 @@ export default function MashwarNaturalLanguageRouteModal({
               <p className="mashwar-mono text-[10px] uppercase tracking-[0.34em] text-[#6b7280]">
                 {t("headerKicker")}
               </p>
-              <h2 id="natural-route-title" className="text-[24px] font-bold text-[#f9fafb]">
+              <h2 id="natural-route-title" className="relative z-50 text-[24px] font-bold text-[#f9fafb]">
                 {t("title")}
               </h2>
               <p className="max-w-2xl text-[13px] leading-6 text-[#94a3b8]">{t("subtitle")}</p>

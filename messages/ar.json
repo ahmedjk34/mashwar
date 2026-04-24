@@ -138,6 +138,11 @@
       "swapEndpointsTitle": "عكس من وإلى",
       "swapEndpointsAria": "بدّل نقطة الانطلاق والوجهة",
       "heatmapTitle": "خريطة حرارية",
+      "compactRouteReady": "المسار جاهز",
+      "compactEta": "~{minutes} دقيقة",
+      "expandEndpoints": "عدّل المسار",
+      "expandEndpointsTitle": "إظهار شريط البحث عن المسار",
+      "expandEndpointsAria": "إظهار شريط البحث مع نقطة الانطلاق والوجهة",
       "loadingModal": {
         "kicker": "مشوار على الطريق",
         "title": "شوي وبنطلع المسار من الفرن",
@@ -196,7 +201,13 @@
       "signal": "الإشارة",
       "routeShort": "مسار",
       "checkpointsDistance": "{count} حواجز · {distance}",
-      "distanceOnly": "{distance}"
+      "distanceOnly": "{distance}",
+      "metricCheckpointBurden": "عبء الحواجز {percent}٪",
+      "metricSeverity": "ضغط التأخير {percent}٪",
+      "metricConfidenceGap": "فجوة النموذج {percent}٪",
+      "metricVolatility": "تقلب الزمن {percent}٪",
+      "metricForecastConfidence": "ثقة التوقع {percent}٪",
+      "metricFallback": "{label} · {value}"
     },
     "popup": {
       "routeNumber": "مسار #{rank}",

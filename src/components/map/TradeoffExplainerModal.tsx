@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
+import { RouteLoadingFlagStripe } from "@/components/map/RouteLoadingCard";
 import type {
   NormalizedRoutes,
   RoutingRiskLevel,
@@ -17,6 +18,8 @@ interface TradeoffExplainerModalProps {
   explainer: TradeoffExplainer | null;
   selectedRouteId: string | null;
   onRouteSelect: (routeId: string) => void;
+  /** Fired when the full explainer dialog is open vs collapsed/hidden (for coordinating top chrome). */
+  onExplainerOpenChange?: (isDialogOpen: boolean) => void;
 }
 
 const RISK_VISUALS: Record<
@@ -225,6 +228,7 @@ export default function TradeoffExplainerModal({
   explainer,
   selectedRouteId,
   onRouteSelect,
+  onExplainerOpenChange,
 }: TradeoffExplainerModalProps) {
   const locale = useLocale();
   const isArabic = locale === "ar";
@@ -259,6 +263,14 @@ export default function TradeoffExplainerModal({
     setIsOpen(true);
     setIsCollapsed(false);
   }, [explainerKey, explainer]);
+
+  useEffect(() => {
+    if (!explainer) {
+      onExplainerOpenChange?.(false);
+      return;
+    }
+    onExplainerOpenChange?.(isOpen);
+  }, [explainer, isOpen, onExplainerOpenChange]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -375,29 +387,39 @@ export default function TradeoffExplainerModal({
 
   if (!isOpen) {
     return (
-      <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2" style={{ zIndex: 60 }}>
-        <button
-          type="button"
-          onClick={() => {
-            setIsOpen(true);
-            setIsCollapsed(false);
-          }}
-          className="mashwar-tradeoff-collapsed-cta inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[11px] font-semibold shadow-[0_18px_48px_rgba(0,0,0,0.45)] backdrop-blur-xl transition"
-        >
-          <span className="h-2 w-2 rounded-full bg-[#6b8f56]" />
-          {t("showExplainer")}
-        </button>
+      <div
+        className={`mashwar-tradeoff-anchor fixed z-[1150] flex ${
+          isArabic ? "left-3 sm:left-4" : "right-3 sm:right-4"
+        }`}
+        style={{ top: "1rem" }}
+      >
+        <div className="mashwar-tradeoff-collapsed-enter mashwar-tradeoff-collapsed-wrap w-full max-w-[min(calc(100vw-1.5rem),22rem)] overflow-hidden rounded-full border-2 border-[rgba(107,143,86,0.65)] backdrop-blur-xl">
+          <RouteLoadingFlagStripe dense className="opacity-100" />
+          <button
+            type="button"
+            onClick={() => {
+              setIsOpen(true);
+              setIsCollapsed(false);
+            }}
+            className="mashwar-tradeoff-collapsed-cta mashwar-arabic flex w-full items-center justify-center gap-2.5 border-0 border-t border-white/[0.12] px-4 py-2.5 text-center text-[13px] font-semibold leading-snug transition sm:px-5 sm:py-3 sm:text-[14px]"
+          >
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#7cb86a] shadow-[0_0_12px_rgba(124,184,106,0.75)]" />
+            {t("showExplainer")}
+          </button>
+        </div>
       </div>
     );
   }
 
   const shellClass =
-    "mashwar-tradeoff-shell pointer-events-auto w-[min(100vw-1rem,1180px)] overflow-hidden rounded-[26px] border shadow-[0_30px_100px_rgba(0,0,0,0.72)] backdrop-blur-2xl";
+    "mashwar-tradeoff-shell mashwar-tradeoff-shell-enter pointer-events-auto w-[min(100vw-1.5rem,460px)] h-full flex flex-col overflow-hidden rounded-[26px] border shadow-[0_30px_100px_rgba(0,0,0,0.72)] backdrop-blur-2xl";
 
   return (
     <div
-      className="fixed inset-x-0 top-4 z-50 flex justify-center px-3"
-      style={{ zIndex: 60 }}
+      className={`mashwar-tradeoff-anchor fixed z-[1150] flex ${
+        isArabic ? "left-3 sm:left-4" : "right-3 sm:right-4"
+      }`}
+      style={{ top: "1rem", bottom: "1rem" }}
       aria-live="polite"
     >
       <section
@@ -405,9 +427,8 @@ export default function TradeoffExplainerModal({
         aria-modal="false"
         aria-label={t("ariaLabel")}
         className={shellClass}
-        style={{ animation: "mashwar-modal-in 220ms ease-out" }}
       >
-        <div className="mashwar-tradeoff-sheen">
+        <div className="mashwar-tradeoff-sheen flex h-full flex-col">
           <header
             className={`flex items-start justify-between gap-4 border-b px-4 py-4 sm:px-5 ${
               isArabic ? "text-right mashwar-rtl" : "text-left"
@@ -423,7 +444,7 @@ export default function TradeoffExplainerModal({
                 <button
                   type="button"
                   onClick={scrollToWinner}
-                  className="rounded-full border px-3 py-1 text-[11px] font-semibold transition mashwar-tradeoff-winner-pill"
+                  className="rounded-full border px-3 py-1 text-[13px] font-semibold transition mashwar-tradeoff-winner-pill"
                 >
                   {t("winner", {
                     rank:
@@ -432,7 +453,7 @@ export default function TradeoffExplainerModal({
                         : "—",
                   })}
                 </button>
-                <span className="rounded-full border px-3 py-1 text-[11px] text-[#dbe4f0] mashwar-tradeoff-chip">
+                <span className="rounded-full border px-3 py-1 text-[13px] text-[#dbe4f0] mashwar-tradeoff-chip">
                   {t("routesCompared", { count: comparedCount })}
                 </span>
               </div>
@@ -545,7 +566,7 @@ export default function TradeoffExplainerModal({
               <button
                 type="button"
                 onClick={() => setIsCollapsed((current) => !current)}
-                className="rounded-full border px-3 py-2 text-[11px] font-semibold text-[#dbe4f0] transition mashwar-tradeoff-chip hover:bg-white/[0.06]"
+                className="rounded-full border px-3 py-2 text-[13px] font-semibold text-[#dbe4f0] transition mashwar-tradeoff-chip hover:bg-white/[0.06]"
               >
                 {isCollapsed ? t("expand") : t("collapse")}
               </button>
@@ -561,7 +582,7 @@ export default function TradeoffExplainerModal({
           </header>
 
           {!isCollapsed ? (
-            <div className="max-h-[calc(100dvh-7.5rem)] overflow-y-auto mashwar-scroll px-4 py-4 sm:px-5">
+            <div className="mashwar-tradeoff-body-stagger mashwar-tradeoff-scroll-region flex-1 overflow-y-auto mashwar-scroll px-4 py-4 sm:px-5">
               {narrativeBody ? (
                 <details className="mb-5 rounded-2xl border border-white/[0.07] bg-black/15 px-4 py-3 mashwar-tradeoff-panel">
                   <summary className="cursor-pointer list-none text-[13px] font-semibold text-[#e8ecef] marker:content-none [&::-webkit-details-marker]:hidden">
@@ -634,7 +655,7 @@ export default function TradeoffExplainerModal({
                           ref={(node) => {
                             routeRefs.current.set(route.uiKey, node);
                           }}
-                          className={`overflow-hidden rounded-2xl border transition mashwar-tradeoff-route-card ${
+                          className={`overflow-hidden rounded-2xl border transition-colors duration-100 ease-out mashwar-tradeoff-route-card ${
                             isSelected ? "mashwar-tradeoff-route-selected" : ""
                           }`}
                           dir={isArabic ? "rtl" : "ltr"}
@@ -656,18 +677,18 @@ export default function TradeoffExplainerModal({
                                   isArabic ? "justify-end" : ""
                                 }`}
                               >
-                                <span className="mashwar-mono text-[12px] font-semibold text-[#9aa5b2]">
+                                <span className="mashwar-mono text-[14px] font-semibold text-[#9aa5b2]">
                                   #{route.rank}
                                 </span>
                                 {isWinner ? (
-                                  <span className="rounded-full border px-2.5 py-0.5 text-[10px] font-semibold mashwar-tradeoff-winner-pill">
+                                  <span className="rounded-full border px-2.5 py-0.5 text-[12px] font-semibold mashwar-tradeoff-winner-pill">
                                     {t("winnerBadge")}
                                   </span>
                                 ) : null}
                               </div>
                               <div className={`flex flex-wrap gap-1.5 ${isArabic ? "justify-end" : ""}`}>
                                 <span
-                                  className="rounded-full border px-2.5 py-0.5 text-[10px] font-medium"
+                                  className="rounded-full border px-2.5 py-0.5 text-[12px] font-medium"
                                   style={{
                                     color: riskVisual.text,
                                     backgroundColor: riskVisual.bg,
@@ -677,7 +698,7 @@ export default function TradeoffExplainerModal({
                                   {riskLabel(route.riskLevel)}
                                 </span>
                                 <span
-                                  className="rounded-full border px-2.5 py-0.5 text-[10px] font-medium"
+                                  className="rounded-full border px-2.5 py-0.5 text-[12px] font-medium"
                                   style={{
                                     color: statusStyle.text,
                                     backgroundColor: statusStyle.bg,
@@ -759,7 +780,7 @@ export default function TradeoffExplainerModal({
                                 ) : null}
                               </div>
 
-                              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                              <div className="grid gap-2 sm:grid-cols-2">
                                 <MetricChip
                                   label={t("metric.duration")}
                                   value={formatMinutesI18n(route.durationMinutes, na, locale, t)}
@@ -783,26 +804,26 @@ export default function TradeoffExplainerModal({
                                 />
                               </div>
 
-                              <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
+                              <div className="grid gap-3">
                                 <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
-                              <div
-                                className={`flex items-center justify-between gap-3 ${
-                                  isArabic ? "flex-row-reverse" : ""
-                                }`}
-                              >
-                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-[#6b7280]">
-                                  {t("timeVsRisk")}
-                                </p>
-                                <span className="text-[11px] text-[#94a3b8]">
-                                  {t("vsRecommended", {
-                                    signed: formatSignedNumber(
-                                      route.durationDeltaVsRecommendedMinutes,
-                                      0,
-                                      na,
-                                    ),
-                                  })}
-                                </span>
-                              </div>
+                                  <div
+                                    className={`flex items-center justify-between gap-3 ${
+                                      isArabic ? "flex-row-reverse" : ""
+                                    }`}
+                                  >
+                                    <p className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-[#6b7280]">
+                                      {t("timeVsRisk")}
+                                    </p>
+                                    <span className="text-[11px] text-[#94a3b8]">
+                                      {t("vsRecommended", {
+                                        signed: formatSignedNumber(
+                                          route.durationDeltaVsRecommendedMinutes,
+                                          0,
+                                          na,
+                                        ),
+                                      })}
+                                    </span>
+                                  </div>
                                   <div className="mt-3 space-y-2">
                                     <div>
                                       <div
@@ -940,121 +961,121 @@ export default function TradeoffExplainerModal({
                               </div>
 
                               <details className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
-                            <summary
-                              className={`cursor-pointer list-none text-[13px] font-semibold text-[#f4f6f8] marker:content-none [&::-webkit-details-marker]:hidden ${
-                                isArabic ? "mashwar-arabic" : ""
-                              }`}
-                            >
-                              {t("riskyCheckpoints")}
-                              {route.riskyCheckpointCount > 0
-                                ? t("riskyCount", { count: route.riskyCheckpointCount })
-                                : t("riskyNone")}
-                            </summary>
+                                <summary
+                                  className={`cursor-pointer list-none text-[13px] font-semibold text-[#f4f6f8] marker:content-none [&::-webkit-details-marker]:hidden ${
+                                    isArabic ? "mashwar-arabic" : ""
+                                  }`}
+                                >
+                                  {t("riskyCheckpoints")}
+                                  {route.riskyCheckpointCount > 0
+                                    ? t("riskyCount", { count: route.riskyCheckpointCount })
+                                    : t("riskyNone")}
+                                </summary>
 
-                            {route.riskyCheckpointCount > 0 ? (
-                              <div className="mt-3 grid gap-2">
-                                {route.riskyCheckpoints.map((checkpoint) => {
-                                  const currentStyle = getStatusStyle(checkpoint.currentStatus);
-                                  const etaStyle = getStatusStyle(checkpoint.predictedStatusAtEta);
+                                {route.riskyCheckpointCount > 0 ? (
+                                  <div className="mt-3 grid gap-2">
+                                    {route.riskyCheckpoints.map((checkpoint) => {
+                                      const currentStyle = getStatusStyle(checkpoint.currentStatus);
+                                      const etaStyle = getStatusStyle(checkpoint.predictedStatusAtEta);
 
-                                  return (
-                                    <div
-                                      key={`${checkpoint.checkpointId ?? checkpoint.name}-${checkpoint.name}`}
-                                      className="rounded-[14px] border border-white/8 bg-white/[0.03] p-3"
-                                    >
-                                      <div
-                                        className={`flex flex-wrap items-start justify-between gap-3 ${
-                                          isArabic ? "flex-row-reverse" : ""
-                                        }`}
-                                      >
-                                        <div className={isArabic ? "text-right mashwar-arabic" : ""}>
-                                          <p className="text-[13px] font-semibold text-[#f4f6f8]">
-                                            {checkpoint.name}
-                                          </p>
-                                          <p className="mt-1 text-[12px] text-[#94a3b8]">
-                                            {checkpoint.city ?? t("unknownCity")} ·{" "}
-                                            {checkpoint.routeDirection === "entering" ||
-                                            checkpoint.routeDirection === "leaving" ||
-                                            checkpoint.routeDirection === "transit" ||
-                                            checkpoint.routeDirection === "unknown"
-                                              ? directionLabel(checkpoint.routeDirection)
-                                              : (checkpoint.routeDirection ?? t("unknownDirection"))}
-                                          </p>
-                                        </div>
+                                      return (
                                         <div
-                                          className={`flex flex-wrap gap-2 ${
-                                            isArabic ? "justify-start" : "justify-end"
-                                          }`}
+                                          key={`${checkpoint.checkpointId ?? checkpoint.name}-${checkpoint.name}`}
+                                          className="rounded-[14px] border border-white/8 bg-white/[0.03] p-3"
                                         >
-                                          <span
-                                            className="rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-tight"
-                                            style={{
-                                              color: etaStyle.text,
-                                              backgroundColor: etaStyle.bg,
-                                              borderColor: etaStyle.border,
-                                            }}
+                                          <div
+                                            className={`flex flex-wrap items-start justify-between gap-3 ${
+                                              isArabic ? "flex-row-reverse" : ""
+                                            }`}
                                           >
-                                            {t("etaBadge", {
-                                              status: bucketLabel(checkpoint.predictedStatusAtEta),
-                                            })}
-                                          </span>
-                                          <span
-                                            className="rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-tight"
-                                            style={{
-                                              color: currentStyle.text,
-                                              backgroundColor: currentStyle.bg,
-                                              borderColor: currentStyle.border,
-                                            }}
-                                          >
-                                            {t("currentBadge", {
-                                              status: bucketLabel(checkpoint.currentStatus),
-                                            })}
-                                          </span>
-                                        </div>
-                                      </div>
+                                            <div className={isArabic ? "text-right mashwar-arabic" : ""}>
+                                              <p className="text-[13px] font-semibold text-[#f4f6f8]">
+                                                {checkpoint.name}
+                                              </p>
+                                              <p className="mt-1 text-[12px] text-[#94a3b8]">
+                                                {checkpoint.city ?? t("unknownCity")} ·{" "}
+                                                {checkpoint.routeDirection === "entering" ||
+                                                checkpoint.routeDirection === "leaving" ||
+                                                checkpoint.routeDirection === "transit" ||
+                                                checkpoint.routeDirection === "unknown"
+                                                  ? directionLabel(checkpoint.routeDirection)
+                                                  : (checkpoint.routeDirection ?? t("unknownDirection"))}
+                                              </p>
+                                            </div>
+                                            <div
+                                              className={`flex flex-wrap gap-2 ${
+                                                isArabic ? "justify-start" : "justify-end"
+                                              }`}
+                                            >
+                                              <span
+                                                className="rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-tight"
+                                                style={{
+                                                  color: etaStyle.text,
+                                                  backgroundColor: etaStyle.bg,
+                                                  borderColor: etaStyle.border,
+                                                }}
+                                              >
+                                                {t("etaBadge", {
+                                                  status: bucketLabel(checkpoint.predictedStatusAtEta),
+                                                })}
+                                              </span>
+                                              <span
+                                                className="rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-tight"
+                                                style={{
+                                                  color: currentStyle.text,
+                                                  backgroundColor: currentStyle.bg,
+                                                  borderColor: currentStyle.border,
+                                                }}
+                                              >
+                                                {t("currentBadge", {
+                                                  status: bucketLabel(checkpoint.currentStatus),
+                                                })}
+                                              </span>
+                                            </div>
+                                          </div>
 
-                                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                                        <MetricChip
-                                          label={t("metric.smartEta")}
-                                          value={formatMinutesI18n(
-                                            checkpoint.etaMinutes,
-                                            na,
-                                            locale,
-                                            t,
-                                          )}
-                                        />
-                                        <MetricChip
-                                          label={t("forecastConfidence")}
-                                          value={formatPercent(
-                                            checkpoint.forecastConfidence,
-                                            locale,
-                                            na,
-                                          )}
-                                        />
-                                        <MetricChip
-                                          label={t("metric.expectedDelay")}
-                                          value={formatMinutesI18n(
-                                            checkpoint.expectedDelayMinutes,
-                                            na,
-                                            locale,
-                                            t,
-                                          )}
-                                        />
-                                        <MetricChip
-                                          label={t("distanceFromRoute")}
-                                          value={formatDistance(
-                                            checkpoint.distanceFromRouteM,
-                                            locale,
-                                            na,
-                                          )}
-                                        />
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : null}
-                          </details>
+                                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                            <MetricChip
+                                              label={t("metric.smartEta")}
+                                              value={formatMinutesI18n(
+                                                checkpoint.etaMinutes,
+                                                na,
+                                                locale,
+                                                t,
+                                              )}
+                                            />
+                                            <MetricChip
+                                              label={t("forecastConfidence")}
+                                              value={formatPercent(
+                                                checkpoint.forecastConfidence,
+                                                locale,
+                                                na,
+                                              )}
+                                            />
+                                            <MetricChip
+                                              label={t("metric.expectedDelay")}
+                                              value={formatMinutesI18n(
+                                                checkpoint.expectedDelayMinutes,
+                                                na,
+                                                locale,
+                                                t,
+                                              )}
+                                            />
+                                            <MetricChip
+                                              label={t("distanceFromRoute")}
+                                              value={formatDistance(
+                                                checkpoint.distanceFromRouteM,
+                                                locale,
+                                                na,
+                                              )}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : null}
+                              </details>
                             </div>
                           </details>
                         </div>

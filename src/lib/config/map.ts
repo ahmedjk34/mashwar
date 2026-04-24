@@ -364,6 +364,20 @@ export function getRenderableRoutes(routes: NormalizedRoutes): RoutePath[] {
   );
 }
 
+/** Rounded minutes for UI summaries: smart ETA when present, else raw drive time (matches MapView popups). */
+export function getRouteDisplayEtaMinutes(route: RoutePath): number {
+  if (route.smartEtaMinutes != null && Number.isFinite(route.smartEtaMinutes)) {
+    return Math.round(route.smartEtaMinutes);
+  }
+
+  const ms = route.smartEtaMs ?? route.durationMs;
+  if (typeof ms === "number" && Number.isFinite(ms) && ms > 0) {
+    return Math.round(ms / 60000);
+  }
+
+  return Math.round(route.durationMinutes);
+}
+
 export function calculateRouteBounds(
   routes: NormalizedRoutes,
 ): [number, number, number, number] | null {

@@ -12,6 +12,7 @@ import ForecastHorizonCard, {
 import LocaleToggle from "@/components/map/LocaleToggle";
 import MapView from "@/components/map/MapView";
 import MashwarNaturalLanguageRouteModal from "@/components/map/MashwarNaturalLanguageRouteModal";
+import { RouteLoadingFlagStripe, RouteLoadingMicroDots } from "@/components/map/RouteLoadingCard";
 import RouteBuildingOverlay from "@/components/map/RouteBuildingOverlay";
 import RouteDetailsModal from "@/components/map/RouteDetailsModal";
 import TradeoffExplainerModal from "@/components/map/TradeoffExplainerModal";
@@ -23,7 +24,12 @@ import {
 import { translateServiceError } from "@/lib/i18n/translate-service-error";
 import { buildCorridorSegments } from "@/lib/heatmap/corridorSegments";
 import { normalizeCheckpointId } from "@/lib/heatmap/normalizeCheckpoint";
-import { hasValidCoordinates, getRenderableRoutes, getWorstStatus } from "@/lib/config/map";
+import {
+  getRouteDisplayEtaMinutes,
+  hasValidCoordinates,
+  getRenderableRoutes,
+  getWorstStatus,
+} from "@/lib/config/map";
 import { getCheckpoints } from "@/lib/services/checkpoints";
 import { getCheckpointForecast } from "@/lib/services/forecast";
 import { fetchHeatmapCache, streamHeatmapNetwork } from "@/lib/services/heatmap";
@@ -282,6 +288,8 @@ export default function MashwarHome() {
   const [gpsLoading, setGpsLoading] = useState({ from: false, to: false });
   const [gpsErrorField, setGpsErrorField] = useState<"from" | "to" | null>(null);
   const [swapAnimating, setSwapAnimating] = useState(false);
+  const [routeChromeExpanded, setRouteChromeExpanded] = useState(true);
+  const prevRoutePathCount = useRef<number | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routes, setRoutes] = useState<NormalizedRoutes>(EMPTY_ROUTES);
   const [routeDetailsRouteId, setRouteDetailsRouteId] = useState<string | null>(null);
@@ -379,6 +387,16 @@ export default function MashwarHome() {
   }, [corridorsRaw, checkpointsById]);
 
   const routePaths = useMemo(() => getRenderableRoutes(routes), [routes]);
+  const routeForCompactSummary = useMemo(() => {
+    if (routePaths.length === 0) {
+      return null;
+    }
+    const selectedId = routes.selectedRouteId;
+    if (selectedId) {
+      return routePaths.find((route) => route.routeId === selectedId) ?? routePaths[0];
+    }
+    return routePaths[0];
+  }, [routePaths, routes.selectedRouteId]);
   const routeDetailsRoute = useMemo(() => {
     if (!routeDetailsRouteId) {
       return null;
@@ -388,6 +406,26 @@ export default function MashwarHome() {
       routePaths.find((route) => route.routeId === routeDetailsRouteId) ?? null
     );
   }, [routeDetailsRouteId, routePaths]);
+
+  useEffect(() => {
+    const n = routePaths.length;
+    const prev = prevRoutePathCount.current;
+    if (n === 0) {
+      setRouteChromeExpanded(true);
+      prevRoutePathCount.current = 0;
+      return;
+    }
+    if (prev !== null && prev === 0 && n > 0) {
+      setRouteChromeExpanded(false);
+    }
+    prevRoutePathCount.current = n;
+  }, [routePaths.length]);
+
+  const handleTradeoffExplainerOpenChange = useCallback((dialogOpen: boolean) => {
+    if (dialogOpen) {
+      setRouteChromeExpanded(false);
+    }
+  }, []);
 
   const selectedCheckpointStatus = selectedCheckpoint
     ? getWorstStatus(
@@ -1022,6 +1060,16 @@ export default function MashwarHome() {
   const fromGpsSet = routeFrom?.kind === "current-location";
   const toGpsSet = toOrigin === "gps" && routeTo?.kind === "map-point";
 
+  const showRouteChromeCompact =
+    routePaths.length > 0 &&
+    !isRouteLoading &&
+    !endpointPlacementMode &&
+    !routeChromeExpanded;
+
+  const compactRouteSummary = routeForCompactSummary
+    ? tRoute("compactEta", { minutes: getRouteDisplayEtaMinutes(routeForCompactSummary) })
+    : tRoute("compactRouteReady");
+
   return (
     <main className="fixed inset-0 z-0 h-[100dvh] w-screen overflow-hidden bg-transparent text-[var(--clr-white)]">
       <RouteBuildingOverlay open={isRouteLoading} />
@@ -1049,8 +1097,48 @@ export default function MashwarHome() {
       </div>
 
       <div className="fixed left-1/2 top-5 z-[1100] flex w-[min(calc(100vw-24px),864px)] -translate-x-1/2 flex-col items-stretch gap-2">
+        {showRouteChromeCompact ? (
+          <div
+            className="overflow-hidden rounded-full border border-white/[0.14] shadow-[0_12px_44px_rgba(0,0,0,0.5),0_0_0_1px_rgba(0,98,51,0.14),0_0_28px_-8px_rgba(238,42,53,0.12)]"
+            style={{
+              animation: "mashwar-modal-in 220ms ease-out both",
+              backgroundColor: "rgba(12,14,16,0.9)",
+              backgroundImage:
+                "linear-gradient(155deg, rgba(0,98,51,0.18) 0%, transparent 45%), linear-gradient(325deg, rgba(238,42,53,0.14) 0%, transparent 42%), linear-gradient(180deg, rgba(245,245,240,0.06) 0%, transparent 28%)",
+              backdropFilter: "blur(14px)",
+            }}
+          >
+            <RouteLoadingFlagStripe dense className="opacity-95" />
+            <div className="flex items-center justify-between gap-2 px-3 py-2 sm:gap-3 sm:px-4">
+              <p className="mashwar-arabic min-w-0 flex-1 truncate text-center text-[12px] font-semibold text-[var(--clr-white)] sm:text-[13px]">
+                {compactRouteSummary}
+              </p>
+              <button
+                type="button"
+                onClick={() => setRouteChromeExpanded(true)}
+                title={tRoute("expandEndpointsTitle")}
+                aria-label={tRoute("expandEndpointsAria")}
+                className="mashwar-arabic shrink-0 rounded-full border border-white/18 bg-[rgba(245,245,240,0.08)] px-3 py-1.5 text-[11px] font-semibold text-[var(--clr-sand)] transition hover:border-[var(--clr-green)]/45 hover:bg-[rgba(0,98,51,0.15)] hover:text-[var(--clr-green-soft)] active:scale-[0.98]"
+              >
+                {tRoute("expandEndpoints")}
+              </button>
+              <button
+                type="button"
+                onClick={handleRouteButtonClick}
+                className="mashwar-arabic shrink-0 rounded-full bg-[var(--clr-red-deep)] px-3 py-1.5 text-[11px] font-semibold text-[var(--clr-white)] shadow-[0_2px_12px_rgba(0,0,0,0.35)] transition hover:bg-[var(--clr-red)] active:scale-[0.98]"
+              >
+                {tRoute("clear")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div
-          className="overflow-hidden rounded-full border border-white/[0.14] shadow-[0_12px_44px_rgba(0,0,0,0.5),0_0_0_1px_rgba(0,98,51,0.14),0_0_28px_-8px_rgba(238,42,53,0.12)]"
+          className={`overflow-hidden rounded-full border border-white/[0.14] shadow-[0_12px_44px_rgba(0,0,0,0.5),0_0_0_1px_rgba(0,98,51,0.14),0_0_28px_-8px_rgba(238,42,53,0.12)] transition duration-300 ease-out ${
+            showRouteChromeCompact
+              ? "pointer-events-none max-h-0 -translate-y-2 scale-[0.98] opacity-0"
+              : "max-h-[min(40vh,720px)] translate-y-0 scale-100 opacity-100"
+          }`}
           style={{
             backgroundColor: "rgba(12,14,16,0.9)",
             backgroundImage:
@@ -1058,12 +1146,7 @@ export default function MashwarHome() {
             backdropFilter: "blur(14px)",
           }}
         >
-          <div className="pointer-events-none flex h-[3px] w-full shrink-0 opacity-95" aria-hidden>
-            <span className="h-full flex-[2] bg-[var(--clr-black)]" />
-            <span className="h-full flex-[2] bg-[var(--clr-white)]" />
-            <span className="h-full flex-[2] bg-[var(--clr-green)]" />
-            <span className="h-full flex-[1.25] bg-[var(--clr-red)]" />
-          </div>
+          <RouteLoadingFlagStripe dense className="opacity-95" />
           <div
             dir="ltr"
             className="flex w-full max-w-full items-center justify-between gap-2 overflow-x-hidden px-2 py-1.5"
@@ -1104,10 +1187,14 @@ export default function MashwarHome() {
                   </span>
                   <div className="flex min-w-0 items-center justify-end gap-1">
                     {fromResolving ? (
-                      <span
-                        className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/20 border-t-[var(--clr-green-bright)]"
-                        aria-hidden
-                      />
+                      <span className="flex min-w-0 max-w-[min(30vw,160px)] flex-col items-end gap-1 py-0.5">
+                        <RouteLoadingFlagStripe dense className="w-14 max-w-full opacity-90" />
+                        <RouteLoadingMicroDots
+                          dotClassName="h-1.5 w-1.5 rounded-full"
+                          gapClass="gap-0.5"
+                          justify="end"
+                        />
+                      </span>
                     ) : (
                       <span
                         dir="rtl"
@@ -1154,13 +1241,15 @@ export default function MashwarHome() {
                   />
                 ) : null}
                 {gpsLoading.from ? (
-                  <span
-                    className="absolute h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[var(--clr-green-bright)]"
-                    aria-hidden
-                  />
+                  <span className="absolute inset-0 flex items-center justify-center" aria-hidden>
+                    <RouteLoadingMicroDots
+                      dotClassName="h-1.5 w-1.5 rounded-full"
+                      gapClass="gap-0.5"
+                    />
+                  </span>
                 ) : null}
                 <MdMyLocation
-                  className={`relative h-5 w-5 transition duration-200 ${fromGpsSet ? "scale-105 fill-[var(--clr-green-soft)]" : ""}`}
+                  className={`relative h-5 w-5 transition duration-200 ${gpsLoading.from ? "opacity-20" : ""} ${fromGpsSet ? "scale-105 fill-[var(--clr-green-soft)]" : ""}`}
                   aria-hidden
                 />
               </button>
@@ -1195,10 +1284,14 @@ export default function MashwarHome() {
                   </span>
                   <div className="flex min-w-0 items-center justify-end gap-1">
                     {toResolving ? (
-                      <span
-                        className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/20 border-t-red-300"
-                        aria-hidden
-                      />
+                      <span className="flex min-w-0 max-w-[min(30vw,160px)] flex-col items-end gap-1 py-0.5">
+                        <RouteLoadingFlagStripe dense className="w-14 max-w-full opacity-90" />
+                        <RouteLoadingMicroDots
+                          dotClassName="h-1.5 w-1.5 rounded-full"
+                          gapClass="gap-0.5"
+                          justify="end"
+                        />
+                      </span>
                     ) : (
                       <span
                         dir="rtl"
@@ -1243,13 +1336,15 @@ export default function MashwarHome() {
                   />
                 ) : null}
                 {gpsLoading.to ? (
-                  <span
-                    className="absolute h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[var(--clr-red)]"
-                    aria-hidden
-                  />
+                  <span className="absolute inset-0 flex items-center justify-center" aria-hidden>
+                    <RouteLoadingMicroDots
+                      dotClassName="h-1.5 w-1.5 rounded-full"
+                      gapClass="gap-0.5"
+                    />
+                  </span>
                 ) : null}
                 <MdMyLocation
-                  className={`relative h-5 w-5 transition duration-200 ${toGpsSet ? "scale-105 fill-[#fecaca]" : ""}`}
+                  className={`relative h-5 w-5 transition duration-200 ${gpsLoading.to ? "opacity-20" : ""} ${toGpsSet ? "scale-105 fill-[#fecaca]" : ""}`}
                   aria-hidden
                 />
               </button>
@@ -1730,6 +1825,7 @@ export default function MashwarHome() {
         explainer={routes.tradeoffExplainer}
         selectedRouteId={routes.selectedRouteId}
         onRouteSelect={handleSelectRoute}
+        onExplainerOpenChange={handleTradeoffExplainerOpenChange}
       />
     </main>
   );

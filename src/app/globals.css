@@ -432,6 +432,32 @@ select {
   box-shadow: 0 12px 28px rgba(45, 90, 95, 0.18);
 }
 
+/* Below fixed route chrome (top-5 + pill + gap); keeps trade-off CTA under the search bar */
+:root {
+  --mashwar-tradeoff-anchor-top: 6.75rem;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --mashwar-tradeoff-anchor-top: 7.25rem;
+  }
+}
+
+.mashwar-tradeoff-anchor {
+  top: var(--mashwar-tradeoff-anchor-top);
+}
+
+.mashwar-tradeoff-scroll-region {
+  max-height: min(68dvh, calc(100dvh - var(--mashwar-tradeoff-anchor-top) - 3.5rem));
+}
+
+.mashwar-tradeoff-collapsed-wrap {
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(107, 143, 86, 0.55),
+    0 0 36px -6px rgba(0, 166, 81, 0.32);
+}
+
 .mashwar-tradeoff-collapsed-cta {
   border-color: rgba(255, 255, 255, 0.1);
   background: rgba(11, 15, 20, 0.82);
@@ -441,6 +467,18 @@ select {
 .mashwar-tradeoff-collapsed-cta:hover {
   border-color: rgba(255, 255, 255, 0.16);
   background: rgba(11, 15, 20, 0.92);
+}
+
+/* Collapsed “show explainer” chip: stronger contrast when wrapped with flag stripe */
+.mashwar-tradeoff-collapsed-wrap .mashwar-tradeoff-collapsed-cta {
+  background: linear-gradient(180deg, rgba(18, 26, 22, 0.98) 0%, rgba(8, 11, 14, 0.96) 100%);
+  color: #f8fafc;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.mashwar-tradeoff-collapsed-wrap .mashwar-tradeoff-collapsed-cta:hover {
+  background: linear-gradient(180deg, rgba(26, 38, 30, 0.98) 0%, rgba(12, 16, 18, 0.98) 100%);
+  color: #fff;
 }
 
 @keyframes mashwar-shake {
@@ -499,6 +537,29 @@ select {
 
 .mashwar-route-loading-dot {
   animation: mashwar-route-dot-bounce 0.9s ease-in-out infinite;
+}
+
+@keyframes mashwar-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Tradeoff explainer: shell entrance + delayed body fade (handoff from route overlay) */
+.mashwar-tradeoff-shell-enter {
+  animation: mashwar-modal-in 220ms ease-out both;
+}
+
+.mashwar-tradeoff-body-stagger {
+  animation: mashwar-fade-in 260ms ease-out 85ms both;
+}
+
+.mashwar-tradeoff-collapsed-enter {
+  animation: mashwar-modal-in 220ms ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {

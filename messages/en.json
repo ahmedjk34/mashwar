@@ -138,6 +138,11 @@
       "swapEndpointsTitle": "Swap from and to",
       "swapEndpointsAria": "Swap start and destination",
       "heatmapTitle": "Heat map",
+      "compactRouteReady": "Route ready",
+      "compactEta": "~{minutes} min",
+      "expandEndpoints": "Edit route",
+      "expandEndpointsTitle": "Show route search bar",
+      "expandEndpointsAria": "Show route search bar with start and destination",
       "loadingModal": {
         "kicker": "Hang tight",
         "title": "Almost there — sketching your path",
@@ -196,7 +201,13 @@
       "signal": "Signal",
       "routeShort": "Route",
       "checkpointsDistance": "{count} checkpoints · {distance}",
-      "distanceOnly": "{distance}"
+      "distanceOnly": "{distance}",
+      "metricCheckpointBurden": "{percent}% checkpoint load",
+      "metricSeverity": "{percent}% delay pressure",
+      "metricConfidenceGap": "{percent}% model uncertainty",
+      "metricVolatility": "{percent}% variability",
+      "metricForecastConfidence": "{percent}% forecast confidence",
+      "metricFallback": "{label} · {value}"
     },
     "popup": {
       "routeNumber": "Route #{rank}",

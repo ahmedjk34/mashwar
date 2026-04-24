@@ -3,6 +3,69 @@
 import { useId } from "react";
 import { useLocale, useTranslations } from "next-intl";
 
+/** Palestinan palette order for loading dots (shared with overlays and top-bar micro loaders). */
+export const ROUTE_LOADING_DOT_SPECS = [
+  ["var(--clr-black)", "0ms"],
+  ["var(--clr-white)", "120ms"],
+  ["var(--clr-green)", "240ms"],
+  ["var(--clr-red)", "360ms"],
+] as const;
+
+export function RouteLoadingFlagStripe({
+  className = "",
+  dense = false,
+}: {
+  className?: string;
+  /** Thinner stripe for inline / top-bar use. */
+  dense?: boolean;
+}) {
+  const h = dense ? "h-[3px]" : "h-2";
+  const redFlex = dense ? "flex-[1.25]" : "flex-[1.4]";
+  return (
+    <div
+      className={`flex ${h} w-full shrink-0 overflow-hidden rounded-sm opacity-95 ${className}`}
+      aria-hidden
+    >
+      <span className="h-full flex-[2] bg-[var(--clr-black)]" />
+      <span className="h-full flex-[2] bg-[var(--clr-white)]" />
+      <span className="h-full flex-[2] bg-[var(--clr-green)]" />
+      <span className={`h-full ${redFlex} bg-[var(--clr-red)]`} />
+    </div>
+  );
+}
+
+export function RouteLoadingMicroDots({
+  className = "",
+  dotClassName = "h-2 w-2 rounded-full",
+  gapClass = "gap-1",
+  justify = "center" as "center" | "start" | "end",
+  count = 4 as 2 | 4,
+}: {
+  className?: string;
+  dotClassName?: string;
+  gapClass?: string;
+  justify?: "center" | "start" | "end";
+  count?: 2 | 4;
+}) {
+  const justifyClass =
+    justify === "start" ? "justify-start" : justify === "end" ? "justify-end" : "justify-center";
+  const specs = ROUTE_LOADING_DOT_SPECS.slice(0, count);
+  return (
+    <div className={`flex items-center ${gapClass} ${justifyClass} ${className}`} aria-hidden>
+      {specs.map(([color, delay], i) => (
+        <span
+          key={i}
+          className={`mashwar-route-loading-dot inline-block ${dotClassName}`}
+          style={{
+            backgroundColor: color,
+            animationDelay: delay,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export type RouteLoadingMessageNamespace =
   | "home.route.loadingModal"
   | "nlRoute.loadingModal";
@@ -43,14 +106,7 @@ export default function RouteLoadingCard({
       className={`mt-8 flex w-full gap-3 sm:mt-10 ${dir === "rtl" ? "justify-end" : "justify-start"}`}
       aria-hidden
     >
-      {(
-        [
-          ["var(--clr-black)", "0ms"],
-          ["var(--clr-white)", "120ms"],
-          ["var(--clr-green)", "240ms"],
-          ["var(--clr-red)", "360ms"],
-        ] as const
-      ).map(([color, delay], i) => (
+      {ROUTE_LOADING_DOT_SPECS.map(([color, delay], i) => (
         <span
           key={i}
           className="mashwar-route-loading-dot inline-block h-3.5 w-3.5 rounded-full sm:h-4 sm:w-4"
@@ -87,11 +143,8 @@ export default function RouteLoadingCard({
         </div>
 
         <div className="relative flex flex-1 flex-col px-5 pb-6 pt-6 sm:px-8 sm:pb-8 sm:pt-8 md:px-10">
-          <div className="mb-5 flex h-2 w-full overflow-hidden rounded-sm opacity-[0.92] sm:mb-6" aria-hidden>
-            <span className="h-full flex-[2] bg-[var(--clr-black)]" />
-            <span className="h-full flex-[2] bg-[var(--clr-white)]" />
-            <span className="h-full flex-[2] bg-[var(--clr-green)]" />
-            <span className="h-full flex-[1.35] bg-[var(--clr-red)]" />
+          <div className="mb-5 sm:mb-6">
+            <RouteLoadingFlagStripe className="opacity-[0.92]" />
           </div>
 
           <div className="flex min-h-[12rem] flex-1 flex-col sm:min-h-[14rem]">
@@ -168,12 +221,7 @@ export default function RouteLoadingCard({
       className={`relative w-full max-w-md overflow-hidden rounded-[var(--radius-xl)] border border-[var(--glass-border)] bg-[var(--glass-bg-raised)]/92 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-[var(--glass-blur)] ${className}`}
       dir={dir}
     >
-      <div className="flex h-2 w-full" aria-hidden>
-        <span className="h-full flex-[2] bg-[var(--clr-black)]" />
-        <span className="h-full flex-[2] bg-[var(--clr-white)]" />
-        <span className="h-full flex-[2] bg-[var(--clr-green)]" />
-        <span className="h-full flex-[1.4] bg-[var(--clr-red)]" />
-      </div>
+      <RouteLoadingFlagStripe />
 
       <div className="relative px-5 pb-6 pt-5 sm:px-6 sm:pb-7 sm:pt-6">
         <div
@@ -204,14 +252,7 @@ export default function RouteLoadingCard({
         </p>
 
         <div className="mt-6 flex justify-center gap-2.5 sm:mt-7" aria-hidden>
-          {(
-            [
-              ["var(--clr-black)", "0ms"],
-              ["var(--clr-white)", "120ms"],
-              ["var(--clr-green)", "240ms"],
-              ["var(--clr-red)", "360ms"],
-            ] as const
-          ).map(([color, delay], i) => (
+          {ROUTE_LOADING_DOT_SPECS.map(([color, delay], i) => (
             <span
               key={i}
               className="mashwar-route-loading-dot inline-block h-3 w-3 rounded-full"
