@@ -375,6 +375,33 @@ select {
   }
 }
 
+@keyframes mashwar-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  18% {
+    transform: translateX(-7px);
+  }
+
+  36% {
+    transform: translateX(7px);
+  }
+
+  54% {
+    transform: translateX(-5px);
+  }
+
+  72% {
+    transform: translateX(5px);
+  }
+}
+
+.mashwar-gps-shake {
+  animation: mashwar-shake 0.42s ease-out;
+}
+
 .mashwar-route-hover-popup .maplibregl-popup-content {
   background: var(--glass-bg-raised);
   backdrop-filter: var(--glass-blur);

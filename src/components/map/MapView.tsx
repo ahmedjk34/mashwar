@@ -80,6 +80,12 @@ const ROUTE_LAYER_OUTLINE_IDS = [
   "route-v2-slot-3-outline",
 ] as const;
 
+/** Crosshair + pin; hotspot at pin tip for map placement mode. */
+const MASHWAR_PLACEMENT_CURSOR =
+  `url("data:image/svg+xml,${encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36"><g stroke="rgba(255,255,255,0.95)" stroke-width="1.25" stroke-linecap="round"><path d="M18 3v6M18 27v6M3 18h6M27 18h6"/></g><path fill="#22c55e" stroke="#ffffff" stroke-width="1.4" d="M18 10.5c-2.6 0-4.7 2-4.7 4.7 0 3.2 4.7 10.3 4.7 10.3s4.7-7 4.7-10.3c0-2.6-2.1-4.7-4.7-4.7z"/></svg>',
+  )}") 18 24, crosshair`;
+
 interface RouteLabelItem {
   routeId: string;
   rank: number;
@@ -695,15 +701,15 @@ export default function MapView({
       dot.style.borderRadius = "9999px";
       dot.style.border = "3px solid #ffffff";
       dot.style.boxShadow = "0 8px 20px rgba(15, 23, 42, 0.28)";
-      dot.style.backgroundColor = role === "from" ? "#2563eb" : "#f59e0b";
+      dot.style.backgroundColor = role === "from" ? "#22c55e" : "#ef4444";
 
       const label = document.createElement("div");
-      label.textContent = role === "from" ? "START" : "FINISH";
+      label.textContent = role === "from" ? "من" : "إلى";
       label.style.padding = "3px 8px";
       label.style.borderRadius = "9999px";
       label.style.backgroundColor = "#ffffff";
-      label.style.border = `1px solid ${role === "from" ? "#bfdbfe" : "#fde68a"}`;
-      label.style.color = role === "from" ? "#1d4ed8" : "#b45309";
+      label.style.border = `1px solid ${role === "from" ? "#bbf7d0" : "#fecaca"}`;
+      label.style.color = role === "from" ? "#15803d" : "#b91c1c";
       label.style.fontSize = "10px";
       label.style.fontWeight = "800";
       label.style.letterSpacing = "0.22em";
@@ -1107,7 +1113,7 @@ export default function MapView({
     }
 
     const map = mapRef.current;
-    map.getCanvas().style.cursor = placementMode ? "crosshair" : "";
+    map.getCanvas().style.cursor = placementMode ? MASHWAR_PLACEMENT_CURSOR : "";
 
     const handleClusterClick = async (event: any) => {
       if (placementMode && onMapPlacement) {
@@ -1162,11 +1168,11 @@ export default function MapView({
     };
 
     const handlePointerEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
+      map.getCanvas().style.cursor = placementMode ? MASHWAR_PLACEMENT_CURSOR : "pointer";
     };
 
     const handlePointerLeave = () => {
-      map.getCanvas().style.cursor = "";
+      map.getCanvas().style.cursor = placementMode ? MASHWAR_PLACEMENT_CURSOR : "";
     };
 
     map.on("click", CHECKPOINT_CLUSTER_LAYER_ID, handleClusterClick);
@@ -1350,7 +1356,12 @@ export default function MapView({
 
     const handleRouteMouseEnter = (event: any) => {
       const route = getRouteFromEvent(event);
-      if (!route || placementMode) {
+      if (placementMode) {
+        map.getCanvas().style.cursor = MASHWAR_PLACEMENT_CURSOR;
+        return;
+      }
+
+      if (!route) {
         return;
       }
 
@@ -1382,7 +1393,7 @@ export default function MapView({
     };
 
     const handleRouteMouseLeave = () => {
-      map.getCanvas().style.cursor = "";
+      map.getCanvas().style.cursor = placementMode ? MASHWAR_PLACEMENT_CURSOR : "";
       closeRoutePopup();
     };
 
