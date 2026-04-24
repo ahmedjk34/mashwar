@@ -10,30 +10,18 @@ import {
 } from "react";
 
 import MapView from "@/components/map/MapView";
-import LocationSyncIcon from "@/components/map/LocationSyncIcon";
 import MashwarNaturalLanguageRouteModal from "@/components/map/MashwarNaturalLanguageRouteModal";
 import RouteDetailsModal from "@/components/map/RouteDetailsModal";
 import TradeoffExplainerModal from "@/components/map/TradeoffExplainerModal";
 import { buildCorridorSegments } from "@/lib/heatmap/corridorSegments";
 import { normalizeCheckpointId } from "@/lib/heatmap/normalizeCheckpoint";
-import {
-  DEMO_ROUTE_REQUEST,
-  hasValidCoordinates,
-  getRenderableRoutes,
-  getWorstStatus,
-} from "@/lib/config/map";
+import { hasValidCoordinates, getRenderableRoutes, getWorstStatus } from "@/lib/config/map";
 import { getCheckpoints } from "@/lib/services/checkpoints";
 import { getCheckpointForecast } from "@/lib/services/forecast";
-import {
-  createEmptyHeatmapBuildProgress,
-  fetchHeatmapCache,
-  mergeHeatmapProgress,
-  streamHeatmapNetwork,
-} from "@/lib/services/heatmap";
+import { fetchHeatmapCache, streamHeatmapNetwork } from "@/lib/services/heatmap";
 import { getRoute } from "@/lib/services/routing";
 import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 import type {
-  HeatmapBuildProgress,
   HeatmapCorridorFeature,
   HeatmapSegmentFeatureCollection,
 } from "@/lib/types/heatmap";
@@ -48,6 +36,9 @@ import type {
   RoutePoint,
   UserLocation,
 } from "@/lib/types/map";
+import { FaBrain, FaFire } from "react-icons/fa";
+import { IoClose } from "react-icons/io5";
+import { MdMyLocation } from "react-icons/md";
 
 const EMPTY_ROUTES: NormalizedRoutes = {
   generatedAt: null,
@@ -139,18 +130,6 @@ const STATUS_VISUALS: Record<
     softBg: "var(--glass-bg-mid)",
   },
 };
-
-function formatDateTimeLabel(value: string | null): string {
-  return formatDateTimeInPalestine(value);
-}
-
-function formatCoordinatePair(lat: number, lng: number): string {
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return "n/a";
-  }
-
-  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-}
 
 function getConfidenceTone(confidence: number | null): {
   color: string;
@@ -396,115 +375,6 @@ function StatusPill({
   );
 }
 
-function ConfidenceBadge({
-  confidence,
-  className = "",
-}: {
-  confidence: number | null;
-  className?: string;
-}) {
-  const tone = getConfidenceTone(confidence);
-
-  return (
-    <span
-      className={`mashwar-pill inline-flex items-center rounded-full px-3 py-1 ${className}`}
-      style={{ color: tone.color, borderColor: "var(--glass-border)" }}
-    >
-      <span className="mashwar-mono text-[12px] font-semibold tracking-[0.08em]">
-        {tone.label}
-      </span>
-    </span>
-  );
-}
-
-function EndpointChip({
-  label,
-  value,
-  helper,
-  isActive,
-  onClear,
-  onActivate,
-}: {
-  label: string;
-  value: string;
-  helper?: string;
-  isActive?: boolean;
-  onClear: () => void;
-  onActivate: () => void;
-}) {
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onActivate}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onActivate();
-        }
-      }}
-      dir="rtl"
-      className={`glass-card relative px-3 py-2.5 transition-all duration-[var(--duration-base)] ease-out ${isActive ? "mashwar-card-raised" : ""}`}
-      style={{
-        borderColor: isActive ? "var(--clr-green-bright)" : "var(--glass-border)",
-      }}
-    >
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onClear();
-        }}
-        className="mashwar-icon-button absolute left-2 top-2 inline-flex h-5 w-5 items-center justify-center border border-transparent text-[var(--clr-slate)]"
-        aria-label={`Clear ${label}`}
-      >
-        <span className="text-[15px] leading-none">×</span>
-      </button>
-      <p className="mashwar-mono text-[10px] uppercase tracking-[0.26em] text-[var(--clr-slate)]">
-        {label}
-      </p>
-      <div className="mashwar-arabic mt-2 min-h-[26px] pl-6 text-[15px] font-medium text-[var(--clr-white)]">
-        {value || "غير محدد"}
-      </div>
-      {helper ? (
-        <p className="mashwar-arabic mt-1 text-[10px] text-[var(--clr-green-soft)]">{helper}</p>
-      ) : null}
-    </div>
-  );
-}
-
-function MapStatChip({
-  label,
-  value,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  tone?: "neutral" | "green" | "amber";
-}) {
-  const toneClass =
-    tone === "green"
-      ? "text-[var(--risk-low)]"
-      : tone === "amber"
-        ? "text-[var(--risk-med)]"
-        : "text-[var(--clr-sand)]";
-
-  const dotColor =
-    tone === "green"
-      ? "var(--risk-low)"
-      : tone === "amber"
-        ? "var(--risk-med)"
-        : "var(--clr-slate)";
-
-  return (
-    <span className="mashwar-pill inline-flex items-center gap-2 px-3 py-1.5 text-[11px] text-[var(--clr-sand)]">
-      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: dotColor }} />
-      <span className={`mashwar-mono ${toneClass}`}>{value}</span>
-      <span className="text-[var(--clr-slate)]">{label}</span>
-    </span>
-  );
-}
-
 function ForecastEntry({
   row,
 }: {
@@ -584,185 +454,11 @@ function ForecastEntry({
   );
 }
 
-function formatHeatmapProgressLabel(progress: HeatmapBuildProgress): string {
-  if (progress.total <= 0) {
-    return "0%";
-  }
-
-  return `${progress.percentage}%`;
-}
-
-function HeatmapToggle({
-  enabled,
-  loading,
-  onToggle,
-}: {
-  enabled: boolean;
-  loading: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="glass-card flex w-full items-center justify-between gap-3 px-3 py-3 text-right transition-all duration-[var(--duration-base)] ease-out hover:bg-[var(--glass-bg-raised)]"
-      style={{
-        borderColor: enabled ? "var(--clr-green-bright)" : "var(--glass-border)",
-        backgroundColor: enabled ? "var(--clr-green-dim)" : undefined,
-      }}
-    >
-      <div className="min-w-0">
-        <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[var(--clr-slate)]">
-          UNCERTAINTY
-        </p>
-        <p dir="rtl" className="mashwar-arabic mt-1 text-[14px] font-semibold text-[var(--clr-white)]">
-          عدم اليقين
-        </p>
-        <p className="mt-1 text-[11px] text-[var(--clr-slate)]">
-          Uncertainty Network
-        </p>
-      </div>
-
-      <span
-        className="mashwar-pill inline-flex items-center gap-2 px-3 py-1 text-[11px]"
-        style={{
-          borderColor: enabled ? "var(--clr-green-bright)" : "var(--glass-border)",
-          color: enabled ? "var(--clr-green-soft)" : "var(--clr-sand)",
-          backgroundColor: enabled ? "rgba(34, 197, 94, 0.12)" : "var(--glass-bg-mid)",
-        }}
-      >
-        {loading ? <span className="mashwar-live-dot" /> : null}
-        <span className="mashwar-mono">{enabled ? "ON" : "OFF"}</span>
-      </span>
-    </button>
-  );
-}
-
-function HeatmapLegendPanel({
-  progress,
-  isBuilding,
-  isLoading,
-  error,
-  corridorCount,
-}: {
-  progress: HeatmapBuildProgress;
-  isBuilding: boolean;
-  isLoading: boolean;
-  error: string | null;
-  corridorCount: number;
-}) {
-  const progressWidth =
-    progress.total > 0 ? `${Math.min(100, Math.max(0, progress.percentage))}%` : "0%";
-  const statusLabel = error
-    ? "تعذر تحميل شبكة عدم اليقين"
-    : isBuilding
-      ? "جاري بناء الشبكة..."
-      : isLoading
-        ? "جارٍ تحميل الشبكة..."
-        : corridorCount > 0
-          ? "تم بناء الشبكة"
-          : "بانتظار البيانات";
-
-  return (
-    <section
-      className="mashwar-panel p-[var(--panel-padding)]"
-      style={{ animation: "mashwar-panel-in-left 220ms ease-out" }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[var(--clr-slate)]">
-            UNCERTAINTY NETWORK
-          </p>
-          <h3 dir="rtl" className="mashwar-arabic mashwar-display mt-2 text-[var(--text-md)] text-[var(--clr-white)]">
-            شبكة عدم اليقين
-          </h3>
-          <p className="mt-2 text-[12px] text-[var(--clr-slate)]">
-            Shows movement reliability between checkpoints
-          </p>
-          <p dir="rtl" className="mashwar-arabic mt-1 text-[12px] text-[var(--clr-slate)]">
-            توضح مدى استقرار الحركة بين الحواجز
-          </p>
-        </div>
-
-        <span className="mashwar-pill px-3 py-1 text-[11px]">
-          <span className="mashwar-mono">{corridorCount}</span>
-          <span>corridors</span>
-        </span>
-      </div>
-
-      <div className="mt-4 grid gap-2">
-        {[
-          { labelAr: "مستقر", labelEn: "Stable", color: "#22c55e" },
-          { labelAr: "متوسط", labelEn: "Uncertain", color: "#facc15" },
-          { labelAr: "متقلب", labelEn: "Volatile", color: "#ef4444" },
-        ].map((item) => (
-          <div key={item.labelEn} className="glass-card flex items-center justify-between gap-3 px-3 py-2">
-            <div className="flex items-center gap-3">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-              <span dir="rtl" className="mashwar-arabic text-[13px] text-[var(--clr-white)]">
-                {item.labelAr}
-              </span>
-            </div>
-            <span className="mashwar-mono text-[10px] uppercase tracking-[0.18em] text-[var(--clr-slate)]">
-              {item.labelEn}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="glass-card mt-4 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p dir="rtl" className="mashwar-arabic text-[13px] text-[var(--clr-white)]">
-              {statusLabel}
-            </p>
-            <p className="mt-1 text-[11px] text-[var(--clr-slate)]">
-              {progress.completed} / {progress.total || "?"} corridors
-            </p>
-          </div>
-          <span className="mashwar-pill px-3 py-1 text-[11px]">
-            <span className="mashwar-mono">{formatHeatmapProgressLabel(progress)}</span>
-          </span>
-        </div>
-
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/8">
-          <div
-            className="h-full rounded-full transition-all duration-300 ease-out"
-            style={{
-              width: progressWidth,
-              background:
-                "linear-gradient(90deg, #22c55e 0%, #facc15 50%, #ef4444 100%)",
-            }}
-          />
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-          <span className="mashwar-pill px-3 py-1">
-            built <span className="mashwar-mono">{progress.built}</span>
-          </span>
-          <span className="mashwar-pill px-3 py-1">
-            skipped <span className="mashwar-mono">{progress.skipped}</span>
-          </span>
-          <span className="mashwar-pill px-3 py-1">
-            failed <span className="mashwar-mono">{progress.failed}</span>
-          </span>
-        </div>
-
-        {error ? (
-          <p
-            className="mt-3 rounded-[var(--radius-md)] border px-3 py-2 text-[12px] text-[var(--clr-white)]"
-            style={{
-              borderColor: "var(--risk-high)",
-              backgroundColor: "var(--risk-high-bg)",
-            }}
-          >
-            {error}
-          </p>
-        ) : null}
-      </div>
-    </section>
-  );
-}
+const DEFAULT_GEO_OPTIONS: PositionOptions = {
+  enableHighAccuracy: true,
+  timeout: 10000,
+  maximumAge: 0,
+};
 
 export default function MashwarHome() {
   const [checkpoints, setCheckpoints] = useState<MapCheckpoint[]>([]);
@@ -771,6 +467,7 @@ export default function MashwarHome() {
   const [selectedCheckpointForecast, setSelectedCheckpointForecast] =
     useState<NormalizedCheckpointForecast | null>(null);
   const [isNaturalRouteModalOpen, setIsNaturalRouteModalOpen] = useState(false);
+  const [smartRouterOn, setSmartRouterOn] = useState(false);
   const [checkpointError, setCheckpointError] = useState<string | null>(null);
   const [forecastError, setForecastError] = useState<string | null>(null);
   const [isForecastLoading, setIsForecastLoading] = useState(false);
@@ -778,11 +475,9 @@ export default function MashwarHome() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isSyncingLocation, setIsSyncingLocation] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
-  const [isLoadingCheckpoints, setIsLoadingCheckpoints] = useState(true);
   const [routes, setRoutes] = useState<NormalizedRoutes>(EMPTY_ROUTES);
   const [routeDetailsRouteId, setRouteDetailsRouteId] = useState<string | null>(null);
   const [isRoutePending, startRouteTransition] = useTransition();
-  const [checkpointReloadNonce, setCheckpointReloadNonce] = useState(0);
   const [heatmapEnabled, setHeatmapEnabled] = useState(false);
   const [corridorsRaw, setCorridorsRaw] = useState<HeatmapCorridorFeature[]>([]);
   const [corridorSegments, setCorridorSegments] =
@@ -792,9 +487,6 @@ export default function MashwarHome() {
     });
   const [isHeatmapLoading, setIsHeatmapLoading] = useState(false);
   const [isHeatmapBuilding, setIsHeatmapBuilding] = useState(false);
-  const [buildProgress, setBuildProgress] = useState<HeatmapBuildProgress>(
-    createEmptyHeatmapBuildProgress(),
-  );
   const [heatmapError, setHeatmapError] = useState<string | null>(null);
   const [routeFrom, setRouteFrom] = useState<
     | { kind: "current-location" }
@@ -818,7 +510,6 @@ export default function MashwarHome() {
     let cancelled = false;
 
     async function loadCheckpoints(): Promise<void> {
-      setIsLoadingCheckpoints(true);
       setCheckpointError(null);
 
       try {
@@ -834,10 +525,6 @@ export default function MashwarHome() {
               : "Unable to load checkpoint data.",
           );
         }
-      } finally {
-        if (!cancelled) {
-          setIsLoadingCheckpoints(false);
-        }
       }
     }
 
@@ -845,23 +532,7 @@ export default function MashwarHome() {
     return () => {
       cancelled = true;
     };
-  }, [checkpointReloadNonce]);
-
-  const mappableCheckpointCount = useMemo(() => {
-    return checkpoints.filter(
-      (checkpoint) =>
-        typeof checkpoint.latitude === "number" &&
-        typeof checkpoint.longitude === "number",
-    ).length;
-  }, [checkpoints]);
-
-  const checkpointsWithoutCoordinates = useMemo(() => {
-    return checkpoints.filter(
-      (checkpoint) =>
-        typeof checkpoint.latitude !== "number" ||
-        typeof checkpoint.longitude !== "number",
-    );
-  }, [checkpoints]);
+  }, []);
 
   const checkpointsById = useMemo(() => {
     return new Map(
@@ -899,9 +570,6 @@ export default function MashwarHome() {
   );
   const travelWindow = selectedCheckpointForecast?.travelWindow ?? null;
 
-  const selectedCheckpointStatusVisual = selectedCheckpointStatus
-    ? STATUS_VISUALS[selectedCheckpointStatus]
-    : STATUS_VISUALS["غير معروف"];
   const enteringVisual = selectedCheckpoint
     ? STATUS_VISUALS[selectedCheckpoint.enteringStatus]
     : STATUS_VISUALS["غير معروف"];
@@ -937,29 +605,18 @@ export default function MashwarHome() {
 
       if ("type" in payload) {
         setCorridorsRaw(payload.features);
-        setBuildProgress((current) => {
-          const next = createEmptyHeatmapBuildProgress();
-          next.built = payload.features.length;
-          next.completed = payload.features.length;
-          next.total = payload.features.length;
-          next.percentage = payload.features.length > 0 ? 100 : 0;
-          next.cached = true;
-          return current.total > next.total ? current : next;
-        });
         setIsHeatmapBuilding(false);
         setIsHeatmapLoading(false);
         return;
       }
 
       setIsHeatmapBuilding(true);
-      setBuildProgress(createEmptyHeatmapBuildProgress());
 
       const source = streamHeatmapNetwork({
         onStart: (event) => {
-          setBuildProgress((current) => mergeHeatmapProgress(current, event));
           setIsHeatmapBuilding(!(event.cached ?? false));
         },
-        onRouteBuilt: (corridor, event) => {
+        onRouteBuilt: (corridor, _event) => {
           setCorridorsRaw((current) => {
             if (current.some((item) => item.properties.id === corridor.properties.id)) {
               return current;
@@ -967,42 +624,13 @@ export default function MashwarHome() {
 
             return [...current, corridor];
           });
-          setBuildProgress((current) => {
-            const merged = mergeHeatmapProgress(current, event);
-            return {
-              ...merged,
-              built: Math.max(
-                merged.built,
-                current.built + (event.corridor ? 1 : 0),
-              ),
-            };
-          });
         },
-        onRouteSkipped: (event) => {
-          setBuildProgress((current) => {
-            const merged = mergeHeatmapProgress(current, event);
-            return { ...merged, skipped: Math.max(merged.skipped, current.skipped + 1) };
-          });
-        },
-        onRouteFailed: (event) => {
-          setBuildProgress((current) => {
-            const merged = mergeHeatmapProgress(current, event);
-            return { ...merged, failed: Math.max(merged.failed, current.failed + 1) };
-          });
-        },
-        onProgress: (event) => {
-          setBuildProgress((current) => mergeHeatmapProgress(current, event));
-        },
-        onDone: (event) => {
-          setBuildProgress((current) => mergeHeatmapProgress(current, event));
+        onDone: () => {
           setIsHeatmapLoading(false);
           setIsHeatmapBuilding(false);
           closeHeatmapStream();
         },
-        onError: (message, event) => {
-          if (event) {
-            setBuildProgress((current) => mergeHeatmapProgress(current, event));
-          }
+        onError: (message) => {
           setHeatmapError(message);
           setIsHeatmapLoading(false);
           setIsHeatmapBuilding(false);
@@ -1013,7 +641,7 @@ export default function MashwarHome() {
       eventSourceRef.current = source;
     } catch (error) {
       setHeatmapError(
-        error instanceof Error ? error.message : "تعذر تحميل شبكة عدم اليقين",
+        error instanceof Error ? error.message : "تعذر تحميل الخريطة الحرارية",
       );
       setIsHeatmapBuilding(false);
       setIsHeatmapLoading(false);
@@ -1039,30 +667,11 @@ export default function MashwarHome() {
     void ensureHeatmapNetworkLoaded();
   }, [corridorsRaw.length, ensureHeatmapNetworkLoaded, heatmapEnabled]);
 
-  function handleLoadDemoRoute(): void {
-    setRouteError(null);
-
-    startRouteTransition(() => {
-      void (async () => {
-        try {
-          const nextRoutes = await getRoute(DEMO_ROUTE_REQUEST);
-          setRoutes(nextRoutes);
-          setRouteDetailsRouteId(null);
-        } catch (error) {
-          setRouteError(
-            error instanceof Error
-              ? error.message
-              : "Unable to load route data.",
-          );
-        }
-      })();
-    });
-  }
-
   function handleClearRoute(): void {
     setRouteError(null);
     setRoutes(EMPTY_ROUTES);
     setRouteDetailsRouteId(null);
+    setSmartRouterOn(false);
   }
 
   const handleSelectRoute = useCallback((routeId: string) => {
@@ -1101,6 +710,7 @@ export default function MashwarHome() {
       setRouteDetailsRouteId(null);
       setEndpointPlacementMode(null);
       setIsNaturalRouteModalOpen(false);
+      setSmartRouterOn(true);
     },
     [],
   );
@@ -1169,10 +779,6 @@ export default function MashwarHome() {
     });
   }
 
-  function handleRetryCheckpoints(): void {
-    setCheckpointReloadNonce((current) => current + 1);
-  }
-
   const handleToggleHeatmap = useCallback(() => {
     setHeatmapEnabled((current) => {
       const next = !current;
@@ -1185,7 +791,7 @@ export default function MashwarHome() {
     });
   }, [ensureHeatmapNetworkLoaded]);
 
-  const handleSyncLocation = useCallback(() => {
+  const handleGpsAsFrom = useCallback(() => {
     setLocationError(null);
 
     if (!navigator.geolocation) {
@@ -1202,7 +808,9 @@ export default function MashwarHome() {
           lng: position.coords.longitude,
           accuracy: position.coords.accuracy,
         });
-        setRouteFrom((current) => current ?? { kind: "current-location" });
+        setRouteFrom({ kind: "current-location" });
+        setRouteError(null);
+        setEndpointPlacementMode(null);
         setIsSyncingLocation(false);
       },
       (error) => {
@@ -1223,14 +831,70 @@ export default function MashwarHome() {
           return;
         }
 
-        setLocationError("Unable to sync your location right now.");
+        setLocationError("Unable to read your location right now.");
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 15000,
-      },
+      DEFAULT_GEO_OPTIONS,
     );
+  }, []);
+
+  const handleGpsAsTo = useCallback(() => {
+    setLocationError(null);
+
+    if (!navigator.geolocation) {
+      setLocationError("Location access is not supported in this browser.");
+      return;
+    }
+
+    setIsSyncingLocation(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setUserLocation({
+          lat,
+          lng,
+          accuracy: position.coords.accuracy,
+        });
+        setRouteTo({ kind: "map-point", lat, lng });
+        setRouteError(null);
+        setEndpointPlacementMode(null);
+        setIsSyncingLocation(false);
+      },
+      (error) => {
+        setIsSyncingLocation(false);
+
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationError("Location permission was denied.");
+          return;
+        }
+
+        if (error.code === error.POSITION_UNAVAILABLE) {
+          setLocationError("Your current location could not be determined.");
+          return;
+        }
+
+        if (error.code === error.TIMEOUT) {
+          setLocationError("Location request timed out. Please try again.");
+          return;
+        }
+
+        setLocationError("Unable to read your location right now.");
+      },
+      DEFAULT_GEO_OPTIONS,
+    );
+  }, []);
+
+  const handleSmartRouterCardClick = useCallback(() => {
+    setSmartRouterOn((prev) => {
+      const next = !prev;
+      if (next) {
+        setIsNaturalRouteModalOpen(true);
+      } else {
+        setIsNaturalRouteModalOpen(false);
+      }
+      return next;
+    });
   }, []);
 
   const handleCheckpointSelect = useCallback(
@@ -1343,17 +1007,6 @@ export default function MashwarHome() {
     setEndpointPlacementMode(null);
   }, [selectedCheckpoint]);
 
-  const handleUseCurrentLocationAsOrigin = useCallback(() => {
-    if (!userLocation) {
-      setRouteError("Sync your location first before using it as the origin.");
-      return;
-    }
-
-    setRouteError(null);
-    setRouteFrom({ kind: "current-location" });
-    setEndpointPlacementMode(null);
-  }, [userLocation]);
-
   const handleActivateEndpointPlacement = useCallback(
     (endpoint: "from" | "to") => {
       setEndpointPlacementMode((current) => (current === endpoint ? null : endpoint));
@@ -1383,289 +1036,198 @@ export default function MashwarHome() {
   const routeToLabel = routeTo
     ? formatSelectionLabel(routeTo, checkpointsById, userLocation)
     : "غير محدد";
-  const placementBadgeLabel =
-    endpointPlacementMode === "from"
-      ? "Tap map to place FROM"
-      : endpointPlacementMode === "to"
-        ? "Tap map to place TO"
-        : "Ready";
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-transparent text-[var(--clr-white)]">
+    <main className="fixed inset-0 z-0 h-[100dvh] w-screen overflow-hidden bg-transparent text-[var(--clr-white)]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,var(--clr-green-dim),transparent_28%),radial-gradient(circle_at_82%_12%,var(--glass-bg-raised),transparent_26%),radial-gradient(circle_at_bottom,var(--clr-red-soft),transparent_22%)]" />
 
-      <MapView
-        checkpoints={checkpoints}
-        routes={routes}
-        departAt={routes.departAt}
-        userLocation={userLocation}
-        routeEndpoints={{
-          from: routeFromPoint,
-          to: routeToPoint,
-        }}
-        heatmapEnabled={heatmapEnabled}
-        heatmapSegments={corridorSegments}
-        placementMode={endpointPlacementMode}
-        onMapPlacement={handlePlaceEndpoint}
-        onCheckpointSelect={handleCheckpointSelect}
-        onRouteSelect={handleSelectRoute}
-        onRouteOpen={handleOpenRouteDetails}
-      />
+      <div className="absolute inset-0 h-full w-full">
+        <MapView
+          checkpoints={checkpoints}
+          routes={routes}
+          departAt={routes.departAt}
+          userLocation={userLocation}
+          routeEndpoints={{
+            from: routeFromPoint,
+            to: routeToPoint,
+          }}
+          heatmapEnabled={heatmapEnabled}
+          heatmapSegments={corridorSegments}
+          placementMode={endpointPlacementMode}
+          onMapPlacement={handlePlaceEndpoint}
+          onCheckpointSelect={handleCheckpointSelect}
+          onRouteSelect={handleSelectRoute}
+          onRouteOpen={handleOpenRouteDetails}
+        />
+      </div>
 
       <div
-        aria-hidden="true"
-        className="mashwar-column-shell pointer-events-none absolute left-[var(--space-3)] top-[var(--space-3)] bottom-[var(--space-3)] z-10 w-[min(calc(100vw-var(--space-6)),calc(var(--panel-width)+var(--space-5)))]"
-      />
-
-      <aside className="pointer-events-auto absolute left-[var(--space-4)] top-[var(--space-4)] z-20 flex w-[min(calc(100vw-var(--space-8)),var(--panel-width))] flex-col gap-[var(--space-3)]">
-        <section className="mashwar-panel">
+        className="fixed left-1/2 top-5 z-[1100] w-[min(calc(100vw-24px),720px)] -translate-x-1/2 overflow-hidden rounded-full border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+        style={{
+          backgroundColor: "rgba(20,20,20,0.85)",
+          backdropFilter: "blur(12px)",
+        }}
+      >
+        <div
+          dir="ltr"
+          className="flex max-w-full items-center gap-1 overflow-x-hidden px-2 py-1.5"
+        >
           <button
             type="button"
-            onClick={handleSyncLocation}
+            onClick={handleGpsAsFrom}
             disabled={isSyncingLocation}
-            className="mashwar-icon-button absolute left-[var(--space-4)] top-[var(--space-4)] inline-flex h-10 w-10 items-center justify-center disabled:cursor-wait disabled:opacity-55"
-            aria-label={isSyncingLocation ? "Syncing location" : "Sync location"}
+            title="استخدام موقعي كنقطة انطلاق"
+            aria-label="استخدام موقعي كنقطة انطلاق"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-emerald-400 transition hover:bg-white/10 disabled:cursor-wait disabled:opacity-50"
           >
-            <LocationSyncIcon className={`h-5 w-5 ${isSyncingLocation ? "animate-pulse" : ""}`} />
+            <MdMyLocation className="h-5 w-5" aria-hidden />
           </button>
 
-          <div className="p-[var(--panel-padding)] pl-16">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="mashwar-mono text-[10px] uppercase tracking-[0.34em] text-[var(--clr-slate)]">
-                  MOVEMENT
-                </p>
-                <h2 dir="rtl" className="mashwar-arabic mashwar-display mt-2 text-[var(--text-lg)] text-[var(--clr-white)]">
-                  من - إلى
-                </h2>
-              </div>
-
-              <span
-                className="mashwar-pill px-3 py-1 text-[11px] font-semibold"
-                style={{
-                  borderColor: endpointPlacementMode
-                    ? "var(--clr-green-bright)"
-                    : "var(--glass-border)",
-                  color: endpointPlacementMode
-                    ? "var(--clr-green-soft)"
-                    : "var(--clr-sand)",
-                  backgroundColor: endpointPlacementMode
-                    ? "var(--clr-green-dim)"
-                    : "var(--glass-bg-mid)",
-                }}
-              >
-                <span className={endpointPlacementMode ? "mashwar-live-dot" : "mashwar-live-dot"} />
-                <span className="mashwar-mono">{placementBadgeLabel}</span>
-              </span>
-            </div>
-
-            <div className="mt-[var(--space-4)] grid gap-[var(--space-3)]">
-              <EndpointChip
-                label="من"
-                value={routeFromLabel}
-                helper={endpointPlacementMode === "from" ? "اضغط على أي نقطة في الخريطة" : undefined}
-                isActive={endpointPlacementMode === "from"}
-                onActivate={() => handleActivateEndpointPlacement("from")}
-                onClear={() => setRouteFrom(null)}
-              />
-              <EndpointChip
-                label="إلى"
-                value={routeToLabel}
-                helper={endpointPlacementMode === "to" ? "اضغط على أي نقطة في الخريطة" : undefined}
-                isActive={endpointPlacementMode === "to"}
-                onActivate={() => handleActivateEndpointPlacement("to")}
-                onClear={() => setRouteTo(null)}
-              />
-            </div>
-
-            <div className="mt-[var(--space-3)] flex flex-wrap gap-[var(--space-2)]">
-              <button
-                type="button"
-                onClick={handleUseCurrentLocationAsOrigin}
-                disabled={!userLocation}
-                className="mashwar-action px-3 py-2 text-[11px] disabled:cursor-not-allowed"
-              >
-                الحالي
-              </button>
-              <button
-                type="button"
-                onClick={handleUseSelectedCheckpointAsOrigin}
-                disabled={!selectedCheckpoint}
-                className="mashwar-action px-3 py-2 text-[11px] disabled:cursor-not-allowed"
-              >
-                استخدم كمن
-              </button>
-              <button
-                type="button"
-                onClick={handleUseSelectedCheckpointAsDestination}
-                disabled={!selectedCheckpoint}
-                className="mashwar-action px-3 py-2 text-[11px] disabled:cursor-not-allowed"
-              >
-                استخدم كإلى
-              </button>
-            </div>
-
+          <div className="flex min-w-0 shrink items-center gap-0.5 rounded-full bg-white/5 px-1 py-0.5">
             <button
               type="button"
-              onClick={handleRouteButtonClick}
-              disabled={isRoutePending}
-              className="mashwar-action mashwar-action-primary mt-[var(--space-3)] flex h-10 w-full items-center justify-center gap-2 px-4 text-sm font-semibold disabled:cursor-wait disabled:opacity-70"
+              onClick={() => handleActivateEndpointPlacement("from")}
+              className={`flex min-w-0 max-w-[min(42vw,200px)] flex-col rounded-full px-2.5 py-1.5 text-left transition ${
+                endpointPlacementMode === "from"
+                  ? "ring-2 ring-emerald-400/90 ring-offset-2 ring-offset-[rgba(20,20,20,0.85)]"
+                  : "hover:bg-white/8"
+              }`}
             >
-              <span>{routePaths.length > 0 ? "مسح المسار" : "ابدأ التوجيه"}</span>
-              {routePaths.length > 0 ? (
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/12 text-[12px] leading-none">
-                  ×
-                </span>
-              ) : null}
+              <span className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-white/45">
+                من
+              </span>
+              <span dir="rtl" className="mashwar-arabic truncate text-[13px] font-medium text-white">
+                {routeFromLabel}
+              </span>
             </button>
-
-            <div className="mt-[var(--space-3)] flex flex-wrap items-center gap-[var(--space-2)] text-[11px] text-[var(--clr-slate)]">
-              {routeError ? (
-                <span className="mashwar-pill px-3 py-1 text-[var(--clr-white)]" style={{ borderColor: "var(--risk-high)", backgroundColor: "var(--risk-high-bg)" }}>
-                  {routeError}
-                </span>
-              ) : null}
-              {locationError ? (
-                <span className="mashwar-pill px-3 py-1 text-[var(--clr-white)]" style={{ borderColor: "var(--risk-high)", backgroundColor: "var(--risk-high-bg)" }}>
-                  {locationError}
-                </span>
-              ) : null}
-            </div>
-
-            {routePaths.length > 0 ? (
-              <div className="glass-card mt-[var(--space-4)] p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[var(--clr-slate)]">
-                      ROUTES ON MAP
-                    </p>
-                    <p className="mt-1 text-[13px] text-[var(--clr-sand)]">
-                      كل المسارات المعادة تظهر فوق الخريطة. مرر فوق أي مسار لرؤية الوقت والمخاطر ثم اضغط لفتح التفاصيل.
-                    </p>
-                  </div>
-                  <span className="mashwar-pill px-3 py-1 text-[11px]">
-                    {routePaths.length} ACTIVE
-                  </span>
-                </div>
-              </div>
+            {routeFrom ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setRouteFrom(null);
+                  setRouteError(null);
+                }}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/50 transition hover:bg-white/10 hover:text-white"
+                aria-label="مسح نقطة الانطلاق"
+              >
+                <IoClose className="h-4 w-4" aria-hidden />
+              </button>
             ) : null}
           </div>
 
-          <div className="border-t border-[var(--glass-border)]" />
+          <span className="shrink-0 px-0.5 text-lg font-semibold text-white/70" aria-hidden>
+            →
+          </span>
 
-          <div className="space-y-[var(--space-4)] p-[var(--panel-padding)]">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="mashwar-display text-[var(--text-md)] text-[var(--clr-white)]">
-                  لوحة الحركة
-                </h3>
-                <div className="mashwar-pill mt-[var(--space-2)] px-3 py-1.5 text-[11px]">
-                  <span className="mashwar-live-dot" />
-                  <span className="mashwar-mono">{checkpoints.length}</span>
-                  <span>CHECKPOINTS</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <MapStatChip
-                label="mappable"
-                value={`${mappableCheckpointCount}`}
-                tone="neutral"
-              />
-              <MapStatChip
-                label="missing coords"
-                value={`${checkpointsWithoutCoordinates.length}`}
-                tone="amber"
-              />
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2">
+          <div className="flex min-w-0 shrink items-center gap-0.5 rounded-full bg-white/5 px-1 py-0.5">
+            <button
+              type="button"
+              onClick={() => handleActivateEndpointPlacement("to")}
+              className={`flex min-w-0 max-w-[min(42vw,200px)] flex-col rounded-full px-2.5 py-1.5 text-left transition ${
+                endpointPlacementMode === "to"
+                  ? "ring-2 ring-amber-400/90 ring-offset-2 ring-offset-[rgba(20,20,20,0.85)]"
+                  : "hover:bg-white/8"
+              }`}
+            >
+              <span className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-white/45">
+                إلى
+              </span>
+              <span dir="rtl" className="mashwar-arabic truncate text-[13px] font-medium text-white">
+                {routeToLabel}
+              </span>
+            </button>
+            {routeTo ? (
               <button
                 type="button"
-                onClick={() => setIsNaturalRouteModalOpen(true)}
-                className="mashwar-action px-3 py-2 text-sm"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setRouteTo(null);
+                  setRouteError(null);
+                }}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/50 transition hover:bg-white/10 hover:text-white"
+                aria-label="مسح الوجهة"
               >
-                موجز المسار الذكي
+                <IoClose className="h-4 w-4" aria-hidden />
               </button>
-              <button
-                type="button"
-                onClick={handleLoadDemoRoute}
-                disabled={isRoutePending}
-                className="mashwar-action px-3 py-2 text-sm disabled:cursor-wait"
-              >
-                تحميل مسار تجريبي
-              </button>
-            </div>
-
-            <HeatmapToggle
-              enabled={heatmapEnabled}
-              loading={isHeatmapLoading || isHeatmapBuilding}
-              onToggle={handleToggleHeatmap}
-            />
-
-            <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px]">
-              <button
-                type="button"
-                onClick={handleRetryCheckpoints}
-                className="mashwar-link-button underline-offset-4 hover:underline"
-              >
-                إعادة تحميل الحواجز
-              </button>
-              <button
-                type="button"
-                onClick={handleSyncLocation}
-                disabled={isSyncingLocation}
-                className="mashwar-link-button underline-offset-4 hover:underline disabled:cursor-wait disabled:opacity-55"
-              >
-                {isSyncingLocation ? "جارٍ مزامنة الموقع..." : "مزامنة الموقع"}
-              </button>
-            </div>
-
-            <div className="space-y-2 text-[12px] leading-6 text-[var(--clr-slate)]">
-              {isLoadingCheckpoints ? (
-                <p className="mashwar-arabic">جارٍ تحميل ذكاء الحركة من واجهة الحواجز.</p>
-              ) : (
-                <p className="mashwar-arabic">نقاط الحواجز الحية جاهزة للاختيار فوق الخريطة.</p>
-              )}
-
-              {!isLoadingCheckpoints && checkpointError ? (
-                <p className="text-[var(--clr-white)]" style={{ color: "var(--risk-high)" }}>{checkpointError}</p>
-              ) : null}
-
-              {!isLoadingCheckpoints && routeError ? (
-                <p className="text-[var(--clr-white)]" style={{ color: "var(--risk-high)" }}>{routeError}</p>
-              ) : null}
-
-              {!isLoadingCheckpoints && checkpointsWithoutCoordinates.length > 0 ? (
-                <p className="mashwar-arabic">
-                  يوجد {checkpointsWithoutCoordinates.length} حاجز بدون إحداثيات، لذلك لن يظهر داخل طبقة الخريطة.
-                </p>
-              ) : null}
-            </div>
+            ) : null}
           </div>
-        </section>
-      </aside>
 
-      {heatmapEnabled ? (
-        <aside className="pointer-events-auto absolute left-[var(--space-4)] bottom-[var(--space-4)] z-20 w-[min(calc(100vw-var(--space-8)),var(--panel-width))]">
-          <HeatmapLegendPanel
-            progress={buildProgress}
-            isBuilding={isHeatmapBuilding}
-            isLoading={isHeatmapLoading}
-            error={heatmapError}
-            corridorCount={corridorsRaw.length}
+          <button
+            type="button"
+            onClick={handleGpsAsTo}
+            disabled={isSyncingLocation}
+            title="استخدام موقعي كوجهة"
+            aria-label="استخدام موقعي كوجهة"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-amber-300 transition hover:bg-white/10 disabled:cursor-wait disabled:opacity-50"
+          >
+            <MdMyLocation className="h-5 w-5" aria-hidden />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleRouteButtonClick}
+            disabled={isRoutePending}
+            className="mashwar-arabic ms-1 shrink-0 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-60"
+          >
+            {routePaths.length > 0 ? "مسح المسار" : "ابدأ التوجيه"}
+          </button>
+        </div>
+
+        {routeError ||
+        locationError ||
+        checkpointError ||
+        (heatmapEnabled && heatmapError) ? (
+          <div className="border-t border-white/10 px-3 py-2 text-center text-[11px] text-red-200">
+            {[routeError, locationError, checkpointError, heatmapEnabled ? heatmapError : null]
+              .filter(Boolean)
+              .join(" · ")}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="fixed right-5 top-5 z-[1100] flex flex-col gap-2.5">
+        <button
+          type="button"
+          onClick={handleSmartRouterCardClick}
+          title="موجز المسار الذكي"
+          aria-pressed={smartRouterOn}
+          className={`inline-flex h-12 w-12 items-center justify-center rounded-xl border text-lg text-white/90 shadow-lg transition ${
+            smartRouterOn
+              ? "border-emerald-400 bg-white/10 shadow-[0_0_0_1px_rgba(52,211,153,0.65),0_0_18px_rgba(52,211,153,0.35)]"
+              : "border-white/15 bg-[rgba(20,20,20,0.85)] hover:bg-white/10"
+          }`}
+          style={{ backdropFilter: "blur(10px)" }}
+        >
+          <FaBrain className="h-5 w-5" aria-hidden />
+        </button>
+
+        <button
+          type="button"
+          onClick={handleToggleHeatmap}
+          title="خريطة حرارية"
+          aria-pressed={heatmapEnabled}
+          className={`inline-flex h-12 w-12 items-center justify-center rounded-xl border text-lg text-white/90 shadow-lg transition ${
+            heatmapEnabled
+              ? "border-amber-400 bg-white/10 shadow-[0_0_0_1px_rgba(251,191,36,0.65),0_0_18px_rgba(251,191,36,0.3)]"
+              : "border-white/15 bg-[rgba(20,20,20,0.85)] hover:bg-white/10"
+          }`}
+          style={{ backdropFilter: "blur(10px)" }}
+        >
+          <FaFire
+            className={`h-5 w-5 ${isHeatmapLoading || isHeatmapBuilding ? "animate-pulse" : ""}`}
+            aria-hidden
           />
-        </aside>
-      ) : null}
+        </button>
+      </div>
 
-      <aside className="pointer-events-auto absolute left-[var(--space-4)] top-[calc(var(--space-4)+32rem)] z-30 w-[min(calc(100vw-var(--space-8)),var(--panel-width))]">
+      <aside className="pointer-events-auto fixed bottom-6 left-4 right-4 z-[1050] mx-auto w-full max-w-2xl">
         {selectedCheckpoint ? (
           <section
-            className="mashwar-panel max-h-[calc(100dvh-32rem)] overflow-hidden"
+            className="mashwar-panel max-h-[min(520px,calc(100dvh-7rem))] overflow-hidden"
             style={{ animation: "mashwar-panel-in-left 220ms ease-out" }}
           >
-            <div className="mashwar-scroll max-h-[calc(100dvh-32rem)] overflow-y-auto">
+            <div className="mashwar-scroll max-h-[min(520px,calc(100dvh-7rem))] overflow-y-auto overflow-x-hidden">
               <div className="border-b border-[var(--glass-border)] p-[var(--panel-padding)]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -1895,7 +1457,10 @@ export default function MashwarHome() {
         open={isNaturalRouteModalOpen}
         currentLocation={userLocation}
         onApplyRoute={handleApplyNaturalLanguageRoute}
-        onClose={() => setIsNaturalRouteModalOpen(false)}
+        onClose={() => {
+          setIsNaturalRouteModalOpen(false);
+          setSmartRouterOn(false);
+        }}
       />
       <RouteDetailsModal
         open={Boolean(routeDetailsRoute)}
