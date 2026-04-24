@@ -151,9 +151,9 @@
       "nameWithCity": "{name} · {city}"
     },
     "floating": {
-      "smartRouterTitle": "توجيه بالوصف",
+      "smartRouterTitle": "موجز المسار الذكي",
       "smartRouterAria": "افتح موجز المسار الذكي — اكتب مشوارك بلغة عادية",
-      "smartRouterCta": "توجيه بالوصف",
+      "smartRouterCta": "موجز ذكي",
       "heatmapTitle": "خريطة حرارية للمخاطرة",
       "heatmapAria": "شغّل أو طفي الخريطة الحرارية للممرات",
       "heatmapCta": "خريطة حرارية",
@@ -218,9 +218,9 @@
       "unknown": "مش واضح"
     },
     "bucket": {
-      "green": "أخضر",
-      "yellow": "أصفر",
-      "red": "أحمر",
+      "green": "سالك",
+      "yellow": "أزمة",
+      "red": "مغلق",
       "unknown": "مش واضح"
     },
     "direction": {
@@ -246,6 +246,10 @@
     "heading": "مسار #{rank}",
     "intro": "نسخة الـ V5 بتربط الحواجز بس اللي انطبقت تمام، وبتمشي على كل حاجز حسب اتجاه المسار الفعلي.",
     "closeAria": "سكّر النافذة",
+    "closeBackdropAria": "سكّر تفاصيل المسار",
+    "rawGroup": " · مجموعة خام: {group}",
+    "riskWithLevel": "مخاطرة {label}",
+    "matchChip": "مطابقة {value}",
     "legend": "مفتاح المسار",
     "legendSmartEta": "الوقت الذكي = وصول متوقع من الحواجز المقبولة",
     "badgeV5": "توجيه واعي بالحواجز — V5",
@@ -421,6 +425,11 @@
     "example3": "«على جنين الساعة 7:30»",
     "loadingTitle": "عم نجهّز الموجز",
     "loadingSub": "عم نفهم النص، نربط المدن، ونحكي مع السيرفر.",
+    "loadingModal": {
+      "kicker": "توجيه بالوصف",
+      "title": "شوي وبنفهم كلامك…",
+      "body": "عم نمرّر النص على السيرفر، نربط المدن، ونطلع الموجز — استنى علينا ثواني، مش رايحين نقرأ «جنين» من كلامك ونودّيك على غزة 😉"
+    },
     "requestFailed": "صار في مشكلة بالطلب",
     "clarificationKicker": "محتاجين تفصيلة",
     "clarificationTitle": "نقصنا تفصيلة وحدة",
@@ -460,6 +469,10 @@
     "confidenceLine": "الثقة {value}",
     "emptyTitle": "لسه ما في تحليل",
     "emptySub": "ابعث طلب لنشوف الوقت الذكي والمخاطرة والتوقّع.",
+    "routeSummary": "{origin} → {destination}",
+    "travelKindBestShort": "أحسن",
+    "travelKindWorstShort": "أسوأ",
+    "confidenceInline": "الثقة {value}",
     "windowCard": {
       "smartEta": "الوقت الذكي",
       "expectedDelay": "التأخير المتوقع",

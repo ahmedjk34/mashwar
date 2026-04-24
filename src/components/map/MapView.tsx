@@ -2,6 +2,7 @@
 
 import type { FeatureCollection, LineString } from "geojson";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 
 import {
@@ -125,31 +126,6 @@ function getRouteLayerStyle(routeIndex: number, isSelected: boolean) {
   };
 }
 
-function getRouteRiskLabel(route: RoutePath): {
-  label: string;
-  tone: "good" | "warning" | "danger";
-} {
-  const riskLevel: RoutingRiskLevel =
-    route.riskLevel !== "unknown"
-      ? route.riskLevel
-      : route.routeViability === "good"
-        ? "low"
-        : route.routeViability === "avoid"
-          ? "high"
-          : "medium";
-
-  switch (riskLevel) {
-    case "low":
-      return { label: "LOW RISK", tone: "good" };
-    case "high":
-      return { label: "HIGH RISK", tone: "danger" };
-    case "medium":
-      return { label: "MEDIUM RISK", tone: "warning" };
-    default:
-      return { label: "RISK UNKNOWN", tone: "warning" };
-  }
-}
-
 function getRouteToneStyles(tone: "good" | "warning" | "danger") {
   switch (tone) {
     case "good":
@@ -171,81 +147,6 @@ function getRouteToneStyles(tone: "good" | "warning" | "danger") {
         background: "var(--risk-med-bg)",
       };
   }
-}
-
-function formatDelayLabel(delayMinutes: number | null): string | null {
-  if (delayMinutes === null || !Number.isFinite(delayMinutes) || delayMinutes <= 0) {
-    return null;
-  }
-
-  return `+${Math.round(delayMinutes)} min delay`;
-}
-
-function formatRouteArrivalLabel(value: string | null): string {
-  if (!value) {
-    return "Arrival n/a";
-  }
-
-  return formatDateTimeInPalestine(value);
-}
-
-function getRouteNoteLabel(route: RoutePath): string | null {
-  if (route.expectedDelayMinutes !== null && route.expectedDelayMinutes > 0) {
-    return "Base ETA + upstream delay";
-  }
-
-  if (route.riskComponents.length > 0) {
-    return route.riskComponents[0];
-  }
-
-  return null;
-}
-
-function getRouteScoreLabel(route: RoutePath): string {
-  if (route.riskScore !== null && Number.isFinite(route.riskScore)) {
-    return `Risk ${route.riskScore.toFixed(1)}`;
-  }
-
-  if (Number.isFinite(route.routeScore)) {
-    return `Route ${route.routeScore.toFixed(1)}`;
-  }
-
-  return "Risk n/a";
-}
-
-function formatDurationLabel(durationMs: number | null): string {
-  if (durationMs === null || !Number.isFinite(durationMs) || durationMs <= 0) {
-    return "n/a";
-  }
-
-  const totalMinutes = Math.round(durationMs / 60000);
-  if (totalMinutes >= 60) {
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  }
-
-  return `${totalMinutes} min`;
-}
-
-function formatRouteDistance(distanceM: number): string {
-  if (!Number.isFinite(distanceM) || distanceM <= 0) {
-    return "0 km";
-  }
-
-  if (distanceM >= 1000) {
-    return `${(distanceM / 1000).toFixed(distanceM >= 10000 ? 0 : 1)} km`;
-  }
-
-  return `${Math.round(distanceM)} m`;
-}
-
-function formatConfidence(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "n/a";
-  }
-
-  return `${Math.round(value * 100)}%`;
 }
 
 function getRouteSummary(route: RoutePath): string | null {
@@ -443,6 +344,180 @@ export default function MapView({
     departAtRef.current = departAt;
   }, [departAt]);
 
+  const locale = useLocale();
+  const tCommon = useTranslations("common");
+  const tMap = useTranslations("map");
+  const tPopup = useTranslations("map.popup");
+  const tCard = useTranslations("map.card");
+  const tMarker = useTranslations("map.marker");
+
+  function escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function getRouteRiskLabel(route: RoutePath): {
+    label: string;
+    tone: "good" | "warning" | "danger";
+  } {
+    const riskLevel: RoutingRiskLevel =
+      route.riskLevel !== "unknown"
+        ? route.riskLevel
+        : route.routeViability === "good"
+          ? "low"
+          : route.routeViability === "avoid"
+            ? "high"
+            : "medium";
+
+    switch (riskLevel) {
+      case "low":
+        return { label: tMap("risk.low"), tone: "good" };
+      case "high":
+        return { label: tMap("risk.high"), tone: "danger" };
+      case "medium":
+        return { label: tMap("risk.medium"), tone: "warning" };
+      default:
+        return { label: tMap("risk.unknown"), tone: "warning" };
+    }
+  }
+
+  function formatDelayLabel(delayMinutes: number | null): string | null {
+    if (delayMinutes === null || !Number.isFinite(delayMinutes) || delayMinutes <= 0) {
+      return null;
+    }
+
+    return tMap("delay", { minutes: Math.round(delayMinutes) });
+  }
+
+  function formatRouteArrivalLabel(value: string | null): string {
+    if (!value) {
+      return tMap("arrivalNa");
+    }
+
+    return formatDateTimeInPalestine(value);
+  }
+
+  function getRouteNoteLabel(route: RoutePath): string | null {
+    if (route.expectedDelayMinutes !== null && route.expectedDelayMinutes > 0) {
+      return tMap("noteBaseEtaDelay");
+    }
+
+    if (route.riskComponents.length > 0) {
+      return route.riskComponents[0];
+    }
+
+    return null;
+  }
+
+  function getRouteScoreLabel(route: RoutePath): string {
+    if (route.riskScore !== null && Number.isFinite(route.riskScore)) {
+      return tMap("scoreRisk", { score: route.riskScore.toFixed(1) });
+    }
+
+    if (Number.isFinite(route.routeScore)) {
+      return tMap("scoreRoute", { score: route.routeScore.toFixed(1) });
+    }
+
+    return tMap("scoreRiskNa");
+  }
+
+  function getRouteRiskScoreParen(route: RoutePath): string {
+    if (route.riskScore !== null && Number.isFinite(route.riskScore)) {
+      return route.riskScore.toFixed(1);
+    }
+    if (Number.isFinite(route.routeScore)) {
+      return route.routeScore.toFixed(1);
+    }
+    return tCommon("notAvailable");
+  }
+
+  function formatDurationLabel(durationMs: number | null): string {
+    if (durationMs === null || !Number.isFinite(durationMs) || durationMs <= 0) {
+      return tMap("durationNa");
+    }
+
+    const totalMinutes = Math.round(durationMs / 60000);
+    if (totalMinutes >= 60) {
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+
+    return `${totalMinutes} min`;
+  }
+
+  function formatRouteDistance(distanceM: number): string {
+    if (!Number.isFinite(distanceM) || distanceM <= 0) {
+      return tMap("distanceZero");
+    }
+
+    if (distanceM >= 1000) {
+      return `${(distanceM / 1000).toFixed(distanceM >= 10000 ? 0 : 1)} km`;
+    }
+
+    return `${Math.round(distanceM)} m`;
+  }
+
+  function formatConfidence(value: number | null): string {
+    if (value === null || !Number.isFinite(value)) {
+      return tCommon("notAvailable");
+    }
+
+    return tCommon("percent", { value: Math.round(value * 100) });
+  }
+
+  function resolveRouteArrivalDateTime(route: RoutePath): string | null {
+    if (route.smartEtaDateTime) {
+      return route.smartEtaDateTime;
+    }
+
+    const currentDepartAt = departAtRef.current;
+    if (!currentDepartAt) {
+      return null;
+    }
+
+    const departDate = new Date(currentDepartAt);
+    if (Number.isNaN(departDate.getTime())) {
+      return null;
+    }
+
+    const smartEtaMs = route.smartEtaMs ?? route.durationMs;
+    if (!Number.isFinite(smartEtaMs) || smartEtaMs <= 0) {
+      return null;
+    }
+
+    return new Date(departDate.getTime() + smartEtaMs).toISOString();
+  }
+
+  function getRouteHoverMarkup(route: RoutePath): string {
+    const risk = getRouteRiskLabel(route);
+    const smartEtaLabel = formatRouteArrivalLabel(resolveRouteArrivalDateTime(route));
+    const expectedDelay =
+      formatDelayLabel(route.expectedDelayMinutes ?? route.estimatedDelayMinutes) ??
+      tCommon("notAvailable");
+    const note = getRouteNoteLabel(route);
+    const riskLine = tPopup("riskWithScore", {
+      label: risk.label,
+      score: getRouteRiskScoreParen(route),
+    });
+
+    return `
+      <div style="min-width: 160px; color: #f8fafc;">
+        <div style="font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: #94a3b8;">${escapeHtml(tPopup("routeNumber", { rank: route.rank }))}</div>
+        <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px; font-size: 12px;">
+          <div><span style="color: #94a3b8;">${escapeHtml(tPopup("smartEta"))}</span> <span style="font-weight: 600;">${escapeHtml(smartEtaLabel)}</span></div>
+          <div><span style="color: #94a3b8;">${escapeHtml(tPopup("expectedDelay"))}</span> <span style="font-weight: 600;">${escapeHtml(expectedDelay)}</span></div>
+          <div><span style="color: #94a3b8;">${escapeHtml(tPopup("journeyRisk"))}</span> <span style="font-weight: 600;">${escapeHtml(riskLine)}</span></div>
+          ${note ? `<div style="color: #cbd5e1;">${escapeHtml(note)}</div>` : ""}
+        </div>
+      </div>
+    `;
+  }
+
   const checkpointsById = useMemo(() => {
     return new Map(checkpoints.map((checkpoint) => [checkpoint.id, checkpoint]));
   }, [checkpoints]);
@@ -511,8 +586,11 @@ export default function MapView({
               ? truncateLabel(getRouteSummary(route), 48)
               : null;
             const checkpointLabel = isSelectedRoute
-              ? `${route.checkpointCount} checkpoints · ${formatRouteDistance(route.distanceM)}`
-              : formatRouteDistance(route.distanceM);
+              ? tCard("checkpointsDistance", {
+                  count: route.checkpointCount,
+                  distance: formatRouteDistance(route.distanceM),
+                })
+              : tCard("distanceOnly", { distance: formatRouteDistance(route.distanceM) });
 
             if (projectedCoordinates.length === 0) {
               return [];
@@ -666,7 +744,7 @@ export default function MapView({
       map.off("resize", updateRouteLabels);
       map.off("rotate", updateRouteLabels);
     };
-  }, [mapLoaded, routePaths]);
+  }, [mapLoaded, routePaths, routes.selectedRouteId, locale, tMap, tCard, tCommon]);
 
   useEffect(() => {
     if (!mapLoaded || !mapRef.current || !maplibreRef.current) {
@@ -704,7 +782,7 @@ export default function MapView({
       dot.style.backgroundColor = role === "from" ? "#22c55e" : "#ef4444";
 
       const label = document.createElement("div");
-      label.textContent = role === "from" ? "من" : "إلى";
+      label.textContent = role === "from" ? tMarker("from") : tMarker("to");
       label.style.padding = "3px 8px";
       label.style.borderRadius = "9999px";
       label.style.backgroundColor = "#ffffff";
@@ -746,56 +824,11 @@ export default function MapView({
       markers.from = null;
       markers.to = null;
     };
-  }, [mapLoaded, routeEndpoints]);
+  }, [mapLoaded, routeEndpoints, locale, tMarker]);
 
   function closeRoutePopup(): void {
     routePopupRef.current?.remove();
     routePopupRef.current = null;
-  }
-
-  function resolveRouteArrivalDateTime(route: RoutePath): string | null {
-    if (route.smartEtaDateTime) {
-      return route.smartEtaDateTime;
-    }
-
-    const currentDepartAt = departAtRef.current;
-    if (!currentDepartAt) {
-      return null;
-    }
-
-    const departDate = new Date(currentDepartAt);
-    if (Number.isNaN(departDate.getTime())) {
-      return null;
-    }
-
-    const smartEtaMs = route.smartEtaMs ?? route.durationMs;
-    if (!Number.isFinite(smartEtaMs) || smartEtaMs <= 0) {
-      return null;
-    }
-
-    return new Date(departDate.getTime() + smartEtaMs).toISOString();
-  }
-
-  function getRouteHoverMarkup(route: RoutePath): string {
-    const risk = getRouteRiskLabel(route);
-    const smartEtaLabel = formatRouteArrivalLabel(resolveRouteArrivalDateTime(route));
-    const expectedDelay = formatDelayLabel(
-      route.expectedDelayMinutes ?? route.estimatedDelayMinutes,
-    );
-    const note = getRouteNoteLabel(route);
-    const riskScoreLabel = getRouteScoreLabel(route);
-
-    return `
-      <div style="min-width: 160px; color: #f8fafc;">
-        <div style="font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: #94a3b8;">Route #${route.rank}</div>
-        <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px; font-size: 12px;">
-          <div><span style="color: #94a3b8;">Smart ETA</span> <span style="font-weight: 600;">${smartEtaLabel}</span></div>
-          <div><span style="color: #94a3b8;">Expected delay</span> <span style="font-weight: 600;">${expectedDelay ?? "n/a"}</span></div>
-          <div><span style="color: #94a3b8;">Journey risk</span> <span style="font-weight: 600;">${risk.label} (${riskScoreLabel})</span></div>
-          ${note ? `<div style="color: #cbd5e1;">${note}</div>` : ""}
-        </div>
-      </div>
-    `;
   }
 
   useEffect(() => {
@@ -1442,11 +1475,15 @@ export default function MapView({
     };
   }, [
     mapLoaded,
+    locale,
     onMapPlacement,
     onRouteOpen,
     onRouteSelect,
     placementMode,
     routeLayerBindings,
+    tCommon,
+    tMap,
+    tPopup,
   ]);
 
   return (
@@ -1507,7 +1544,7 @@ export default function MapView({
                               className="shrink-0 text-[9px] font-bold uppercase tracking-[0.24em]"
                               style={{ color: routeMetaColor }}
                             >
-                              Route #{item.rank}
+                              {tCard("routeNumber", { rank: item.rank })}
                             </p>
                           </div>
                           <div className="mt-2 flex items-end gap-2">
@@ -1515,7 +1552,7 @@ export default function MapView({
                               {item.durationLabel}
                             </p>
                             <p className="pb-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
-                              ETA {item.arrivalLabel}
+                              {tCard("eta", { time: item.arrivalLabel })}
                             </p>
                           </div>
                         </div>
@@ -1534,18 +1571,18 @@ export default function MapView({
                       <div className="mt-3 grid grid-cols-3 gap-2">
                         <div className="rounded-[12px] border border-slate-200/80 bg-white/55 px-2.5 py-2">
                           <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                            Delay
+                            {tCard("delay")}
                           </p>
                           <p
                             className="mt-1 text-[11px] font-semibold leading-tight"
                             style={{ color: item.delayLabel ? item.accentColor : "#475569" }}
                           >
-                            {item.delayLabel ?? "Clear"}
+                            {item.delayLabel ?? tCard("clear")}
                           </p>
                         </div>
                         <div className="rounded-[12px] border border-slate-200/80 bg-white/55 px-2.5 py-2">
                           <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                            Route Data
+                            {tCard("routeData")}
                           </p>
                           <p className="mt-1 text-[11px] font-semibold leading-tight text-slate-700">
                             {item.checkpointLabel}
@@ -1553,7 +1590,7 @@ export default function MapView({
                         </div>
                         <div className="rounded-[12px] border border-slate-200/80 bg-white/55 px-2.5 py-2">
                           <p className="text-[8px] font-bold uppercase tracking-[0.18em] text-slate-400">
-                            Signal
+                            {tCard("signal")}
                           </p>
                           <p className="mt-1 text-[11px] font-semibold leading-tight text-slate-700">
                             {item.scoreLabel}
@@ -1582,7 +1619,7 @@ export default function MapView({
                           className="truncate text-[8px] font-bold uppercase tracking-[0.22em]"
                           style={{ color: routeMetaColor }}
                         >
-                          Route #{item.rank}
+                          {tCard("routeNumber", { rank: item.rank })}
                         </p>
                         <div className="mt-0.5 flex items-baseline gap-2">
                           <span className="text-[17px] font-semibold leading-none text-slate-950">
@@ -1595,7 +1632,7 @@ export default function MapView({
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-[8px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                          Route
+                          {tCard("routeShort")}
                         </p>
                         <p className="mt-0.5 text-[10px] font-semibold text-slate-700">
                           {item.checkpointLabel}

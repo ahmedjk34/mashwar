@@ -1,12 +1,8 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import MashwarHome from "@/components/map/MashwarHome";
+import { routing } from "@/i18n/routing";
 
-export const metadata: Metadata = {
-  title: "Mashwar Map Base",
-  description: "MapLibre-based West Bank map foundation for Mashwar.",
-};
-
-export default function Home() {
-  return <MashwarHome />;
+/** Fallback when `/` is not handled by middleware (e.g. matcher edge cases). */
+export default function RootRedirectPage() {
+  redirect(`/${routing.defaultLocale}`);
 }

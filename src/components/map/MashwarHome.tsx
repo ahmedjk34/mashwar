@@ -15,7 +15,11 @@ import MashwarNaturalLanguageRouteModal from "@/components/map/MashwarNaturalLan
 import RouteBuildingOverlay from "@/components/map/RouteBuildingOverlay";
 import RouteDetailsModal from "@/components/map/RouteDetailsModal";
 import TradeoffExplainerModal from "@/components/map/TradeoffExplainerModal";
-import { checkpointFlowSubkey, safeCheckpointFlowLabel } from "@/i18n/message-key-map";
+import {
+  checkpointFlowSubkey,
+  ERR_HEATMAP_LOAD,
+  safeCheckpointFlowLabel,
+} from "@/i18n/message-key-map";
 import { translateServiceError } from "@/lib/i18n/translate-service-error";
 import { buildCorridorSegments } from "@/lib/heatmap/corridorSegments";
 import { normalizeCheckpointId } from "@/lib/heatmap/normalizeCheckpoint";
@@ -466,9 +470,7 @@ export default function MashwarHome() {
 
       eventSourceRef.current = source;
     } catch (error) {
-      setHeatmapError(
-        error instanceof Error ? error.message : "تعذر تحميل الخريطة الحرارية",
-      );
+      setHeatmapError(error instanceof Error ? error.message : ERR_HEATMAP_LOAD);
       setIsHeatmapBuilding(false);
       setIsHeatmapLoading(false);
       closeHeatmapStream();

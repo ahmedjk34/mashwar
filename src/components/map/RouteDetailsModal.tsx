@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 
 import type {
   NormalizedRoutes,
@@ -19,10 +20,9 @@ interface RouteDetailsModalProps {
   onClose: () => void;
 }
 
-const RISK_VISUALS: Record<
+const RISK_STYLES: Record<
   RoutingRiskLevel,
   {
-    label: string;
     text: string;
     bg: string;
     border: string;
@@ -30,28 +30,24 @@ const RISK_VISUALS: Record<
   }
 > = {
   low: {
-    label: "Low",
     text: "#86efac",
     bg: "rgba(34, 197, 94, 0.12)",
     border: "rgba(34, 197, 94, 0.35)",
     meter: "#22c55e",
   },
   medium: {
-    label: "Medium",
     text: "#fbbf24",
     bg: "rgba(245, 158, 11, 0.12)",
     border: "rgba(245, 158, 11, 0.35)",
     meter: "#f59e0b",
   },
   high: {
-    label: "High",
     text: "#fca5a5",
     bg: "rgba(239, 68, 68, 0.12)",
     border: "rgba(239, 68, 68, 0.35)",
     meter: "#ef4444",
   },
   unknown: {
-    label: "Unknown",
     text: "#cbd5e1",
     bg: "rgba(148, 163, 184, 0.12)",
     border: "rgba(148, 163, 184, 0.35)",
@@ -59,174 +55,37 @@ const RISK_VISUALS: Record<
   },
 };
 
-const STATUS_VISUALS: Record<
+const BUCKET_STYLES: Record<
   RoutingStatusBucket,
   {
-    label: string;
     text: string;
     bg: string;
     border: string;
   }
 > = {
   green: {
-    label: "Green",
     text: "#86efac",
     bg: "rgba(34, 197, 94, 0.12)",
     border: "rgba(34, 197, 94, 0.35)",
   },
   yellow: {
-    label: "Yellow",
     text: "#fbbf24",
     bg: "rgba(245, 158, 11, 0.12)",
     border: "rgba(245, 158, 11, 0.35)",
   },
   red: {
-    label: "Red",
     text: "#fca5a5",
     bg: "rgba(239, 68, 68, 0.12)",
     border: "rgba(239, 68, 68, 0.35)",
   },
   unknown: {
-    label: "Unknown",
     text: "#cbd5e1",
     bg: "rgba(148, 163, 184, 0.12)",
     border: "rgba(148, 163, 184, 0.35)",
   },
 };
 
-function formatRouteDistance(distanceM: number): string {
-  if (!Number.isFinite(distanceM) || distanceM <= 0) {
-    return "0 km";
-  }
-
-  if (distanceM >= 1000) {
-    return `${(distanceM / 1000).toFixed(distanceM >= 10000 ? 0 : 1)} km`;
-  }
-
-  return `${Math.round(distanceM)} m`;
-}
-
-function formatDurationLabel(durationMs: number | null): string {
-  if (durationMs === null || !Number.isFinite(durationMs) || durationMs <= 0) {
-    return "n/a";
-  }
-
-  const totalMinutes = Math.round(durationMs / 60000);
-  if (totalMinutes >= 60) {
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  }
-
-  return `${totalMinutes}m`;
-}
-
-function formatDateTimeLabel(value: string | null): string {
-  return formatDateTimeInPalestine(value);
-}
-
-function formatArrivalShortLabel(value: string | null): string {
-  return formatDateTimeInPalestine(value);
-}
-
-function formatCoordinatePair(lat: number, lng: number): string {
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return "n/a";
-  }
-
-  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-}
-
-function formatConfidence(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "n/a";
-  }
-
-  return `${Math.round(value * 100)}%`;
-}
-
-function formatRouteDirection(value: string | null): string {
-  if (!value) {
-    return "Unknown";
-  }
-
-  switch (value) {
-    case "entering":
-      return "Entering";
-    case "leaving":
-      return "Leaving";
-    case "transit":
-      return "Transit";
-    default:
-      return value;
-  }
-}
-
-function formatSelectedStatusType(value: string | null): string {
-  if (!value) {
-    return "n/a";
-  }
-
-  switch (value) {
-    case "entering":
-      return "Entering side";
-    case "leaving":
-      return "Leaving side";
-    case "worst":
-      return "Worst side";
-    default:
-      return value;
-  }
-}
-
-function formatMatchConfidence(value: string | null): string {
-  if (!value) {
-    return "n/a";
-  }
-
-  switch (value) {
-    case "strong":
-      return "Strong";
-    case "medium":
-      return "Medium";
-    case "weak":
-      return "Weak";
-    default:
-      return value;
-  }
-}
-
-function formatNumberLabel(value: number | null, fractionDigits = 0): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "n/a";
-  }
-
-  return value.toFixed(fractionDigits);
-}
-
-function formatDistanceLabel(value: number | null): string {
-  if (value === null || !Number.isFinite(value) || value < 0) {
-    return "n/a";
-  }
-
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)} km`;
-  }
-
-  return `${Math.round(value)} m`;
-}
-
-function formatPercent(value: number | null): string {
-  if (value === null || !Number.isFinite(value)) {
-    return "n/a";
-  }
-
-  return `${Math.round(value * 100)}%`;
-}
-
-function normalizeRiskLevel(
-  route: RoutePath,
-): RoutingRiskLevel {
+function normalizeRiskLevel(route: RoutePath): RoutingRiskLevel {
   if (route.riskLevel !== "unknown") {
     return route.riskLevel;
   }
@@ -247,18 +106,6 @@ function getRiskSummary(route: RoutePath): string | null {
   }
 
   return route.reasonSummary || null;
-}
-
-function getRouteEtaBreakdownLabel(route: RoutePath): string {
-  const delayMinutes = route.expectedDelayMinutes ?? route.estimatedDelayMinutes;
-
-  if (delayMinutes !== null && Number.isFinite(delayMinutes) && delayMinutes > 0) {
-    return "Base ETA + upstream delay";
-  }
-
-  return route.smartEtaDateTime
-    ? "Smart ETA from accepted checkpoints"
-    : "Legacy travel-time fallback";
 }
 
 function resolveRouteArrivalDateTime(
@@ -286,29 +133,16 @@ function resolveRouteArrivalDateTime(
   return new Date(departDate.getTime() + smartEtaMs).toISOString();
 }
 
+function formatArrivalShortLabel(value: string | null): string {
+  return formatDateTimeInPalestine(value);
+}
+
 function getRouteSmartEta(route: RoutePath, departAt: string | null): string {
   return formatArrivalShortLabel(resolveRouteArrivalDateTime(route, departAt));
 }
 
-function getRouteDelayLabel(route: RoutePath): string {
-  const delayMinutes = route.expectedDelayMinutes ?? route.estimatedDelayMinutes;
-  if (delayMinutes === null || !Number.isFinite(delayMinutes) || delayMinutes <= 0) {
-    return "No predicted delay";
-  }
-
-  return `+${Math.max(1, Math.round(delayMinutes))} min expected delay`;
-}
-
-function getRouteScoreLabel(route: RoutePath): string {
-  if (route.riskScore !== null && Number.isFinite(route.riskScore)) {
-    return `Risk score ${route.riskScore.toFixed(1)}`;
-  }
-
-  if (Number.isFinite(route.routeScore)) {
-    return `Routing score ${route.routeScore.toFixed(1)}`;
-  }
-
-  return "Risk score n/a";
+function formatDateTimeLabel(value: string | null): string {
+  return formatDateTimeInPalestine(value);
 }
 
 function getProbabilityEntries(probabilities: Record<string, number>) {
@@ -337,18 +171,6 @@ function getProbabilityColor(label: string): string {
   }
 
   return "#94a3b8";
-}
-
-function getProbabilitySummary(probabilities: Record<string, number>): string {
-  const entries = getProbabilityEntries(probabilities);
-  if (entries.length === 0) {
-    return "No probability breakdown available.";
-  }
-
-  return entries
-    .slice(0, 3)
-    .map((entry) => `${entry.label} ${formatPercent(entry.value)}`)
-    .join(" · ");
 }
 
 function Pill({
@@ -380,6 +202,15 @@ export default function RouteDetailsModal({
   checkpointMatching,
   onClose,
 }: RouteDetailsModalProps) {
+  const t = useTranslations("routeDetails");
+  const tCommon = useTranslations("common");
+  const tMap = useTranslations("map");
+  const tRisk = useTranslations("routing.risk");
+  const tBucket = useTranslations("routing.bucket");
+  const tDirection = useTranslations("routing.direction");
+  const tSelectedStatus = useTranslations("routing.selectedStatus");
+  const tMatchConfidence = useTranslations("routing.matchConfidence");
+
   useEffect(() => {
     if (!open) {
       return;
@@ -403,9 +234,169 @@ export default function RouteDetailsModal({
     return null;
   }
 
+  function formatRouteDistance(distanceM: number): string {
+    if (!Number.isFinite(distanceM) || distanceM <= 0) {
+      return tMap("distanceZero");
+    }
+
+    if (distanceM >= 1000) {
+      return `${(distanceM / 1000).toFixed(distanceM >= 10000 ? 0 : 1)} km`;
+    }
+
+    return `${Math.round(distanceM)} m`;
+  }
+
+  function formatDurationLabel(durationMs: number | null): string {
+    if (durationMs === null || !Number.isFinite(durationMs) || durationMs <= 0) {
+      return tCommon("notAvailable");
+    }
+
+    const totalMinutes = Math.round(durationMs / 60000);
+    if (totalMinutes >= 60) {
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+
+    return `${totalMinutes}m`;
+  }
+
+  function formatCoordinatePair(lat: number, lng: number): string {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return tCommon("notAvailable");
+    }
+
+    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
+
+  function formatConfidence(value: number | null): string {
+    if (value === null || !Number.isFinite(value)) {
+      return tCommon("notAvailable");
+    }
+
+    return tCommon("percent", { value: Math.round(value * 100) });
+  }
+
+  function formatPercent(value: number | null): string {
+    if (value === null || !Number.isFinite(value)) {
+      return tCommon("notAvailable");
+    }
+
+    return tCommon("percent", { value: Math.round(value * 100) });
+  }
+
+  function formatRouteDirection(value: string | null): string {
+    if (!value) {
+      return tDirection("unknown");
+    }
+
+    switch (value) {
+      case "entering":
+      case "leaving":
+      case "transit":
+        return tDirection(value);
+      default:
+        return value;
+    }
+  }
+
+  function formatSelectedStatusType(value: string | null): string {
+    if (!value) {
+      return tCommon("notAvailable");
+    }
+
+    switch (value) {
+      case "entering":
+      case "leaving":
+      case "worst":
+        return tSelectedStatus(value);
+      default:
+        return value;
+    }
+  }
+
+  function formatMatchConfidence(value: string | null): string {
+    if (!value) {
+      return tCommon("notAvailable");
+    }
+
+    switch (value) {
+      case "strong":
+      case "medium":
+      case "weak":
+        return tMatchConfidence(value);
+      default:
+        return value;
+    }
+  }
+
+  function formatNumberLabel(value: number | null, fractionDigits = 0): string {
+    if (value === null || !Number.isFinite(value)) {
+      return tCommon("notAvailable");
+    }
+
+    return value.toFixed(fractionDigits);
+  }
+
+  function formatDistanceLabel(value: number | null): string {
+    if (value === null || !Number.isFinite(value) || value < 0) {
+      return tCommon("notAvailable");
+    }
+
+    if (value >= 1000) {
+      return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)} km`;
+    }
+
+    return `${Math.round(value)} m`;
+  }
+
+  function getRouteEtaBreakdownLabel(r: RoutePath): string {
+    const delayMinutes = r.expectedDelayMinutes ?? r.estimatedDelayMinutes;
+
+    if (delayMinutes !== null && Number.isFinite(delayMinutes) && delayMinutes > 0) {
+      return t("etaBreakdownBaseDelay");
+    }
+
+    return r.smartEtaDateTime ? t("etaBreakdownSmart") : t("etaBreakdownLegacy");
+  }
+
+  function getRouteDelayLabel(r: RoutePath): string {
+    const delayMinutes = r.expectedDelayMinutes ?? r.estimatedDelayMinutes;
+    if (delayMinutes === null || !Number.isFinite(delayMinutes) || delayMinutes <= 0) {
+      return t("delayNoPrediction");
+    }
+
+    return t("delayExpected", { minutes: Math.max(1, Math.round(delayMinutes)) });
+  }
+
+  function getRouteScoreLabel(r: RoutePath): string {
+    if (r.riskScore !== null && Number.isFinite(r.riskScore)) {
+      return t("riskScoreLabel", { score: r.riskScore.toFixed(1) });
+    }
+
+    if (Number.isFinite(r.routeScore)) {
+      return t("routingScoreLabel", { score: r.routeScore.toFixed(1) });
+    }
+
+    return t("riskScoreNa");
+  }
+
+  function getProbabilitySummary(probabilities: Record<string, number>): string {
+    const entries = getProbabilityEntries(probabilities);
+    if (entries.length === 0) {
+      return t("noProbability");
+    }
+
+    return entries
+      .slice(0, 3)
+      .map((entry) => `${entry.label} ${formatPercent(entry.value)}`)
+      .join(" · ");
+  }
+
   const riskLevel = normalizeRiskLevel(route);
-  const risk = RISK_VISUALS[riskLevel];
-  const worstStatus = STATUS_VISUALS[route.worstPredictedStatus];
+  const riskStyles = RISK_STYLES[riskLevel];
+  const worstBucket = route.worstPredictedStatus;
+  const worstStyles = BUCKET_STYLES[worstBucket];
   const routeSummary = getRiskSummary(route);
   const routeDelayLabel = getRouteDelayLabel(route);
   const routeScoreLabel = getRouteScoreLabel(route);
@@ -421,12 +412,13 @@ export default function RouteDetailsModal({
       ? route.riskConfidence
       : null;
   const routeConfidencePct = routeConfidence !== null ? routeConfidence * 100 : null;
+  const na = tCommon("notAvailable");
 
   return (
     <div className="fixed inset-0 z-50" aria-hidden={!isVisible}>
       <button
         type="button"
-        aria-label="Close route details modal"
+        aria-label={t("closeBackdropAria")}
         className={`absolute inset-0 bg-black/65 backdrop-blur-[20px] transition-opacity duration-300 ${
           isVisible ? "opacity-100" : "opacity-0"
         }`}
@@ -448,22 +440,19 @@ export default function RouteDetailsModal({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="mashwar-mono text-[10px] uppercase tracking-[0.34em] text-[#6b7280]">
-                ROUTE DETAILS
+                {t("title")}
               </p>
               <h2 id="route-details-title" className="mt-1 text-[24px] font-bold text-[#f9fafb]">
-                Route #{route.rank}
+                {t("heading", { rank: route.rank })}
               </h2>
-              <p className="mt-2 max-w-2xl text-[13px] leading-6 text-[#94a3b8]">
-                V5 routing keeps only strictly matched checkpoints and reads each one
-                in the direction the route actually approaches it.
-              </p>
+              <p className="mt-2 max-w-2xl text-[13px] leading-6 text-[#94a3b8]">{t("intro")}</p>
             </div>
 
             <button
               type="button"
               onClick={onClose}
               className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-transparent text-[#cbd5e1] transition hover:bg-white/5 hover:text-[#f9fafb]"
-              aria-label="Close modal"
+              aria-label={t("closeAria")}
             >
               <span className="text-xl leading-none">×</span>
             </button>
@@ -474,36 +463,36 @@ export default function RouteDetailsModal({
           <section className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                Route legend
+                {t("legend")}
               </span>
               <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-2.5 py-1 text-[11px] text-sky-100">
-                Smart ETA = predicted arrival from accepted checkpoints
+                {t("legendSmartEta")}
               </span>
               {isV5Route ? (
                 <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[11px] text-emerald-100">
-                  V5 checkpoint-aware routing
+                  {t("badgeV5")}
                 </span>
               ) : null}
               <Pill
-                color={RISK_VISUALS.low.text}
-                backgroundColor={RISK_VISUALS.low.bg}
-                borderColor={RISK_VISUALS.low.border}
+                color={RISK_STYLES.low.text}
+                backgroundColor={RISK_STYLES.low.bg}
+                borderColor={RISK_STYLES.low.border}
               >
-                Low risk
+                {t("pillLowRisk")}
               </Pill>
               <Pill
-                color={RISK_VISUALS.medium.text}
-                backgroundColor={RISK_VISUALS.medium.bg}
-                borderColor={RISK_VISUALS.medium.border}
+                color={RISK_STYLES.medium.text}
+                backgroundColor={RISK_STYLES.medium.bg}
+                borderColor={RISK_STYLES.medium.border}
               >
-                Medium risk
+                {t("pillMediumRisk")}
               </Pill>
               <Pill
-                color={RISK_VISUALS.high.text}
-                backgroundColor={RISK_VISUALS.high.bg}
-                borderColor={RISK_VISUALS.high.border}
+                color={RISK_STYLES.high.text}
+                backgroundColor={RISK_STYLES.high.bg}
+                borderColor={RISK_STYLES.high.border}
               >
-                High risk
+                {t("pillHighRisk")}
               </Pill>
             </div>
           </section>
@@ -511,24 +500,26 @@ export default function RouteDetailsModal({
           <div className="grid gap-3 lg:grid-cols-4">
             <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
               <p className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                Smart ETA
+                {t("smartEta")}
               </p>
               <p className="mt-2 text-[24px] font-semibold text-[#f9fafb]">
                 {routeSmartEta}
               </p>
               <p className="mt-2 text-[12px] text-[#94a3b8]">{routeDelayLabel}</p>
-              <p className="mt-1 text-[12px] text-[#94a3b8]">
-                {getRouteEtaBreakdownLabel(route)}
-              </p>
+              <p className="mt-1 text-[12px] text-[#94a3b8]">{getRouteEtaBreakdownLabel(route)}</p>
             </div>
 
             <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
               <p className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                Journey Risk
+                {t("journeyRisk")}
               </p>
               <div className="mt-2 flex items-center gap-2">
-                <Pill color={risk.text} backgroundColor={risk.bg} borderColor={risk.border}>
-                  {risk.label}
+                <Pill
+                  color={riskStyles.text}
+                  backgroundColor={riskStyles.bg}
+                  borderColor={riskStyles.border}
+                >
+                  {tRisk(riskLevel)}
                 </Pill>
                 <span className="text-[12px] text-[#cbd5e1]">{routeScoreLabel}</span>
               </div>
@@ -540,12 +531,12 @@ export default function RouteDetailsModal({
                       routeConfidencePct !== null
                         ? `${Math.min(100, Math.max(8, routeConfidencePct))}%`
                         : "18%",
-                    backgroundColor: risk.meter,
+                    backgroundColor: riskStyles.meter,
                   }}
                 />
               </div>
               <p className="mt-2 text-[12px] text-[#94a3b8]">
-                Confidence {formatConfidence(route.riskConfidence)}
+                {t("confidence", { value: formatConfidence(route.riskConfidence) })}
               </p>
               {routeSummary ? (
                 <p className="mt-1 text-[12px] leading-5 text-[#dbe4f0]">{routeSummary}</p>
@@ -554,30 +545,32 @@ export default function RouteDetailsModal({
 
             <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
               <p className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                Distance
+                {t("distance")}
               </p>
               <p className="mt-2 text-[24px] font-semibold text-[#f9fafb]">
                 {formatRouteDistance(route.distanceM)}
               </p>
               <p className="mt-2 text-[12px] text-[#94a3b8]">
-                {Number.isFinite(route.routeScore) ? `Route score ${route.routeScore.toFixed(1)}` : "Route score n/a"}
+                {Number.isFinite(route.routeScore)
+                  ? t("routeScore", { score: route.routeScore.toFixed(1) })
+                  : t("routeScoreNa")}
               </p>
               {route.historicalVolatility !== null ? (
                 <p className="mt-1 text-[12px] text-[#94a3b8]">
-                  Historical volatility {route.historicalVolatility.toFixed(1)}
+                  {t("volatility", { value: route.historicalVolatility.toFixed(1) })}
                 </p>
               ) : null}
             </div>
 
             <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
               <p className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                Checkpoints
+                {t("checkpoints")}
               </p>
               <p className="mt-2 text-[24px] font-semibold text-[#f9fafb]">
                 {route.checkpointCount}
               </p>
               <p className="mt-2 text-[12px] text-[#94a3b8]">
-                {route.checkpoints.length} ordered timeline stops with propagation
+                {t("checkpointsSub", { count: route.checkpoints.length })}
               </p>
             </div>
           </div>
@@ -585,40 +578,64 @@ export default function RouteDetailsModal({
           {checkpointMatching ? (
             <details className="mt-4 rounded-[12px] border border-[#2d3139] bg-white/[0.03] px-4 py-3">
               <summary className="cursor-pointer list-none text-[12px] font-medium text-[#dbe4f0]">
-                Checkpoint matching metadata
+                {t("matchingMeta")}
               </summary>
               <div className="mt-3 grid gap-2 text-[12px] text-[#94a3b8] sm:grid-cols-2 lg:grid-cols-4">
-                <p>Mode: {checkpointMatching.mode ?? "n/a"}</p>
-                <p>Direction mode: {checkpointMatching.directionMode ?? "n/a"}</p>
-                <p>City source: {checkpointMatching.citySource ?? "n/a"}</p>
-                <p>City inference: {checkpointMatching.cityInference ?? "n/a"}</p>
-                <p>Outer threshold: {formatNumberLabel(checkpointMatching.outerThresholdM)} m</p>
-                <p>Strong match: {formatNumberLabel(checkpointMatching.strongMatchDistanceM)} m</p>
-                <p>Medium match: {formatNumberLabel(checkpointMatching.mediumMatchDistanceM)} m</p>
-                <p>Weak match: {formatNumberLabel(checkpointMatching.weakMatchDistanceM)} m</p>
+                <p>{t("matchingField.mode", { value: checkpointMatching.mode ?? na })}</p>
+                <p>
+                  {t("matchingField.directionMode", {
+                    value: checkpointMatching.directionMode ?? na,
+                  })}
+                </p>
+                <p>{t("matchingField.citySource", { value: checkpointMatching.citySource ?? na })}</p>
+                <p>
+                  {t("matchingField.cityInference", {
+                    value: checkpointMatching.cityInference ?? na,
+                  })}
+                </p>
+                <p>
+                  {t("matchingField.outerThreshold", {
+                    value: formatNumberLabel(checkpointMatching.outerThresholdM),
+                  })}
+                </p>
+                <p>
+                  {t("matchingField.strongMatch", {
+                    value: formatNumberLabel(checkpointMatching.strongMatchDistanceM),
+                  })}
+                </p>
+                <p>
+                  {t("matchingField.mediumMatch", {
+                    value: formatNumberLabel(checkpointMatching.mediumMatchDistanceM),
+                  })}
+                </p>
+                <p>
+                  {t("matchingField.weakMatch", {
+                    value: formatNumberLabel(checkpointMatching.weakMatchDistanceM),
+                  })}
+                </p>
               </div>
             </details>
           ) : null}
 
           <section className="mt-4 rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Pill color={risk.text} backgroundColor={risk.bg} borderColor={risk.border}>
-                {risk.label} risk
+              <Pill color={riskStyles.text} backgroundColor={riskStyles.bg} borderColor={riskStyles.border}>
+                {t("riskWithLevel", { label: tRisk(riskLevel) })}
               </Pill>
               <Pill
-                color={worstStatus.text}
-                backgroundColor={worstStatus.bg}
-                borderColor={worstStatus.border}
+                color={worstStyles.text}
+                backgroundColor={worstStyles.bg}
+                borderColor={worstStyles.border}
               >
-                Worst {worstStatus.label}
+                {t("worstPill", { label: tBucket(worstBucket) })}
               </Pill>
               <Pill color="#cbd5e1" backgroundColor="rgba(148, 163, 184, 0.12)" borderColor="rgba(148, 163, 184, 0.24)">
-                Rank #{route.rank}
+                {t("rankPill", { rank: route.rank })}
               </Pill>
             </div>
 
             <p className="mt-3 text-[13px] leading-6 text-[#dbe4f0]">
-              {route.reasonSummary || "No backend reasoning summary was provided for this route."}
+              {route.reasonSummary || t("noSummary")}
             </p>
 
             {route.riskComponents.length > 0 ? (
@@ -639,11 +656,9 @@ export default function RouteDetailsModal({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                  Checkpoint Timeline
+                  {t("timelineTitle")}
                 </p>
-                <p className="mt-1 text-[13px] text-[#94a3b8]">
-                  Base ETA plus upstream delay rolls into the effective ETA you actually care about.
-                </p>
+                <p className="mt-1 text-[13px] text-[#94a3b8]">{t("timelineSub")}</p>
               </div>
             </div>
 
@@ -653,8 +668,8 @@ export default function RouteDetailsModal({
                   let carriedDelayMs = 0;
 
                   return orderedCheckpoints.map((checkpoint, index) => {
-                    const currentStatus = STATUS_VISUALS[checkpoint.currentStatus];
-                    const etaStatus = STATUS_VISUALS[checkpoint.predictedStatusAtEta];
+                    const currentStyles = BUCKET_STYLES[checkpoint.currentStatus];
+                    const etaStyles = BUCKET_STYLES[checkpoint.predictedStatusAtEta];
                     const baseEtaMs = checkpoint.baseEtaMs ?? checkpoint.etaMs;
                     const effectiveEtaMs = checkpoint.effectiveEtaMs ?? checkpoint.etaMs;
                     const checkpointDelayMs =
@@ -684,9 +699,9 @@ export default function RouteDetailsModal({
                               {index + 1}. {checkpoint.name}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              {checkpoint.city ?? "n/a"}
+                              {checkpoint.city ?? na}
                               {checkpoint.checkpointCityGroup
-                                ? ` · raw group: ${checkpoint.checkpointCityGroup}`
+                                ? t("rawGroup", { group: checkpoint.checkpointCityGroup })
                                 : ""}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
@@ -714,13 +729,13 @@ export default function RouteDetailsModal({
                               backgroundColor="rgba(148, 163, 184, 0.12)"
                               borderColor="rgba(148, 163, 184, 0.24)"
                             >
-                              Match {formatMatchConfidence(checkpoint.matchConfidence)}
+                              {t("matchChip", { value: formatMatchConfidence(checkpoint.matchConfidence) })}
                             </Pill>
                             <span className="rounded-full border border-[#2d3139] px-2.5 py-1 text-[11px] text-[#cbd5e1]">
-                              Reach {formatDateTimeLabel(checkpoint.crossingDateTime)}
+                              {t("reach", { time: formatDateTimeLabel(checkpoint.crossingDateTime) })}
                             </span>
                             <span className="rounded-full border border-[#2d3139] px-2.5 py-1 text-[11px] text-[#cbd5e1]">
-                              {formatDurationLabel(checkpoint.etaMs)} from departure
+                              {t("fromDeparture", { duration: formatDurationLabel(checkpoint.etaMs) })}
                             </span>
                           </div>
                         </div>
@@ -728,60 +743,60 @@ export default function RouteDetailsModal({
                         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                           <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
                             <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              Base ETA
+                              {t("baseEta")}
                             </p>
                             <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
                               {formatDurationLabel(baseEtaMs)}
                             </p>
-                            <p className="mt-2 text-[12px] text-[#94a3b8]">
-                              The checkpoint ETA before upstream delay is applied.
-                            </p>
+                            <p className="mt-2 text-[12px] text-[#94a3b8]">{t("baseEtaHelp")}</p>
                           </div>
 
                           <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
                             <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              Effective ETA
+                              {t("effectiveEta")}
                             </p>
                             <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
                               {formatDurationLabel(effectiveEtaMs)}
                             </p>
-                            <p className="mt-2 text-[12px] text-[#94a3b8]">
-                              Predicted arrival after checkpoint delay propagation.
-                            </p>
+                            <p className="mt-2 text-[12px] text-[#94a3b8]">{t("effectiveEtaHelp")}</p>
                           </div>
 
                           <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
                             <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              Expected Delay
+                              {t("expectedDelay")}
                             </p>
                             <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
                               {formatDurationLabel(checkpointDelayMs)}
                             </p>
                             <p className="mt-2 text-[12px] text-[#94a3b8]">
                               {hasDelay
-                                ? `Carried forward: ${formatDurationLabel(carriedForwardMs)}`
-                                : "No propagated delay before this checkpoint."}
+                                ? t("carriedForward", { value: formatDurationLabel(carriedForwardMs) })
+                                : t("noPropagatedDelay")}
                             </p>
                           </div>
 
                           <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
                             <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              Prediction
+                              {t("prediction")}
                             </p>
                             <div className="mt-2">
                               <Pill
-                                color={etaStatus.text}
-                                backgroundColor={etaStatus.bg}
-                                borderColor={etaStatus.border}
+                                color={etaStyles.text}
+                                backgroundColor={etaStyles.bg}
+                                borderColor={etaStyles.border}
                               >
-                                {etaStatus.label}
+                                {tBucket(checkpoint.predictedStatusAtEta)}
                               </Pill>
                             </div>
                             <p className="mt-2 text-[12px] text-[#94a3b8]">
-                              Direction-aware side: {formatRouteDirection(checkpoint.routeDirection)}
+                              {t("directionAware", {
+                                value: formatRouteDirection(checkpoint.routeDirection),
+                              })}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              Selected status: {formatSelectedStatusType(checkpoint.selectedStatusType)}
+                              {t("selectedStatusLine", {
+                                value: formatSelectedStatusType(checkpoint.selectedStatusType),
+                              })}
                             </p>
                           </div>
                         </div>
@@ -789,55 +804,69 @@ export default function RouteDetailsModal({
                         <div className="mt-4 grid gap-3 md:grid-cols-2">
                           <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
                             <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              Status Now
+                              {t("statusNow")}
                             </p>
                             <div className="mt-2">
                               <Pill
-                                color={currentStatus.text}
-                                backgroundColor={currentStatus.bg}
-                                borderColor={currentStatus.border}
+                                color={currentStyles.text}
+                                backgroundColor={currentStyles.bg}
+                                borderColor={currentStyles.border}
                               >
-                                {currentStatus.label}
+                                {tBucket(checkpoint.currentStatus)}
                               </Pill>
                             </div>
                             <p className="mt-3 text-[12px] text-[#94a3b8]">
-                              Direction: {formatRouteDirection(checkpoint.routeDirection)}
+                              {t("directionLine", {
+                                value: formatRouteDirection(checkpoint.routeDirection),
+                              })}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              Selected status side: {formatSelectedStatusType(checkpoint.selectedStatusType)}
+                              {t("selectedSideLine", {
+                                value: formatSelectedStatusType(checkpoint.selectedStatusType),
+                              })}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              Entering: {checkpoint.currentStatusRaw?.entering_status ?? "n/a"}
+                              {t("enteringRaw", {
+                                value: checkpoint.currentStatusRaw?.entering_status ?? na,
+                              })}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              Leaving: {checkpoint.currentStatusRaw?.leaving_status ?? "n/a"}
+                              {t("leavingRaw", {
+                                value: checkpoint.currentStatusRaw?.leaving_status ?? na,
+                              })}
                             </p>
                           </div>
 
                           <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
                             <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              Predicted at ETA
+                              {t("predictedAtEta")}
                             </p>
                             <div className="mt-2">
                               <Pill
-                                color={etaStatus.text}
-                                backgroundColor={etaStatus.bg}
-                                borderColor={etaStatus.border}
+                                color={etaStyles.text}
+                                backgroundColor={etaStyles.bg}
+                                borderColor={etaStyles.border}
                               >
-                                {etaStatus.label}
+                                {tBucket(checkpoint.predictedStatusAtEta)}
                               </Pill>
                             </div>
                             <p className="mt-3 text-[12px] text-[#94a3b8]">
-                              Direction: {formatRouteDirection(checkpoint.routeDirection)}
+                              {t("directionLine", {
+                                value: formatRouteDirection(checkpoint.routeDirection),
+                              })}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              Selected status side: {formatSelectedStatusType(checkpoint.selectedStatusType)}
+                              {t("selectedSideLine", {
+                                value: formatSelectedStatusType(checkpoint.selectedStatusType),
+                              })}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              Forecast source: {checkpoint.forecastSource ?? "n/a"}
+                              {t("forecastSource", { value: checkpoint.forecastSource ?? na })}
                             </p>
                             <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              Confidence: {formatConfidence(checkpoint.forecastConfidence)}
+                              {t("confidenceLine", {
+                                value: formatConfidence(checkpoint.forecastConfidence),
+                              })}
                             </p>
                           </div>
                         </div>
@@ -851,7 +880,7 @@ export default function RouteDetailsModal({
                         {Object.keys(checkpoint.forecastProbabilities).length > 0 ? (
                           <details className="mt-3 rounded-[10px] border border-[#2d3139] bg-white/[0.03] px-3 py-2">
                             <summary className="cursor-pointer list-none text-[12px] font-medium text-[#dbe4f0]">
-                              Probability breakdown
+                              {t("probabilityBreakdown")}
                             </summary>
                             {(() => {
                               const probabilityEntries = getProbabilityEntries(
@@ -864,38 +893,38 @@ export default function RouteDetailsModal({
 
                               return (
                                 <>
-                            <p className="mt-2 text-[12px] text-[#94a3b8]">
-                              {getProbabilitySummary(checkpoint.forecastProbabilities)}
-                            </p>
-                                <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-[#111827]">
-                                  {probabilityEntries.map((entry) => (
-                                    <div
-                                      key={entry.label}
-                                      className="h-full"
-                                      style={{
-                                        width: `${
-                                          totalProbability > 0
-                                            ? Math.max(
-                                                6,
-                                                (entry.value / totalProbability) * 100,
-                                              )
-                                            : 0
-                                        }%`,
-                                        backgroundColor: getProbabilityColor(entry.label),
-                                      }}
-                                    />
-                                  ))}
-                                </div>
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  {probabilityEntries.map((entry) => (
-                                    <span
-                                      key={entry.label}
-                                      className="rounded-full border border-white/8 bg-white/[0.05] px-2.5 py-1 text-[11px] text-[#cbd5e1]"
-                                    >
-                                      {entry.label} {formatPercent(entry.value)}
-                                    </span>
-                                  ))}
-                                </div>
+                                  <p className="mt-2 text-[12px] text-[#94a3b8]">
+                                    {getProbabilitySummary(checkpoint.forecastProbabilities)}
+                                  </p>
+                                  <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-[#111827]">
+                                    {probabilityEntries.map((entry) => (
+                                      <div
+                                        key={entry.label}
+                                        className="h-full"
+                                        style={{
+                                          width: `${
+                                            totalProbability > 0
+                                              ? Math.max(
+                                                  6,
+                                                  (entry.value / totalProbability) * 100,
+                                                )
+                                              : 0
+                                          }%`,
+                                          backgroundColor: getProbabilityColor(entry.label),
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {probabilityEntries.map((entry) => (
+                                      <span
+                                        key={entry.label}
+                                        className="rounded-full border border-white/8 bg-white/[0.05] px-2.5 py-1 text-[11px] text-[#cbd5e1]"
+                                      >
+                                        {entry.label} {formatPercent(entry.value)}
+                                      </span>
+                                    ))}
+                                  </div>
                                 </>
                               );
                             })()}
@@ -904,16 +933,39 @@ export default function RouteDetailsModal({
 
                         <details className="mt-3 rounded-[10px] border border-[#2d3139] bg-white/[0.03] px-3 py-2">
                           <summary className="cursor-pointer list-none text-[12px] font-medium text-[#dbe4f0]">
-                            Match details
+                            {t("matchDetails")}
                           </summary>
                           <div className="mt-3 grid gap-2 text-[12px] text-[#94a3b8] sm:grid-cols-2">
-                            <p>Distance from route: {formatDistanceLabel(checkpoint.distanceFromRouteM)}</p>
-                            <p>Match confidence: {formatMatchConfidence(checkpoint.matchConfidence)}</p>
-                            <p>Projection t: {formatNumberLabel(checkpoint.projectionT, 3)}</p>
-                            <p>Nearest segment: {formatNumberLabel(checkpoint.nearestSegmentIndex)}</p>
-                            <p>Chainage: {formatNumberLabel(checkpoint.chainageM)} m</p>
                             <p>
-                              Projected point: {checkpoint.projectedPointOnRoute ? formatCoordinatePair(checkpoint.projectedPointOnRoute[1], checkpoint.projectedPointOnRoute[0]) : "n/a"}
+                              {t("distanceFromRoute", {
+                                value: formatDistanceLabel(checkpoint.distanceFromRouteM),
+                              })}
+                            </p>
+                            <p>
+                              {t("matchConfidence", {
+                                value: formatMatchConfidence(checkpoint.matchConfidence),
+                              })}
+                            </p>
+                            <p>
+                              {t("projectionT", { value: formatNumberLabel(checkpoint.projectionT, 3) })}
+                            </p>
+                            <p>
+                              {t("nearestSegment", {
+                                value: formatNumberLabel(checkpoint.nearestSegmentIndex),
+                              })}
+                            </p>
+                            <p>
+                              {t("chainage", { value: formatNumberLabel(checkpoint.chainageM) })}
+                            </p>
+                            <p>
+                              {t("projectedPoint", {
+                                value: checkpoint.projectedPointOnRoute
+                                  ? formatCoordinatePair(
+                                      checkpoint.projectedPointOnRoute[1],
+                                      checkpoint.projectedPointOnRoute[0],
+                                    )
+                                  : na,
+                              })}
                             </p>
                           </div>
                         </details>
@@ -924,7 +976,7 @@ export default function RouteDetailsModal({
               </div>
             ) : (
               <p className="mt-4 rounded-[10px] border border-dashed border-white/8 px-3 py-4 text-[12px] text-[#94a3b8]">
-                No checkpoint forecast details were attached to this route.
+                {t("noForecastDetails")}
               </p>
             )}
           </section>

@@ -90,6 +90,9 @@ export function checkpointBadgeSubkey(status: MapCheckpointStatus): string {
   return CHECKPOINT_BADGE_MESSAGE_KEY[status].replace("checkpoint.badge.", "");
 }
 
+/** Canonical English token for heatmap bootstrap failures; maps to `errors.heatmapLoad`. */
+export const ERR_HEATMAP_LOAD = "Unable to load the heat map." as const;
+
 export const SERVICE_ERROR_MESSAGE_KEY: Record<string, string> = {
   "Unable to load checkpoint data.": "errors.checkpointsLoad",
   "Invalid checkpoints response.": "errors.checkpointsInvalid",
@@ -101,6 +104,7 @@ export const SERVICE_ERROR_MESSAGE_KEY: Record<string, string> = {
   "Unable to load checkpoint forecast data.": "errors.forecastData",
   "Unable to reach the forecast service.": "errors.forecastUnreachable",
   "Unable to load route data.": "errors.routeLoad",
+  [ERR_HEATMAP_LOAD]: "errors.heatmapLoad",
   "تعذر تحميل الخريطة الحرارية": "errors.heatmapLoad",
   "Received an invalid uncertainty stream payload.": "errors.heatmapStreamInvalid",
   "Received a corridor without usable geometry.": "errors.heatmapCorridorInvalid",

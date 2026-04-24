@@ -218,9 +218,9 @@
       "unknown": "Unknown"
     },
     "bucket": {
-      "green": "Green",
-      "yellow": "Yellow",
-      "red": "Red",
+      "green": "Clear",
+      "yellow": "Moderate delay",
+      "red": "Heavy delay",
       "unknown": "Unknown"
     },
     "direction": {
@@ -246,6 +246,10 @@
     "heading": "Route #{rank}",
     "intro": "V5 routing keeps only strictly matched checkpoints and reads each one in the direction the route actually approaches it.",
     "closeAria": "Close modal",
+    "closeBackdropAria": "Close route details modal",
+    "rawGroup": " · raw group: {group}",
+    "riskWithLevel": "{label} risk",
+    "matchChip": "Match {value}",
     "legend": "Route legend",
     "legendSmartEta": "Smart ETA = predicted arrival from accepted checkpoints",
     "badgeV5": "V5 checkpoint-aware routing",
@@ -421,6 +425,11 @@
     "example3": "“to Jenin at 7:30”",
     "loadingTitle": "Generating intelligence brief",
     "loadingSub": "Parsing the prompt, resolving cities, and calling the live APIs.",
+    "loadingModal": {
+      "kicker": "Describe your trip",
+      "title": "Hang on — we are reading your prompt",
+      "body": "Parsing what you wrote, matching cities, and calling the server for the brief. A few seconds, then the good stuff lands here."
+    },
     "requestFailed": "Request failed",
     "clarificationKicker": "Clarification needed",
     "clarificationTitle": "We need one more detail",
@@ -460,6 +469,10 @@
     "confidenceLine": "Confidence {value}",
     "emptyTitle": "No intelligence generated yet",
     "emptySub": "Generate a route or checkpoint brief to see Smart ETA, risk, and checkpoint forecasting here.",
+    "routeSummary": "{origin} → {destination}",
+    "travelKindBestShort": "BEST",
+    "travelKindWorstShort": "WORST",
+    "confidenceInline": "Confidence {value}",
     "windowCard": {
       "smartEta": "Smart ETA",
       "expectedDelay": "Expected delay",

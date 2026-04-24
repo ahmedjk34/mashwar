@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
+import RouteLoadingCard from "@/components/map/RouteLoadingCard";
+import { forecastHorizonSubkey, safeCheckpointFlowLabel } from "@/i18n/message-key-map";
+import { translateServiceError } from "@/lib/i18n/translate-service-error";
 import { resolveNaturalLanguageRequest } from "@/lib/services/route-intent";
 import type {
   MapCheckpointStatus,
@@ -25,7 +29,7 @@ interface NaturalLanguageRouteModalProps {
   ) => void;
 }
 
-const SAMPLE_PROMPT = "لو بدي اطلع من رام الله الى جنين بكرة 8";
+const NL_EMPTY_PROMPT_SENTINEL = "__NL_EMPTY_PROMPT__";
 
 const STATUS_VISUALS: Record<
   MapCheckpointStatus,
@@ -62,35 +66,30 @@ const STATUS_VISUALS: Record<
   },
 };
 
-const RISK_VISUALS: Record<
+const NL_RISK_STYLES: Record<
   "low" | "medium" | "high" | "unknown",
   {
-    label: string;
     text: string;
     bg: string;
     border: string;
   }
 > = {
   low: {
-    label: "LOW",
     text: "#86efac",
     bg: "rgba(34, 197, 94, 0.12)",
     border: "rgba(34, 197, 94, 0.35)",
   },
   medium: {
-    label: "MEDIUM",
     text: "#fbbf24",
     bg: "rgba(245, 158, 11, 0.12)",
     border: "rgba(245, 158, 11, 0.35)",
   },
   high: {
-    label: "HIGH",
     text: "#fca5a5",
     bg: "rgba(239, 68, 68, 0.12)",
     border: "rgba(239, 68, 68, 0.35)",
   },
   unknown: {
-    label: "UNKNOWN",
     text: "#cbd5e1",
     bg: "rgba(148, 163, 184, 0.12)",
     border: "rgba(148, 163, 184, 0.35)",
@@ -119,25 +118,34 @@ function formatDateTimeLabel(value: string | null): string {
   return formatDateTimeInPalestine(value);
 }
 
-function formatPercent(value: number | null): string {
+function formatPercent(
+  value: number | null,
+  tCommon: (key: string, values?: Record<string, string | number>) => string,
+): string {
   if (value === null || !Number.isFinite(value)) {
-    return "n/a";
+    return tCommon("notAvailable");
   }
 
-  return `${Math.round(value * 100)}%`;
+  return tCommon("percent", { value: Math.round(value * 100) });
 }
 
-function formatRiskScore(value: number | null): string {
+function formatRiskScore(
+  value: number | null,
+  tCommon: (key: string, values?: Record<string, string | number>) => string,
+): string {
   if (value === null || !Number.isFinite(value)) {
-    return "n/a";
+    return tCommon("notAvailable");
   }
 
   return value.toFixed(1);
 }
 
-function formatDurationLabel(durationMs: number | null): string {
+function formatDurationLabel(
+  durationMs: number | null,
+  tCommon: (key: string, values?: Record<string, string | number>) => string,
+): string {
   if (durationMs === null || !Number.isFinite(durationMs) || durationMs <= 0) {
-    return "n/a";
+    return tCommon("notAvailable");
   }
 
   const totalMinutes = Math.round(durationMs / 60000);
@@ -150,9 +158,12 @@ function formatDurationLabel(durationMs: number | null): string {
   return `${totalMinutes}m`;
 }
 
-function formatDistanceLabel(distanceM: number | null): string {
+function formatDistanceLabel(
+  distanceM: number | null,
+  tCommon: (key: string, values?: Record<string, string | number>) => string,
+): string {
   if (distanceM === null || !Number.isFinite(distanceM) || distanceM <= 0) {
-    return "n/a";
+    return tCommon("notAvailable");
   }
 
   if (distanceM >= 1000) {
@@ -162,8 +173,11 @@ function formatDistanceLabel(distanceM: number | null): string {
   return `${Math.round(distanceM)} m`;
 }
 
-function formatRouteTitle(route: NaturalLanguageRouteExecution["resolution"]): string {
-  return `${route.originLabel} → ${route.destinationLabel}`;
+function formatRouteTitle(
+  route: NaturalLanguageRouteExecution["resolution"],
+  t: (key: string, values: { origin: string; destination: string }) => string,
+): string {
+  return t("routeSummary", { origin: route.originLabel, destination: route.destinationLabel });
 }
 
 function buildForecastRows(
@@ -216,9 +230,12 @@ function buildForecastRows(
   });
 }
 
-function formatTravelWindowHour(value: number | null): string {
+function formatTravelWindowHour(
+  value: number | null,
+  tCommon: (key: string, values?: Record<string, string | number>) => string,
+): string {
   if (value === null || !Number.isFinite(value)) {
-    return "n/a";
+    return tCommon("notAvailable");
   }
 
   return `${`${Math.trunc(value)}`.padStart(2, "0")}:00`;
@@ -226,6 +243,7 @@ function formatTravelWindowHour(value: number | null): string {
 
 function buildTravelWindowEntries(
   travelWindow: NormalizedCheckpointTravelWindow | null,
+  tHeadline: (key: "best" | "worst") => string,
 ): Array<{
   kind: "best" | "worst";
   label: string;
@@ -244,7 +262,7 @@ function buildTravelWindowEntries(
   if (travelWindow.best) {
     entries.push({
       kind: "best",
-      label: "Best time to cross",
+      label: tHeadline("best"),
       item: travelWindow.best,
     });
   }
@@ -252,7 +270,7 @@ function buildTravelWindowEntries(
   if (travelWindow.worst) {
     entries.push({
       kind: "worst",
-      label: "Worst time to cross",
+      label: tHeadline("worst"),
       item: travelWindow.worst,
     });
   }
@@ -261,10 +279,10 @@ function buildTravelWindowEntries(
 }
 
 function StatusBadge({ status }: { status: MapCheckpointStatus }) {
-  const visual = STATUS_VISUALS[status];
-  return (
-    <Pill label={status} text={visual.text} bg={visual.bg} border={visual.border} />
-  );
+  const visual = STATUS_VISUALS[status] ?? STATUS_VISUALS["غير معروف"];
+  const tFlow = useTranslations("checkpoint.flow");
+  const label = safeCheckpointFlowLabel(status, tFlow);
+  return <Pill label={label} text={visual.text} bg={visual.bg} border={visual.border} />;
 }
 
 function RouteWindowCard({
@@ -276,11 +294,17 @@ function RouteWindowCard({
   departAt: string;
   route: NaturalLanguageRouteExecution["resolution"]["route"]["mainRoute"];
 }) {
+  const tWin = useTranslations("nlRoute.windowCard");
+  const tRisk = useTranslations("routing.risk");
+  const tCommon = useTranslations("common");
+
   if (!route) {
     return null;
   }
 
-  const risk = RISK_VISUALS[route.riskLevel ?? "unknown"];
+  const riskStyle = NL_RISK_STYLES[route.riskLevel ?? "unknown"];
+  const riskKey = route.riskLevel ?? "unknown";
+  const riskLabel = tRisk(riskKey as "low");
 
   return (
     <article className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
@@ -293,17 +317,22 @@ function RouteWindowCard({
             {formatDateTimeLabel(departAt)}
           </h4>
           <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
-            {route.reasonSummary || "No backend summary returned for this window."}
+            {route.reasonSummary || tWin("noSummary")}
           </p>
         </div>
 
-        <Pill label={risk.label} text={risk.text} bg={risk.bg} border={risk.border} />
+        <Pill
+          label={riskLabel}
+          text={riskStyle.text}
+          bg={riskStyle.bg}
+          border={riskStyle.border}
+        />
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
           <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-            Smart ETA
+            {tWin("smartEta")}
           </p>
           <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
             {formatDateTimeLabel(route.smartEtaDateTime)}
@@ -311,25 +340,27 @@ function RouteWindowCard({
         </div>
         <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
           <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-            Expected Delay
+            {tWin("expectedDelay")}
           </p>
           <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
             {route.expectedDelayMinutes !== null
-              ? `+${Math.max(1, Math.round(route.expectedDelayMinutes))} min`
-              : "n/a"}
+              ? tWin("delayMinutes", {
+                  minutes: Math.max(1, Math.round(route.expectedDelayMinutes)),
+                })
+              : tCommon("notAvailable")}
           </p>
         </div>
         <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
           <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-            Risk
+            {tWin("risk")}
           </p>
           <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
-            {formatRiskScore(route.riskScore)}
+            {formatRiskScore(route.riskScore, tCommon)}
           </p>
         </div>
         <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
           <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-            Checkpoints
+            {tWin("checkpoints")}
           </p>
           <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
             {route.checkpointCount}
@@ -340,7 +371,9 @@ function RouteWindowCard({
       <div className="mt-4 flex flex-wrap gap-2">
         {route.riskConfidence !== null ? (
           <Pill
-            label={`Confidence ${formatPercent(route.riskConfidence)}`}
+            label={tWin("confidencePill", {
+              value: formatPercent(route.riskConfidence, tCommon),
+            })}
             text="#cbd5e1"
             bg="rgba(148, 163, 184, 0.12)"
             border="rgba(148, 163, 184, 0.24)"
@@ -348,14 +381,18 @@ function RouteWindowCard({
         ) : null}
         {route.historicalVolatility !== null ? (
           <Pill
-            label={`Volatility ${route.historicalVolatility.toFixed(1)}`}
+            label={tWin("volatilityPill", {
+              value: route.historicalVolatility.toFixed(1),
+            })}
             text="#cbd5e1"
             bg="rgba(148, 163, 184, 0.12)"
             border="rgba(148, 163, 184, 0.24)"
           />
         ) : null}
         <Pill
-          label={`Distance ${formatDistanceLabel(route.distanceM)}`}
+          label={tWin("distancePill", {
+            value: formatDistanceLabel(route.distanceM, tCommon),
+          })}
           text="#cbd5e1"
           bg="rgba(148, 163, 184, 0.12)"
           border="rgba(148, 163, 184, 0.24)"
@@ -371,9 +408,17 @@ export default function MashwarNaturalLanguageRouteModal({
   currentLocation,
   onApplyRoute,
 }: NaturalLanguageRouteModalProps) {
+  const t = useTranslations("nlRoute");
+  const tCommon = useTranslations("common");
+  const tErrors = useTranslations("errors");
+  const tPanel = useTranslations("checkpoint.panel");
+  const tForecastH = useTranslations("forecast.horizon");
+  const tTravelHeadline = useTranslations("forecast.travelHeadline");
+  const tFlow = useTranslations("checkpoint.flow");
+
   const [isMounted, setIsMounted] = useState(open);
   const [isVisible, setIsVisible] = useState(open);
-  const [prompt, setPrompt] = useState(SAMPLE_PROMPT);
+  const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState<NaturalLanguageExecution | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -409,7 +454,7 @@ export default function MashwarNaturalLanguageRouteModal({
       setError(
         nextError instanceof Error
           ? nextError.message
-          : "Unable to generate route intelligence right now.",
+          : tErrors("nlIntelligence"),
       );
     } finally {
       if (requestNonceRef.current === requestId) {
@@ -425,7 +470,7 @@ export default function MashwarNaturalLanguageRouteModal({
         setIsVisible(true);
       });
 
-      setPrompt(SAMPLE_PROMPT);
+      setPrompt(t("placeholder"));
       setMode("text");
       setResult(null);
       setError(null);
@@ -447,7 +492,7 @@ export default function MashwarNaturalLanguageRouteModal({
       setError(null);
       setResult(null);
     }, 240);
-  }, [open]);
+  }, [open, t]);
 
   useEffect(() => {
     if (!isMounted) {
@@ -488,7 +533,7 @@ export default function MashwarNaturalLanguageRouteModal({
   function handleGenerateReport(promptOverride?: string): void {
     const nextPrompt = (promptOverride ?? prompt).trim();
     if (!nextPrompt) {
-      setError("Enter a route or checkpoint question first.");
+      setError(NL_EMPTY_PROMPT_SENTINEL);
       return;
     }
 
@@ -508,10 +553,11 @@ export default function MashwarNaturalLanguageRouteModal({
     }
 
     voiceTimerRef.current = window.setTimeout(() => {
-      setPrompt(SAMPLE_PROMPT);
+      const sample = t("placeholder");
+      setPrompt(sample);
       setIsListening(false);
       setMode("text");
-      void runPrompt(SAMPLE_PROMPT);
+      void runPrompt(sample);
     }, 1200);
   }
 
@@ -520,13 +566,15 @@ export default function MashwarNaturalLanguageRouteModal({
   }
 
   const parsedConfidence =
-    result && "parse" in result ? formatPercent(result.parse.confidence) : "—";
+    result && "parse" in result
+      ? formatPercent(result.parse.confidence, tCommon)
+      : tCommon("dash");
 
   return (
     <div className="fixed inset-0 z-50" aria-hidden={!isVisible}>
       <button
         type="button"
-        aria-label="Close routing modal"
+        aria-label={t("closeBackdropAria")}
         className={`absolute inset-0 bg-black/65 backdrop-blur-[20px] transition-opacity duration-300 ${
           isVisible ? "opacity-100" : "opacity-0"
         }`}
@@ -548,20 +596,17 @@ export default function MashwarNaturalLanguageRouteModal({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <p className="mashwar-mono text-[10px] uppercase tracking-[0.34em] text-[#6b7280]">
-                NATURAL LANGUAGE ROUTING
+                {t("headerKicker")}
               </p>
               <h2 id="natural-route-title" className="text-[24px] font-bold text-[#f9fafb]">
-                Smart route and checkpoint parser
+                {t("title")}
               </h2>
-              <p className="max-w-2xl text-[13px] leading-6 text-[#94a3b8]">
-                Parse a freeform travel prompt, resolve city coordinates from the local
-                city map, and call the live forecast or route services as needed.
-              </p>
+              <p className="max-w-2xl text-[13px] leading-6 text-[#94a3b8]">{t("subtitle")}</p>
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
               <Pill
-                label={currentLocation ? "Current location ready" : "No current location"}
+                label={currentLocation ? t("locationReady") : t("locationMissing")}
                 text={currentLocation ? "#86efac" : "#cbd5e1"}
                 bg={currentLocation ? "rgba(34, 197, 94, 0.12)" : "rgba(148, 163, 184, 0.12)"}
                 border={currentLocation ? "rgba(34, 197, 94, 0.35)" : "rgba(148, 163, 184, 0.35)"}
@@ -570,7 +615,7 @@ export default function MashwarNaturalLanguageRouteModal({
                 type="button"
                 onClick={onClose}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-transparent text-[#cbd5e1] transition hover:bg-white/5 hover:text-[#f9fafb]"
-                aria-label="Close modal"
+                aria-label={t("closeAria")}
               >
                 <span className="text-xl leading-none">×</span>
               </button>
@@ -578,12 +623,12 @@ export default function MashwarNaturalLanguageRouteModal({
           </div>
         </header>
 
-        <div className="relative grid flex-1 gap-4 overflow-y-auto p-4 md:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)]">
+        <div className="relative grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 md:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] md:items-stretch">
           <aside className="space-y-4">
             <section className="mashwar-panel p-4">
               <div className="flex items-center justify-between gap-3">
                 <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                  PROMPT
+                  {t("prompt")}
                 </p>
                 <div className="inline-flex rounded-full border border-[#2d3139] bg-transparent p-0.5">
                   <button
@@ -595,7 +640,7 @@ export default function MashwarNaturalLanguageRouteModal({
                         : "text-[#94a3b8] hover:text-[#f9fafb]"
                     }`}
                   >
-                    Text
+                    {t("modeText")}
                   </button>
                   <button
                     type="button"
@@ -604,7 +649,7 @@ export default function MashwarNaturalLanguageRouteModal({
                     className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold text-[#94a3b8] transition hover:text-[#f9fafb] disabled:cursor-wait disabled:opacity-55"
                   >
                     <IconMic />
-                    Voice
+                    {t("modeVoice")}
                   </button>
                 </div>
               </div>
@@ -616,7 +661,7 @@ export default function MashwarNaturalLanguageRouteModal({
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 rows={5}
-                placeholder="لو بدي اطلع من رام الله الى جنين بكرة 8"
+                placeholder={t("placeholder")}
                 className="mt-3 min-h-[128px] w-full resize-none rounded-[8px] border border-[#2d3139] bg-transparent px-4 py-3 text-[16px] leading-7 text-[#f9fafb] outline-none transition placeholder:text-[#64748b] focus:border-[#3b82f6] focus:ring-4 focus:ring-[#3b82f6]/12"
               />
 
@@ -627,7 +672,7 @@ export default function MashwarNaturalLanguageRouteModal({
                   disabled={isParsing || isListening}
                   className="h-11 rounded-[8px] bg-[#3b82f6] px-4 text-sm font-semibold text-white transition hover:bg-[#4f8df7] disabled:cursor-wait disabled:opacity-55"
                 >
-                  {isParsing ? "Generating..." : "Generate"}
+                  {isParsing ? t("generating") : t("generate")}
                 </button>
 
                 <button
@@ -637,19 +682,23 @@ export default function MashwarNaturalLanguageRouteModal({
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[#2d3139] bg-transparent px-4 text-sm text-[#e5e7eb] transition hover:bg-white/5 disabled:cursor-wait disabled:opacity-55"
                 >
                   <IconMic />
-                  Voice
+                  {t("modeVoice")}
                 </button>
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
                 <Pill
-                  label={result ? `Parsed confidence ${parsedConfidence}` : "Awaiting parse"}
+                  label={
+                    result
+                      ? t("parsedConfidence", { value: parsedConfidence })
+                      : t("awaitingParse")
+                  }
                   text="#cbd5e1"
                   bg="rgba(148, 163, 184, 0.12)"
                   border="rgba(148, 163, 184, 0.24)"
                 />
                 <Pill
-                  label={currentLocation ? "Can fall back to current location" : "Current location unavailable"}
+                  label={currentLocation ? t("fallbackLocation") : t("noFallbackLocation")}
                   text={currentLocation ? "#86efac" : "#fbbf24"}
                   bg={currentLocation ? "rgba(34, 197, 94, 0.12)" : "rgba(245, 158, 11, 0.12)"}
                   border={currentLocation ? "rgba(34, 197, 94, 0.35)" : "rgba(245, 158, 11, 0.35)"}
@@ -659,42 +708,35 @@ export default function MashwarNaturalLanguageRouteModal({
 
             <section className="mashwar-panel p-4">
               <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                INPUT EXAMPLES
+                {t("examplesTitle")}
               </p>
               <div className="mt-3 space-y-2 text-[13px] leading-6 text-[#94a3b8]">
-                <p>• "Huwwara at 9:23am"</p>
-                <p>• "from Ramallah to Jenin tomorrow 8"</p>
-                <p>• "to Jenin at 7:30"</p>
+                <p>• {t("example1")}</p>
+                <p>• {t("example2")}</p>
+                <p>• {t("example3")}</p>
               </div>
             </section>
           </aside>
 
-          <section className="mashwar-panel flex min-h-0 flex-col overflow-hidden">
-            <div className="mashwar-scroll flex-1 overflow-y-auto p-4">
+          <section className="mashwar-panel flex min-h-[min(52vh,20rem)] flex-1 flex-col overflow-hidden md:h-full md:min-h-[min(60vh,26rem)]">
+            <div
+              className={`mashwar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto ${isParsing ? "p-0" : "p-4"}`}
+            >
               {isParsing ? (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3 rounded-[10px] bg-transparent p-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-[10px] border border-[#2d3139] bg-transparent">
-                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-white/80" />
-                    </div>
-                    <div>
-                      <p className="mashwar-mono text-[10px] uppercase tracking-[0.3em] text-[#6b7280]">
-                        Generating intelligence brief
-                      </p>
-                      <p className="mt-1 text-[13px] leading-6 text-[#94a3b8]">
-                        Parsing the prompt, resolving cities, and calling the live APIs.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <RouteLoadingCard
+                  layout="panel"
+                  messageNamespace="nlRoute.loadingModal"
+                  withStatusRole
+                  className="bg-transparent"
+                />
               ) : error ? (
                 <div className="flex min-h-[18rem] items-center justify-center rounded-[12px] border border-dashed border-[#2d3139] bg-white/[0.03] px-5 text-center">
                   <div className="max-w-md">
-                    <p className="text-[18px] font-semibold text-[#f9fafb]">
-                      Request failed
-                    </p>
+                    <p className="text-[18px] font-semibold text-[#f9fafb]">{t("requestFailed")}</p>
                     <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
-                      {error}
+                      {error === NL_EMPTY_PROMPT_SENTINEL
+                        ? tErrors("nlEmptyPrompt")
+                        : translateServiceError(error, tErrors)}
                     </p>
                   </div>
                 </div>
@@ -702,11 +744,9 @@ export default function MashwarNaturalLanguageRouteModal({
                 <div className="space-y-4">
                   <section className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
                     <p className="mashwar-mono text-[10px] uppercase tracking-[0.3em] text-[#6b7280]">
-                      Clarification needed
+                      {t("clarificationKicker")}
                     </p>
-                    <h3 className="mt-2 text-[22px] font-semibold text-[#f9fafb]">
-                      We need one more detail
-                    </h3>
+                    <h3 className="mt-2 text-[22px] font-semibold text-[#f9fafb]">{t("clarificationTitle")}</h3>
                     <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
                       {result.message}
                     </p>
@@ -715,9 +755,7 @@ export default function MashwarNaturalLanguageRouteModal({
               ) : result && result.kind === "error" ? (
                 <div className="flex min-h-[18rem] items-center justify-center rounded-[12px] border border-dashed border-[#2d3139] bg-white/[0.03] px-5 text-center">
                   <div className="max-w-md">
-                    <p className="text-[18px] font-semibold text-[#f9fafb]">
-                      Unable to process the prompt
-                    </p>
+                    <p className="text-[18px] font-semibold text-[#f9fafb]">{t("errorTitle")}</p>
                     <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
                       {result.message}
                     </p>
@@ -729,20 +767,20 @@ export default function MashwarNaturalLanguageRouteModal({
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.32em] text-[#6b7280]">
-                          ROUTE INTENT
+                          {t("routeIntent")}
                         </p>
                         <h3 className="mt-2 text-[22px] font-semibold text-[#f9fafb]">
-                          {formatRouteTitle(result.resolution)}
+                          {formatRouteTitle(result.resolution, t)}
                         </h3>
                         <p className="mt-2 max-w-2xl text-[13px] leading-6 text-[#94a3b8]">
-                          {result.parse.entities.wantsSimulation
-                            ? "The prompt asked for a what-if comparison, so the backend route was evaluated across multiple departure windows."
-                            : "The prompt was resolved into a single live route request with Smart ETA and journey risk."}
+                          {result.parse.entities.wantsSimulation ? t("routeSimulated") : t("routeSingle")}
                         </p>
                       </div>
 
                       <Pill
-                        label={`Confidence ${formatPercent(result.parse.confidence)}`}
+                        label={t("confidenceLine", {
+                          value: formatPercent(result.parse.confidence, tCommon),
+                        })}
                         text="#cbd5e1"
                         bg="rgba(148, 163, 184, 0.12)"
                         border="rgba(148, 163, 184, 0.24)"
@@ -752,7 +790,7 @@ export default function MashwarNaturalLanguageRouteModal({
                     <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                          Origin
+                          {t("origin")}
                         </p>
                         <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
                           {result.resolution.originLabel}
@@ -760,7 +798,7 @@ export default function MashwarNaturalLanguageRouteModal({
                       </div>
                       <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                          Destination
+                          {t("destination")}
                         </p>
                         <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
                           {result.resolution.destinationLabel}
@@ -768,7 +806,7 @@ export default function MashwarNaturalLanguageRouteModal({
                       </div>
                       <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                          Departure
+                          {t("departure")}
                         </p>
                         <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
                           {formatDateTimeLabel(result.resolution.departAt)}
@@ -776,7 +814,7 @@ export default function MashwarNaturalLanguageRouteModal({
                       </div>
                       <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                          Smart ETA
+                          {t("smartEta")}
                         </p>
                         <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
                           {formatDateTimeLabel(result.resolution.route.mainRoute?.smartEtaDateTime ?? null)}
@@ -790,18 +828,16 @@ export default function MashwarNaturalLanguageRouteModal({
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                            WHAT-IF SIMULATION
+                            {t("whatIf")}
                           </p>
-                          <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">
-                          Departure windows
-                          </h4>
+                          <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">{t("departureWindows")}</h4>
                         </div>
                         <button
                           type="button"
                           onClick={() => onApplyRoute?.(result.resolution)}
                           className="inline-flex h-10 items-center justify-center rounded-[8px] border border-[#2d3139] bg-transparent px-4 text-[12px] font-semibold text-[#e5e7eb] transition hover:bg-white/5 hover:text-[#f9fafb]"
                         >
-                          Apply on Map
+                          {t("applyOnMap")}
                         </button>
                       </div>
 
@@ -821,22 +857,20 @@ export default function MashwarNaturalLanguageRouteModal({
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                            ROUTE RESULT
+                            {t("routeResult")}
                           </p>
-                          <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">
-                            Main route
-                          </h4>
+                          <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">{t("mainRoute")}</h4>
                         </div>
                         <button
                           type="button"
                           onClick={() => onApplyRoute?.(result.resolution)}
                           className="inline-flex h-10 items-center justify-center rounded-[8px] border border-[#2d3139] bg-transparent px-4 text-[12px] font-semibold text-[#e5e7eb] transition hover:bg-white/5 hover:text-[#f9fafb]"
                         >
-                          Apply on Map
+                          {t("applyOnMap")}
                         </button>
                       </div>
                       <RouteWindowCard
-                        title="Live route"
+                        title={t("liveRoute")}
                         departAt={result.resolution.departAt ?? new Date().toISOString()}
                         route={result.resolution.route.mainRoute}
                       />
@@ -849,13 +883,13 @@ export default function MashwarNaturalLanguageRouteModal({
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.32em] text-[#6b7280]">
-                          CHECKPOINT INTENT
+                          {t("checkpointIntent")}
                         </p>
                         <h3 className="mt-2 text-[22px] font-semibold text-[#f9fafb]">
                           {result.resolution.checkpoint.name}
                         </h3>
                         <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
-                          {result.resolution.checkpoint.city ?? "Unknown city"}
+                          {result.resolution.checkpoint.city ?? t("unknownCity")}
                           {result.resolution.checkpoint.alertText
                             ? ` · ${result.resolution.checkpoint.alertText}`
                             : ""}
@@ -870,7 +904,7 @@ export default function MashwarNaturalLanguageRouteModal({
                     <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                          Mode
+                          {t("mode")}
                         </p>
                         <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
                           {result.resolution.mode.toUpperCase()}
@@ -878,7 +912,7 @@ export default function MashwarNaturalLanguageRouteModal({
                       </div>
                       <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                          Target time
+                          {t("targetTime")}
                         </p>
                         <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
                           {formatDateTimeLabel(result.resolution.targetDateTime)}
@@ -886,15 +920,15 @@ export default function MashwarNaturalLanguageRouteModal({
                       </div>
                       <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                          Current status
+                          {t("currentStatus")}
                         </p>
                         <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
-                          {result.resolution.currentStatusLabel}
+                          {safeCheckpointFlowLabel(result.resolution.currentStatusLabel, tFlow)}
                         </p>
                       </div>
                       <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                          Confidence
+                          {t("confidence")}
                         </p>
                         <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
                           {parsedConfidence}
@@ -908,23 +942,23 @@ export default function MashwarNaturalLanguageRouteModal({
                     <section className="space-y-3">
                       <div>
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                          TRAVEL WINDOW
+                          {t("travelWindow")}
                         </p>
-                        <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">
-                          Best and worst crossing windows
-                        </h4>
+                        <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">{t("travelWindowTitle")}</h4>
                       </div>
 
                       {buildTravelWindowEntries(
                         result.resolution.travelWindow ??
                           result.resolution.forecast?.travelWindow ??
                           null,
+                        tTravelHeadline,
                       ).length > 0 ? (
                         <div className="space-y-3">
                           {buildTravelWindowEntries(
                             result.resolution.travelWindow ??
                               result.resolution.forecast?.travelWindow ??
                               null,
+                            tTravelHeadline,
                           ).map((entry) => {
                             const status =
                               entry.kind === "best"
@@ -946,14 +980,16 @@ export default function MashwarNaturalLanguageRouteModal({
                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                   <div>
                                     <p className="mashwar-mono text-[10px] uppercase tracking-[0.26em] text-[#6b7280]">
-                                      {entry.kind.toUpperCase()}
+                                      {entry.kind === "best"
+                                        ? t("travelKindBestShort")
+                                        : t("travelKindWorstShort")}
                                     </p>
                                     <h5 className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
                                       {entry.label}
                                     </h5>
                                   </div>
                                   <Pill
-                                    label={entry.item?.windowLabel ?? "n/a"}
+                                    label={entry.item?.windowLabel ?? tCommon("notAvailable")}
                                     text={visual.text}
                                     bg={visual.bg}
                                     border={visual.border}
@@ -963,23 +999,23 @@ export default function MashwarNaturalLanguageRouteModal({
                                 <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                                   <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                                     <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                                      Day
+                                      {t("day")}
                                     </p>
                                     <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
-                                      {entry.item?.dayOfWeek ?? "n/a"}
+                                      {entry.item?.dayOfWeek ?? tCommon("notAvailable")}
                                     </p>
                                   </div>
                                   <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                                     <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                                      Hour
+                                      {t("hour")}
                                     </p>
                                     <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
-                                      {formatTravelWindowHour(entry.item?.hour ?? null)}
+                                      {formatTravelWindowHour(entry.item?.hour ?? null, tCommon)}
                                     </p>
                                   </div>
                                   <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3 xl:col-span-2">
                                     <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                                      Target time
+                                      {t("targetTime")}
                                     </p>
                                     <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
                                       {formatDateTimeLabel(
@@ -992,34 +1028,44 @@ export default function MashwarNaturalLanguageRouteModal({
                                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                                   <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                                     <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                                      Entering
+                                      {t("entering")}
                                     </p>
                                     <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
-                                      {entry.item?.enteringPrediction?.predictedStatus ??
-                                        "n/a"}
+                                      {entry.item?.enteringPrediction?.predictedStatus
+                                        ? safeCheckpointFlowLabel(
+                                            entry.item.enteringPrediction.predictedStatus,
+                                            tFlow,
+                                          )
+                                        : tCommon("notAvailable")}
                                     </p>
                                     <p className="mt-1 text-[12px] text-[#94a3b8]">
-                                      Confidence{" "}
-                                      {formatPercent(
-                                        entry.item?.enteringPrediction?.confidence ??
-                                          null,
-                                      )}
+                                      {t("confidenceInline", {
+                                        value: formatPercent(
+                                          entry.item?.enteringPrediction?.confidence ?? null,
+                                          tCommon,
+                                        ),
+                                      })}
                                     </p>
                                   </div>
                                   <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                                     <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                                      Leaving
+                                      {t("leaving")}
                                     </p>
                                     <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
-                                      {entry.item?.leavingPrediction?.predictedStatus ??
-                                        "n/a"}
+                                      {entry.item?.leavingPrediction?.predictedStatus
+                                        ? safeCheckpointFlowLabel(
+                                            entry.item.leavingPrediction.predictedStatus,
+                                            tFlow,
+                                          )
+                                        : tCommon("notAvailable")}
                                     </p>
                                     <p className="mt-1 text-[12px] text-[#94a3b8]">
-                                      Confidence{" "}
-                                      {formatPercent(
-                                        entry.item?.leavingPrediction?.confidence ??
-                                          null,
-                                      )}
+                                      {t("confidenceInline", {
+                                        value: formatPercent(
+                                          entry.item?.leavingPrediction?.confidence ?? null,
+                                          tCommon,
+                                        ),
+                                      })}
                                     </p>
                                   </div>
                                 </div>
@@ -1029,7 +1075,7 @@ export default function MashwarNaturalLanguageRouteModal({
                         </div>
                       ) : (
                         <div className="rounded-[12px] border border-dashed border-[#2d3139] bg-white/[0.03] px-4 py-3 text-[13px] text-[#94a3b8]">
-                          Travel window data was not included in this response.
+                          {t("travelWindowMissing")}
                         </div>
                       )}
 
@@ -1039,7 +1085,7 @@ export default function MashwarNaturalLanguageRouteModal({
                       result.resolution.forecast?.travelWindow?.scope ? (
                         <div className="flex flex-wrap gap-2 text-[11px] text-[#94a3b8]">
                           <span className="rounded-full border border-[#2d3139] px-3 py-1">
-                            Reference{" "}
+                            {t("reference")}{" "}
                             {formatDateTimeLabel(
                               result.resolution.travelWindow?.referenceTime ??
                                 result.resolution.forecast?.travelWindow?.referenceTime ??
@@ -1047,10 +1093,10 @@ export default function MashwarNaturalLanguageRouteModal({
                             )}
                           </span>
                           <span className="rounded-full border border-[#2d3139] px-3 py-1">
-                            Scope{" "}
+                            {t("scope")}{" "}
                             {result.resolution.travelWindow?.scope ??
                               result.resolution.forecast?.travelWindow?.scope ??
-                              "n/a"}
+                              tCommon("notAvailable")}
                           </span>
                         </div>
                       ) : null}
@@ -1061,11 +1107,9 @@ export default function MashwarNaturalLanguageRouteModal({
                     <section className="space-y-3">
                       <div>
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                          FORECAST TIMELINE
+                          {t("forecastTimeline")}
                         </p>
-                        <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">
-                          Entering and leaving windows
-                        </h4>
+                        <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">{t("forecastTimelineTitle")}</h4>
                       </div>
 
                       <div className="space-y-3">
@@ -1077,7 +1121,12 @@ export default function MashwarNaturalLanguageRouteModal({
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div>
                                 <p className="mashwar-mono text-[10px] uppercase tracking-[0.26em] text-[#6b7280]">
-                                  {row.horizon.replace(/_/g, " ").toUpperCase()}
+                                  {(() => {
+                                    const sub = forecastHorizonSubkey(row.horizon);
+                                    return sub === "unknown"
+                                      ? tForecastH("unknown", { code: row.horizon })
+                                      : tForecastH(sub);
+                                  })()}
                                 </p>
                                 <h5 className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
                                   {formatDateTimeLabel(row.targetDateTime)}
@@ -1097,13 +1146,15 @@ export default function MashwarNaturalLanguageRouteModal({
                               {row.entering ? (
                                 <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                                   <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                                    Entering
+                                    {t("entering")}
                                   </p>
                                   <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
-                                    {row.entering.prediction.predictedStatus}
+                                    {safeCheckpointFlowLabel(row.entering.prediction.predictedStatus, tFlow)}
                                   </p>
                                   <p className="mt-1 text-[12px] text-[#94a3b8]">
-                                    Confidence {formatPercent(row.entering.prediction.confidence)}
+                                    {t("confidenceInline", {
+                                      value: formatPercent(row.entering.prediction.confidence, tCommon),
+                                    })}
                                   </p>
                                 </div>
                               ) : null}
@@ -1111,13 +1162,15 @@ export default function MashwarNaturalLanguageRouteModal({
                               {row.leaving ? (
                                 <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                                   <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                                    Leaving
+                                    {t("leaving")}
                                   </p>
                                   <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
-                                    {row.leaving.prediction.predictedStatus}
+                                    {safeCheckpointFlowLabel(row.leaving.prediction.predictedStatus, tFlow)}
                                   </p>
                                   <p className="mt-1 text-[12px] text-[#94a3b8]">
-                                    Confidence {formatPercent(row.leaving.prediction.confidence)}
+                                    {t("confidenceInline", {
+                                      value: formatPercent(row.leaving.prediction.confidence, tCommon),
+                                    })}
                                   </p>
                                 </div>
                               ) : null}
@@ -1130,11 +1183,9 @@ export default function MashwarNaturalLanguageRouteModal({
                     <section className="space-y-3">
                       <div>
                         <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                          EXACT-TIME PREDICTION
+                          {t("exactPrediction")}
                         </p>
-                        <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">
-                          Direction-specific predictions
-                        </h4>
+                        <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">{t("exactPredictionTitle")}</h4>
                       </div>
 
                       <div className="space-y-3">
@@ -1154,11 +1205,17 @@ export default function MashwarNaturalLanguageRouteModal({
                                     {prediction.request.statusType}
                                   </p>
                                   <h5 className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
-                                    {prediction.prediction.predictedStatus}
+                                    {safeCheckpointFlowLabel(
+                                      prediction.prediction.predictedStatus,
+                                      tFlow,
+                                    )}
                                   </h5>
                                 </div>
                                 <Pill
-                                  label={prediction.prediction.predictedStatus}
+                                  label={safeCheckpointFlowLabel(
+                                    prediction.prediction.predictedStatus,
+                                    tFlow,
+                                  )}
                                   text={visual.text}
                                   bg={visual.bg}
                                   border={visual.border}
@@ -1168,7 +1225,7 @@ export default function MashwarNaturalLanguageRouteModal({
                               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                                 <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                                   <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                                    Target time
+                                    {t("targetTime")}
                                   </p>
                                   <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
                                     {formatDateTimeLabel(
@@ -1178,10 +1235,10 @@ export default function MashwarNaturalLanguageRouteModal({
                                 </div>
                                 <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
                                   <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                                    Confidence
+                                    {t("confidence")}
                                   </p>
                                   <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
-                                    {formatPercent(prediction.prediction.confidence)}
+                                    {formatPercent(prediction.prediction.confidence, tCommon)}
                                   </p>
                                 </div>
                               </div>
@@ -1195,13 +1252,8 @@ export default function MashwarNaturalLanguageRouteModal({
               ) : (
                 <div className="flex min-h-[18rem] items-center justify-center rounded-[12px] border border-dashed border-[#2d3139] bg-white/[0.03] px-5 text-center">
                   <div className="max-w-md">
-                    <p className="text-[18px] font-semibold text-[#f9fafb]">
-                      No intelligence generated yet
-                    </p>
-                    <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
-                      Generate a route or checkpoint brief to see Smart ETA, risk, and
-                      checkpoint forecasting appear here.
-                    </p>
+                    <p className="text-[18px] font-semibold text-[#f9fafb]">{t("emptyTitle")}</p>
+                    <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">{t("emptySub")}</p>
                   </div>
                 </div>
               )}
