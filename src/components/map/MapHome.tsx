@@ -11,6 +11,7 @@ import {
 
 import MapView from "@/components/map/MapView";
 import NaturalLanguageRouteModal from "@/components/map/NaturalLanguageRouteModal";
+import TradeoffExplainerModal from "@/components/map/TradeoffExplainerModal";
 import {
   DEMO_ROUTE_REQUEST,
   hasValidCoordinates,
@@ -43,6 +44,7 @@ const EMPTY_ROUTES: NormalizedRoutes = {
   selectedRouteId: null,
   mainRoute: null,
   alternativeRoutes: [],
+  tradeoffExplainer: null,
 };
 
 function getStatusUi(status: ReturnType<typeof getWorstStatus>) {
@@ -301,6 +303,13 @@ export default function MapHome() {
   const [routeTo, setRouteTo] = useState<RouteEndpointSelection | null>(null);
   const checkpointForecastRequestNonce = useRef(0);
   const selectedCheckpointIdRef = useRef<string | null>(null);
+
+  const handleSelectRoute = useCallback((routeId: string) => {
+    setRoutes((current) => ({
+      ...current,
+      selectedRouteId: routeId,
+    }));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -640,6 +649,7 @@ export default function MapHome() {
         departAt={routes.departAt}
         userLocation={userLocation}
         onCheckpointSelect={handleCheckpointSelect}
+        onRouteSelect={handleSelectRoute}
       />
 
       <div className="pointer-events-none absolute inset-x-4 top-4 flex flex-col gap-3">
@@ -917,6 +927,11 @@ export default function MapHome() {
       <NaturalLanguageRouteModal
         open={isNaturalRouteModalOpen}
         onClose={() => setIsNaturalRouteModalOpen(false)}
+      />
+      <TradeoffExplainerModal
+        explainer={routes.tradeoffExplainer}
+        selectedRouteId={routes.selectedRouteId}
+        onRouteSelect={handleSelectRoute}
       />
 
       {selectedCheckpoint &&

@@ -14,6 +14,8 @@ import type {
   RoutingV2CheckpointDto,
   RoutingV2ResponseDataDto,
   RoutingV2RouteDto,
+  RoutingTradeoffExplainerDto,
+  RoutingTradeoffExplainerRouteDto,
 } from "@/lib/types/map";
 
 function getGeoApiBaseUrl(): string {
@@ -543,6 +545,230 @@ function normalizeCheckpointMatching(
   };
 }
 
+function normalizeTradeoffRoute(
+  route: RoutingTradeoffExplainerRouteDto,
+  index: number,
+): NonNullable<NormalizedRoutes["tradeoffExplainer"]>["routes"][number] {
+  return {
+    uiKey: `${toStringOrNull(route.route_id) ?? `tradeoff_route_${index + 1}`}:${Math.max(1, Math.trunc(toFiniteNumber(route.rank) || index + 1))}:${index}`,
+    routeId: toStringOrNull(route.route_id) ?? `tradeoff_route_${index + 1}`,
+    rank: Math.max(1, Math.trunc(toFiniteNumber(route.rank) || index + 1)),
+    labelEn: toStringOrNull(route.label_en),
+    labelAr: toStringOrNull(route.label_ar),
+    isRecommended: route.is_recommended === true,
+    isFastest: route.is_fastest === true,
+    isSafest: route.is_safest === true,
+    isLowestDelay: route.is_lowest_delay === true,
+    isHighestRisk: route.is_highest_risk === true,
+    durationMinutes: toOptionalFiniteNumber(route.duration_minutes),
+    smartEtaMinutes: toOptionalFiniteNumber(route.smart_eta_minutes),
+    expectedDelayMinutes: toOptionalFiniteNumber(route.expected_delay_minutes),
+    distanceM: toOptionalFiniteNumber(route.distance_m),
+    routeScore: toOptionalFiniteNumber(route.route_score),
+    checkpointCount: toOptionalFiniteNumber(route.checkpoint_count),
+    riskScore: toOptionalFiniteNumber(route.risk_score),
+    riskLevel:
+      route.risk_level === "low" ||
+      route.risk_level === "medium" ||
+      route.risk_level === "high"
+        ? route.risk_level
+        : "unknown",
+    riskConfidence: toOptionalFiniteNumber(route.risk_confidence),
+    historicalVolatility: toOptionalFiniteNumber(route.historical_volatility),
+    routeViability:
+      route.route_viability === "good" ||
+      route.route_viability === "risky" ||
+      route.route_viability === "avoid"
+        ? route.route_viability
+        : "risky",
+    worstPredictedStatus:
+      route.worst_predicted_status === "green" ||
+      route.worst_predicted_status === "yellow" ||
+      route.worst_predicted_status === "red" ||
+      route.worst_predicted_status === "unknown"
+        ? route.worst_predicted_status
+        : "unknown",
+    routeDirectionCounts: {
+      entering: Math.max(
+        0,
+        Math.trunc(
+          toOptionalFiniteNumber(route.route_direction_counts?.entering) ?? 0,
+        ),
+      ),
+      leaving: Math.max(
+        0,
+        Math.trunc(
+          toOptionalFiniteNumber(route.route_direction_counts?.leaving) ?? 0,
+        ),
+      ),
+      transit: Math.max(
+        0,
+        Math.trunc(
+          toOptionalFiniteNumber(route.route_direction_counts?.transit) ?? 0,
+        ),
+      ),
+      unknown: Math.max(
+        0,
+        Math.trunc(
+          toOptionalFiniteNumber(route.route_direction_counts?.unknown) ?? 0,
+        ),
+      ),
+    },
+    statusCounts: {
+      green: Math.max(
+        0,
+        Math.trunc(toOptionalFiniteNumber(route.status_counts?.green) ?? 0),
+      ),
+      yellow: Math.max(
+        0,
+        Math.trunc(toOptionalFiniteNumber(route.status_counts?.yellow) ?? 0),
+      ),
+      red: Math.max(
+        0,
+        Math.trunc(toOptionalFiniteNumber(route.status_counts?.red) ?? 0),
+      ),
+      unknown: Math.max(
+        0,
+        Math.trunc(toOptionalFiniteNumber(route.status_counts?.unknown) ?? 0),
+      ),
+    },
+    riskyCheckpointCount: Math.max(
+      0,
+      Math.trunc(toOptionalFiniteNumber(route.risky_checkpoint_count) ?? 0),
+    ),
+    riskyCheckpoints: Array.isArray(route.risky_checkpoints)
+      ? route.risky_checkpoints.map((checkpoint, checkpointIndex) => ({
+          checkpointId:
+            checkpoint.checkpoint_id ?? `tradeoff_checkpoint_${index + 1}_${checkpointIndex + 1}`,
+          name: toStringOrNull(checkpoint.name) ?? `Checkpoint ${checkpointIndex + 1}`,
+          city: toStringOrNull(checkpoint.city),
+          routeDirection: toStringOrNull(checkpoint.route_direction),
+          predictedStatusAtEta:
+            checkpoint.predicted_status_at_eta === "green" ||
+            checkpoint.predicted_status_at_eta === "yellow" ||
+            checkpoint.predicted_status_at_eta === "red" ||
+            checkpoint.predicted_status_at_eta === "unknown"
+              ? checkpoint.predicted_status_at_eta
+              : "unknown",
+          currentStatus:
+            checkpoint.current_status === "green" ||
+            checkpoint.current_status === "yellow" ||
+            checkpoint.current_status === "red" ||
+            checkpoint.current_status === "unknown"
+              ? checkpoint.current_status
+              : "unknown",
+          forecastConfidence: toOptionalFiniteNumber(checkpoint.forecast_confidence),
+          expectedDelayMs: toOptionalFiniteNumber(checkpoint.expected_delay_ms),
+          expectedDelayMinutes: toOptionalFiniteNumber(
+            checkpoint.expected_delay_minutes,
+          ),
+          etaMs: toOptionalFiniteNumber(checkpoint.eta_ms),
+          etaMinutes: toOptionalFiniteNumber(checkpoint.eta_minutes),
+          severityRatio: toOptionalFiniteNumber(checkpoint.severity_ratio),
+          historicalVolatility: toOptionalFiniteNumber(
+            checkpoint.historical_volatility,
+          ),
+          distanceFromRouteM: toOptionalFiniteNumber(
+            checkpoint.distance_from_route_m,
+          ),
+        }))
+      : [],
+    routeCorridorCities: Array.isArray(route.route_corridor_cities)
+      ? route.route_corridor_cities
+          .map((city) => toStringOrNull(city))
+          .filter((city): city is string => Boolean(city))
+      : [],
+    cityContextStrength: toStringOrNull(route.city_context_strength),
+    sameCityTrip:
+      typeof route.same_city_trip === "boolean" ? route.same_city_trip : null,
+    durationDeltaVsRecommendedMinutes: toOptionalFiniteNumber(
+      route.duration_delta_vs_recommended_minutes,
+    ),
+    smartEtaDeltaVsRecommendedMinutes: toOptionalFiniteNumber(
+      route.smart_eta_delta_vs_recommended_minutes,
+    ),
+    expectedDelayDeltaVsRecommendedMinutes: toOptionalFiniteNumber(
+      route.expected_delay_delta_vs_recommended_minutes,
+    ),
+    riskDeltaVsRecommended: toOptionalFiniteNumber(
+      route.risk_delta_vs_recommended,
+    ),
+    distanceDeltaVsRecommendedM: toOptionalFiniteNumber(
+      route.distance_delta_vs_recommended_m,
+    ),
+    checkpointDeltaVsRecommended: toOptionalFiniteNumber(
+      route.checkpoint_delta_vs_recommended,
+    ),
+    confidenceDeltaVsRecommended: toOptionalFiniteNumber(
+      route.confidence_delta_vs_recommended,
+    ),
+    volatilityDeltaVsRecommended: toOptionalFiniteNumber(
+      route.volatility_delta_vs_recommended,
+    ),
+    comparisonFacts: {
+      english: Array.isArray(route.comparison_facts?.english)
+        ? route.comparison_facts.english
+            .map((fact) => toStringOrNull(fact))
+            .filter((fact): fact is string => Boolean(fact))
+        : [],
+      arabic: Array.isArray(route.comparison_facts?.arabic)
+        ? route.comparison_facts.arabic
+            .map((fact) => toStringOrNull(fact))
+            .filter((fact): fact is string => Boolean(fact))
+        : [],
+    },
+  };
+}
+
+function normalizeTradeoffExplainer(
+  value: RoutingTradeoffExplainerDto | null | undefined,
+): NormalizedRoutes["tradeoffExplainer"] {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  return {
+    mode: toStringOrNull(value.mode),
+    language: toStringOrNull(value.language),
+    comparedRouteCount: toOptionalFiniteNumber(value.compared_route_count),
+    winnerRouteId: toStringOrNull(value.winner_route_id),
+    winnerRank: toOptionalFiniteNumber(value.winner_rank),
+    fastestRouteId: toStringOrNull(value.fastest_route_id),
+    safestRouteId: toStringOrNull(value.safest_route_id),
+    lowestDelayRouteId: toStringOrNull(value.lowest_delay_route_id),
+    highestRiskRouteId: toStringOrNull(value.highest_risk_route_id),
+    setSummary: {
+      timeSpreadMinutes: toOptionalFiniteNumber(
+        value.set_summary?.time_spread_minutes,
+      ),
+      riskSpread: toOptionalFiniteNumber(value.set_summary?.risk_spread),
+      delaySpreadMinutes: toOptionalFiniteNumber(
+        value.set_summary?.delay_spread_minutes,
+      ),
+      checkpointSpread: toOptionalFiniteNumber(
+        value.set_summary?.checkpoint_spread,
+      ),
+      confidenceSpread: toOptionalFiniteNumber(
+        value.set_summary?.confidence_spread,
+      ),
+      volatilitySpread: toOptionalFiniteNumber(
+        value.set_summary?.volatility_spread,
+      ),
+      corridorNote: toStringOrNull(value.set_summary?.corridor_note),
+      decisionDriverEn: toStringOrNull(value.set_summary?.decision_driver_en),
+      decisionDriverAr: toStringOrNull(value.set_summary?.decision_driver_ar),
+    },
+    routes: Array.isArray(value.routes)
+      ? value.routes
+          .map((route, index) => normalizeTradeoffRoute(route, index))
+          .sort((left, right) => left.rank - right.rank)
+      : [],
+    englishText: toStringOrNull(value.english_text),
+    arabicText: toStringOrNull(value.arabic_text),
+    fullText: toStringOrNull(value.full_text),
+  };
+}
+
 async function getErrorMessage(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as {
@@ -608,11 +834,11 @@ export async function getRoute(
 
     const data = extractRoutingData(payload);
 
-  const departAt =
-    typeof data.depart_at === "string" && data.depart_at.trim()
-      ? data.depart_at.trim()
-      : request.depart_at ?? null;
-  const departAtPalestine = formatDateTimeInPalestine(departAt);
+    const departAt =
+      typeof data.depart_at === "string" && data.depart_at.trim()
+        ? data.depart_at.trim()
+        : request.depart_at ?? null;
+    const departAtPalestine = formatDateTimeInPalestine(departAt);
 
     const routes = Array.isArray(data.routes)
       ? data.routes
@@ -733,6 +959,7 @@ export async function getRoute(
       selectedRouteId: routesWithDelay[0]?.routeId ?? null,
       mainRoute: routesWithDelay[0] ?? null,
       alternativeRoutes: routesWithDelay.slice(1, 3),
+      tradeoffExplainer: normalizeTradeoffExplainer(data.tradeoff_explainer),
     };
   } catch (error) {
     if (error instanceof Error) {

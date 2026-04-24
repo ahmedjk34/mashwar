@@ -300,6 +300,105 @@ export interface RoutingV2RouteDto {
   } | null;
 }
 
+export interface RoutingTradeoffExplainerCheckpointDto {
+  checkpoint_id?: number | string | null;
+  name?: string | null;
+  city?: string | null;
+  route_direction?: string | null;
+  predicted_status_at_eta?: RoutingStatusBucket | string | null;
+  current_status?: RoutingStatusBucket | string | null;
+  forecast_confidence?: number | string | null;
+  expected_delay_ms?: number | string | null;
+  expected_delay_minutes?: number | string | null;
+  eta_ms?: number | string | null;
+  eta_minutes?: number | string | null;
+  severity_ratio?: number | string | null;
+  historical_volatility?: number | string | null;
+  distance_from_route_m?: number | string | null;
+}
+
+export interface RoutingTradeoffExplainerRouteDto {
+  route_id?: string | null;
+  rank?: number | string | null;
+  label_en?: string | null;
+  label_ar?: string | null;
+  is_recommended?: boolean | null;
+  is_fastest?: boolean | null;
+  is_safest?: boolean | null;
+  is_lowest_delay?: boolean | null;
+  is_highest_risk?: boolean | null;
+  duration_minutes?: number | string | null;
+  smart_eta_minutes?: number | string | null;
+  expected_delay_minutes?: number | string | null;
+  distance_m?: number | string | null;
+  route_score?: number | string | null;
+  checkpoint_count?: number | string | null;
+  risk_score?: number | string | null;
+  risk_level?: RoutingRiskLevel | string | null;
+  risk_confidence?: number | string | null;
+  historical_volatility?: number | string | null;
+  route_viability?: RoutingRouteViability | string | null;
+  worst_predicted_status?: RoutingStatusBucket | string | null;
+  route_direction_counts?: {
+    entering?: number | string | null;
+    leaving?: number | string | null;
+    transit?: number | string | null;
+    unknown?: number | string | null;
+  } | null;
+  status_counts?: {
+    green?: number | string | null;
+    yellow?: number | string | null;
+    red?: number | string | null;
+    unknown?: number | string | null;
+  } | null;
+  risky_checkpoint_count?: number | string | null;
+  risky_checkpoints?: RoutingTradeoffExplainerCheckpointDto[] | null;
+  route_corridor_cities?: string[] | null;
+  city_context_strength?: string | null;
+  same_city_trip?: boolean | null;
+  duration_delta_vs_recommended_minutes?: number | string | null;
+  smart_eta_delta_vs_recommended_minutes?: number | string | null;
+  expected_delay_delta_vs_recommended_minutes?: number | string | null;
+  risk_delta_vs_recommended?: number | string | null;
+  distance_delta_vs_recommended_m?: number | string | null;
+  checkpoint_delta_vs_recommended?: number | string | null;
+  confidence_delta_vs_recommended?: number | string | null;
+  volatility_delta_vs_recommended?: number | string | null;
+  comparison_facts?: {
+    english?: string[] | null;
+    arabic?: string[] | null;
+  } | null;
+}
+
+export interface RoutingTradeoffExplainerSummaryDto {
+  time_spread_minutes?: number | string | null;
+  risk_spread?: number | string | null;
+  delay_spread_minutes?: number | string | null;
+  checkpoint_spread?: number | string | null;
+  confidence_spread?: number | string | null;
+  volatility_spread?: number | string | null;
+  corridor_note?: string | null;
+  decision_driver_en?: string | null;
+  decision_driver_ar?: string | null;
+}
+
+export interface RoutingTradeoffExplainerDto {
+  mode?: string | null;
+  language?: string | null;
+  compared_route_count?: number | string | null;
+  winner_route_id?: string | null;
+  winner_rank?: number | string | null;
+  fastest_route_id?: string | null;
+  safest_route_id?: string | null;
+  lowest_delay_route_id?: string | null;
+  highest_risk_route_id?: string | null;
+  set_summary?: RoutingTradeoffExplainerSummaryDto | null;
+  routes?: RoutingTradeoffExplainerRouteDto[] | null;
+  english_text?: string | null;
+  arabic_text?: string | null;
+  full_text?: string | null;
+}
+
 export interface RoutingV2ResponseDataDto {
   generated_at?: string | null;
   version?: string | null;
@@ -310,6 +409,7 @@ export interface RoutingV2ResponseDataDto {
   warnings?: unknown;
   graphhopper_info?: Record<string, unknown> | null;
   routes?: RoutingV2RouteDto[] | null;
+  tradeoff_explainer?: RoutingTradeoffExplainerDto | null;
 }
 
 export interface RoutingApiEnvelope {
@@ -418,4 +518,97 @@ export interface NormalizedRoutes {
   selectedRouteId: string | null;
   mainRoute: RoutePath | null;
   alternativeRoutes: RoutePath[];
+  tradeoffExplainer: {
+    mode: string | null;
+    language: string | null;
+    comparedRouteCount: number | null;
+    winnerRouteId: string | null;
+    winnerRank: number | null;
+    fastestRouteId: string | null;
+    safestRouteId: string | null;
+    lowestDelayRouteId: string | null;
+    highestRiskRouteId: string | null;
+    setSummary: {
+      timeSpreadMinutes: number | null;
+      riskSpread: number | null;
+      delaySpreadMinutes: number | null;
+      checkpointSpread: number | null;
+      confidenceSpread: number | null;
+      volatilitySpread: number | null;
+      corridorNote: string | null;
+      decisionDriverEn: string | null;
+      decisionDriverAr: string | null;
+    };
+    routes: Array<{
+      uiKey: string;
+      routeId: string;
+      rank: number;
+      labelEn: string | null;
+      labelAr: string | null;
+      isRecommended: boolean;
+      isFastest: boolean;
+      isSafest: boolean;
+      isLowestDelay: boolean;
+      isHighestRisk: boolean;
+      durationMinutes: number | null;
+      smartEtaMinutes: number | null;
+      expectedDelayMinutes: number | null;
+      distanceM: number | null;
+      routeScore: number | null;
+      checkpointCount: number | null;
+      riskScore: number | null;
+      riskLevel: RoutingRiskLevel;
+      riskConfidence: number | null;
+      historicalVolatility: number | null;
+      routeViability: RoutingRouteViability;
+      worstPredictedStatus: RoutingStatusBucket;
+      routeDirectionCounts: {
+        entering: number;
+        leaving: number;
+        transit: number;
+        unknown: number;
+      };
+      statusCounts: {
+        green: number;
+        yellow: number;
+        red: number;
+        unknown: number;
+      };
+      riskyCheckpointCount: number;
+      riskyCheckpoints: Array<{
+        checkpointId: number | string | null;
+        name: string;
+        city: string | null;
+        routeDirection: string | null;
+        predictedStatusAtEta: RoutingStatusBucket;
+        currentStatus: RoutingStatusBucket;
+        forecastConfidence: number | null;
+        expectedDelayMs: number | null;
+        expectedDelayMinutes: number | null;
+        etaMs: number | null;
+        etaMinutes: number | null;
+        severityRatio: number | null;
+        historicalVolatility: number | null;
+        distanceFromRouteM: number | null;
+      }>;
+      routeCorridorCities: string[];
+      cityContextStrength: string | null;
+      sameCityTrip: boolean | null;
+      durationDeltaVsRecommendedMinutes: number | null;
+      smartEtaDeltaVsRecommendedMinutes: number | null;
+      expectedDelayDeltaVsRecommendedMinutes: number | null;
+      riskDeltaVsRecommended: number | null;
+      distanceDeltaVsRecommendedM: number | null;
+      checkpointDeltaVsRecommended: number | null;
+      confidenceDeltaVsRecommended: number | null;
+      volatilityDeltaVsRecommended: number | null;
+      comparisonFacts: {
+        english: string[];
+        arabic: string[];
+      };
+    }>;
+    englishText: string | null;
+    arabicText: string | null;
+    fullText: string | null;
+  } | null;
 }

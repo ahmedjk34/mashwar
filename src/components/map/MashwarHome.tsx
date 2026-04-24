@@ -13,6 +13,7 @@ import MapView from "@/components/map/MapView";
 import LocationSyncIcon from "@/components/map/LocationSyncIcon";
 import MashwarNaturalLanguageRouteModal from "@/components/map/MashwarNaturalLanguageRouteModal";
 import RouteDetailsModal from "@/components/map/RouteDetailsModal";
+import TradeoffExplainerModal from "@/components/map/TradeoffExplainerModal";
 import {
   DEMO_ROUTE_REQUEST,
   hasValidCoordinates,
@@ -46,6 +47,7 @@ const EMPTY_ROUTES: NormalizedRoutes = {
   selectedRouteId: null,
   mainRoute: null,
   alternativeRoutes: [],
+  tradeoffExplainer: null,
 };
 
 const FORECAST_HORIZON_ORDER = [
@@ -1350,6 +1352,11 @@ export default function MashwarHome() {
         routeVersion={routes.version}
         checkpointMatching={routes.checkpointMatching}
         onClose={() => setRouteDetailsRouteId(null)}
+      />
+      <TradeoffExplainerModal
+        explainer={routes.tradeoffExplainer}
+        selectedRouteId={routes.selectedRouteId}
+        onRouteSelect={handleSelectRoute}
       />
     </main>
   );
