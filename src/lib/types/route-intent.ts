@@ -2,6 +2,7 @@ import type {
   MapCheckpoint,
   NormalizedCheckpointForecast,
   NormalizedCheckpointPrediction,
+  NormalizedCheckpointTravelWindow,
   NormalizedRoutes,
   RoutePoint,
   UserLocation,
@@ -60,13 +61,24 @@ export interface NaturalLanguageCheckpointPrediction {
   prediction: NormalizedCheckpointPrediction["prediction"];
 }
 
+export interface NaturalLanguageCheckpointTravelWindow {
+  checkpoint: MapCheckpoint;
+  request: {
+    checkpointId: string;
+    asOf: string | null;
+  };
+  travelWindow: NormalizedCheckpointTravelWindow;
+}
+
 export interface NaturalLanguageCheckpointResolution {
   checkpoint: MapCheckpoint;
-  mode: "predict" | "forecast" | "status";
+  mode: "predict" | "forecast" | "travel-window" | "status";
   targetDateTime: string | null;
+  referenceTime: string | null;
   currentStatusLabel: string;
   predictions: NaturalLanguageCheckpointPrediction[];
   forecast: NormalizedCheckpointForecast | null;
+  travelWindow: NormalizedCheckpointTravelWindow | null;
 }
 
 export interface NaturalLanguageRouteExecution {

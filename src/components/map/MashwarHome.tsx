@@ -29,6 +29,8 @@ import type {
   MapCheckpoint,
   MapCheckpointStatus,
   NormalizedCheckpointForecast,
+  NormalizedCheckpointTravelWindow,
+  NormalizedCheckpointTravelWindowItem,
   NormalizedRoutes,
   RoutePoint,
   UserLocation,
@@ -262,6 +264,50 @@ function buildForecastRows(
   ];
 
   return orderedKeys.map((key) => rows.get(key) as ForecastRow);
+}
+
+function formatTravelWindowHour(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  return `${`${Math.trunc(value)}`.padStart(2, "0")}:00`;
+}
+
+function buildTravelWindowEntries(
+  travelWindow: NormalizedCheckpointTravelWindow | null,
+): Array<{
+  kind: "best" | "worst";
+  label: string;
+  item: NormalizedCheckpointTravelWindowItem;
+}> {
+  if (!travelWindow) {
+    return [];
+  }
+
+  const entries: Array<{
+    kind: "best" | "worst";
+    label: string;
+    item: NormalizedCheckpointTravelWindowItem;
+  }> = [];
+
+  if (travelWindow.best) {
+    entries.push({
+      kind: "best",
+      label: "Best time to cross",
+      item: travelWindow.best,
+    });
+  }
+
+  if (travelWindow.worst) {
+    entries.push({
+      kind: "worst",
+      label: "Worst time to cross",
+      item: travelWindow.worst,
+    });
+  }
+
+  return entries;
 }
 
 function replaceCheckpointInCollection(
@@ -617,6 +663,7 @@ export default function MashwarHome() {
     () => buildForecastRows(selectedCheckpointForecast),
     [selectedCheckpointForecast],
   );
+  const travelWindow = selectedCheckpointForecast?.travelWindow ?? null;
 
   const selectedCheckpointStatusVisual = selectedCheckpointStatus
     ? STATUS_VISUALS[selectedCheckpointStatus]
@@ -1294,6 +1341,105 @@ export default function MashwarHome() {
                       Updated
                     </span>
                   </div>
+
+                  {travelWindow && buildTravelWindowEntries(travelWindow).length > 0 ? (
+                    <div className="mt-4 rounded-[8px] border border-white/6 bg-transparent p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                            TRAVEL WINDOW
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-[10px] text-[#94a3b8]">
+                          {travelWindow.referenceTime ? (
+                            <span className="rounded-full border border-[#2d3139] px-2.5 py-1">
+                              Reference {formatForecastDateTime(travelWindow.referenceTime)}
+                            </span>
+                          ) : null}
+                          {travelWindow.scope ? (
+                            <span className="rounded-full border border-[#2d3139] px-2.5 py-1">
+                              Scope {travelWindow.scope}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 space-y-2">
+                        {buildTravelWindowEntries(travelWindow).map((entry) => (
+                          <article
+                            key={entry.kind}
+                            className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-3"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[#6b7280]">
+                                  {entry.kind.toUpperCase()}
+                                </p>
+                                <h4 className="mt-1 text-[14px] font-semibold text-[#f9fafb]">
+                                  {entry.label}
+                                </h4>
+                              </div>
+                              <span className="rounded-full border border-[#2d3139] px-2.5 py-1 text-[11px] text-[#cbd5e1]">
+                                {entry.item?.windowLabel ?? "n/a"}
+                              </span>
+                            </div>
+
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                              <div className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-2.5">
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[#6b7280]">
+                                  Day
+                                </p>
+                                <p className="mt-1 text-[13px] font-semibold text-[#f9fafb]">
+                                  {entry.item?.dayOfWeek ?? "n/a"}
+                                </p>
+                              </div>
+                              <div className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-2.5">
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[#6b7280]">
+                                  Hour
+                                </p>
+                                <p className="mt-1 text-[13px] font-semibold text-[#f9fafb]">
+                                  {formatTravelWindowHour(entry.item?.hour ?? null)}
+                                </p>
+                              </div>
+                              <div className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-2.5 xl:col-span-2">
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[#6b7280]">
+                                  Target time
+                                </p>
+                                <p className="mt-1 text-[13px] font-semibold text-[#f9fafb]">
+                                  {formatForecastDateTime(entry.item?.targetDateTime ?? null)}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                              <div className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-2.5">
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[#6b7280]">
+                                  Entering
+                                </p>
+                                <p className="mt-1 text-[13px] font-semibold text-[#f9fafb]">
+                                  {entry.item?.enteringPrediction?.predictedStatus ?? "n/a"}
+                                </p>
+                                <p className="mt-1 text-[11px] text-[#94a3b8]">
+                                  Confidence {formatForecastConfidence(entry.item?.enteringPrediction?.confidence ?? null)}
+                                </p>
+                              </div>
+                              <div className="rounded-[8px] border border-[#2d3139] bg-white/[0.03] p-2.5">
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.22em] text-[#6b7280]">
+                                  Leaving
+                                </p>
+                                <p className="mt-1 text-[13px] font-semibold text-[#f9fafb]">
+                                  {entry.item?.leavingPrediction?.predictedStatus ?? "n/a"}
+                                </p>
+                                <p className="mt-1 text-[11px] text-[#94a3b8]">
+                                  Confidence {formatForecastConfidence(entry.item?.leavingPrediction?.confidence ?? null)}
+                                </p>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <p className="mt-2 mashwar-mono text-[10px] uppercase tracking-[0.22em] text-[#f59e0b]">
                     Captured{" "}

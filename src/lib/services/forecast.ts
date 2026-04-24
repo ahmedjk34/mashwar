@@ -10,6 +10,10 @@ import type {
   CheckpointForecastStatusType,
   CheckpointPredictionApiEnvelope,
   CheckpointPredictionResponseDataDto,
+  CheckpointTravelWindowDto,
+  CheckpointTravelWindowPredictionItemDto,
+  NormalizedCheckpointTravelWindow,
+  NormalizedCheckpointTravelWindowItem,
   NormalizedCheckpointForecast,
   NormalizedCheckpointForecastTimelineItem,
   NormalizedCheckpointPrediction,
@@ -85,6 +89,30 @@ function isPredictionGroup(
   );
 }
 
+function getPredictionLike(
+  item: CheckpointTravelWindowPredictionItemDto | null | undefined,
+  direction: "entering" | "leaving",
+): CheckpointForecastPredictionItemDto | null {
+  if (!item) {
+    return null;
+  }
+
+  const prediction =
+    direction === "entering"
+      ? item.entering_prediction ?? item.enteringPrediction ?? item.entering
+      : item.leaving_prediction ?? item.leavingPrediction ?? item.leaving;
+
+  if (!prediction) {
+    return null;
+  }
+
+  return {
+    horizon: "travel_window",
+    target_datetime: firstNonEmptyString(item.target_datetime),
+    prediction,
+  };
+}
+
 function extractForecastData(payload: unknown): CheckpointForecastResponseDataDto {
   if (!payload || typeof payload !== "object") {
     throw new Error("Invalid forecast response.");
@@ -100,7 +128,9 @@ function extractForecastData(payload: unknown): CheckpointForecastResponseDataDt
   if (
     "checkpoint" in envelope ||
     "request" in envelope ||
-    "predictions" in envelope
+    "predictions" in envelope ||
+    "travel_window" in envelope ||
+    "travelWindow" in envelope
   ) {
     return envelope;
   }
@@ -193,6 +223,67 @@ function normalizePredictionItem(
   };
 }
 
+function normalizeTravelWindowItem(
+  item: CheckpointTravelWindowPredictionItemDto | null | undefined,
+): NormalizedCheckpointTravelWindowItem | null {
+  if (!item) {
+    return null;
+  }
+
+  const enteringPrediction = normalizePredictionItem(
+    getPredictionLike(item, "entering") ?? {
+      horizon: "travel_window",
+      target_datetime: firstNonEmptyString(item.target_datetime),
+      prediction: null,
+    },
+    0,
+    "entering",
+  )?.prediction ?? null;
+  const leavingPrediction = normalizePredictionItem(
+    getPredictionLike(item, "leaving") ?? {
+      horizon: "travel_window",
+      target_datetime: firstNonEmptyString(item.target_datetime),
+      prediction: null,
+    },
+    0,
+    "leaving",
+  )?.prediction ?? null;
+
+  return {
+    dayOfWeek: firstNonEmptyString(item.day_of_week),
+    hour: toFiniteNumber(item.hour),
+    windowLabel: firstNonEmptyString(item.window_label),
+    targetDateTime: firstNonEmptyString(item.target_datetime),
+    metrics:
+      item.metrics && typeof item.metrics === "object" && !Array.isArray(item.metrics)
+        ? (item.metrics as Record<string, unknown>)
+        : {},
+    enteringPrediction,
+    leavingPrediction,
+  };
+}
+
+function normalizeTravelWindow(
+  travelWindow: CheckpointTravelWindowDto | null | undefined,
+  fallbackReferenceTime: string | null,
+  fallbackScope: string | null,
+): NormalizedCheckpointTravelWindow | null {
+  if (!travelWindow) {
+    return null;
+  }
+
+  return {
+    best: normalizeTravelWindowItem(travelWindow.best),
+    worst: normalizeTravelWindowItem(travelWindow.worst),
+    referenceTime: firstNonEmptyString(
+      travelWindow.reference_time,
+      travelWindow.referenceTime,
+      fallbackReferenceTime,
+    ),
+    scope: firstNonEmptyString(travelWindow.scope, fallbackScope),
+  };
+}
+
 function addTimelineItem(
   target: NormalizedCheckpointForecast["predictions"],
   item: NormalizedCheckpointForecastTimelineItem | null,
@@ -272,11 +363,11 @@ export async function getCheckpointForecast(
 
     const data = extractForecastData(payload);
 
-    if (!data.checkpoint) {
-      throw new Error("Forecast response did not include a checkpoint.");
-    }
+  if (!data.checkpoint) {
+    throw new Error("Forecast response did not include a checkpoint.");
+  }
 
-    const checkpoint = normalizeCheckpointRecord(data.checkpoint, 0);
+  const checkpoint = normalizeCheckpointRecord(data.checkpoint, 0);
     const requestStatusType = (
       firstNonEmptyString(data.request?.status_type, statusType) ?? statusType
     ) as CheckpointForecastStatusType | string;
@@ -315,6 +406,12 @@ export async function getCheckpointForecast(
       }
     }
 
+    const travelWindow = normalizeTravelWindow(
+      (data.travel_window ?? data.travelWindow) as CheckpointTravelWindowDto | null | undefined,
+      firstNonEmptyString(data.reference_time, data.referenceTime, data.request?.as_of, asOf),
+      firstNonEmptyString(data.scope),
+    );
+
     return {
       checkpoint,
       request: {
@@ -329,6 +426,7 @@ export async function getCheckpointForecast(
         ),
       },
       predictions,
+      travelWindow,
     };
   } catch (error) {
     if (error instanceof Error) {
@@ -340,6 +438,98 @@ export async function getCheckpointForecast(
     }
 
     throw new Error("Unable to load checkpoint forecast data.");
+  }
+}
+
+export async function getCheckpointTravelWindow(
+  checkpointId: string | number,
+  asOf?: string,
+): Promise<{
+  checkpoint: NormalizedCheckpointForecast["checkpoint"];
+  request: {
+    checkpointId: string;
+    asOf: string | null;
+    asOfPalestine?: string | null;
+  };
+  travelWindow: NormalizedCheckpointTravelWindow;
+}> {
+  const numericCheckpointId = Number(checkpointId);
+  if (!Number.isFinite(numericCheckpointId)) {
+    throw new Error("Travel window requests require a numeric checkpoint id.");
+  }
+
+  const endpoint = new URL(
+    `${getGeoApiBaseUrl()}/checkpoints/${numericCheckpointId}/travel-window`,
+  );
+  if (typeof asOf === "string" && asOf.trim()) {
+    endpoint.searchParams.set("as_of", asOf.trim());
+  }
+
+  try {
+    logRoutingDebug("checkpoint travel-window request payload", {
+      endpoint: endpoint.toString(),
+      checkpointId: numericCheckpointId,
+      asOf: typeof asOf === "string" ? asOf.trim() : undefined,
+    });
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error(await getErrorMessage(response));
+    }
+
+    const payload: unknown = await response.json();
+    logRoutingDebug("checkpoint travel-window raw response payload", {
+      endpoint: endpoint.toString(),
+      status: response.status,
+      payload,
+    });
+
+    const data = extractForecastData(payload);
+    if (!data.checkpoint) {
+      throw new Error("Travel window response did not include a checkpoint.");
+    }
+
+    const travelWindow = normalizeTravelWindow(
+      (data.travel_window ?? data.travelWindow) as CheckpointTravelWindowDto | null | undefined,
+      firstNonEmptyString(data.reference_time, data.referenceTime, data.request?.as_of, asOf),
+      firstNonEmptyString(data.scope),
+    );
+
+    if (!travelWindow) {
+      throw new Error("Travel window response did not include travel window data.");
+    }
+
+    return {
+      checkpoint: normalizeCheckpointRecord(data.checkpoint, 0),
+      request: {
+        checkpointId: firstNonEmptyString(
+          data.request?.checkpoint_id,
+          numericCheckpointId,
+        ) ?? String(numericCheckpointId),
+        asOf: firstNonEmptyString(data.request?.as_of, asOf),
+        asOfPalestine: formatDateTimeInPalestine(
+          firstNonEmptyString(data.request?.as_of, asOf),
+        ),
+      },
+      travelWindow,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.name === "TypeError") {
+        throw new Error("Unable to reach the travel window service.");
+      }
+
+      throw error;
+    }
+
+    throw new Error("Unable to load checkpoint travel window data.");
   }
 }
 

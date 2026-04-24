@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 
 import { resolveNaturalLanguageRequest } from "@/lib/services/route-intent";
-import type { MapCheckpointStatus, UserLocation } from "@/lib/types/map";
+import type {
+  MapCheckpointStatus,
+  NormalizedCheckpointTravelWindow,
+  NormalizedCheckpointTravelWindowItem,
+  UserLocation,
+} from "@/lib/types/map";
 import type {
   NaturalLanguageExecution,
   NaturalLanguageCheckpointExecution,
@@ -209,6 +214,50 @@ function buildForecastRows(
 
     return left.horizon.localeCompare(right.horizon);
   });
+}
+
+function formatTravelWindowHour(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "n/a";
+  }
+
+  return `${`${Math.trunc(value)}`.padStart(2, "0")}:00`;
+}
+
+function buildTravelWindowEntries(
+  travelWindow: NormalizedCheckpointTravelWindow | null,
+): Array<{
+  kind: "best" | "worst";
+  label: string;
+  item: NormalizedCheckpointTravelWindowItem;
+}> {
+  if (!travelWindow) {
+    return [];
+  }
+
+  const entries: Array<{
+    kind: "best" | "worst";
+    label: string;
+    item: NormalizedCheckpointTravelWindowItem;
+  }> = [];
+
+  if (travelWindow.best) {
+    entries.push({
+      kind: "best",
+      label: "Best time to cross",
+      item: travelWindow.best,
+    });
+  }
+
+  if (travelWindow.worst) {
+    entries.push({
+      kind: "worst",
+      label: "Worst time to cross",
+      item: travelWindow.worst,
+    });
+  }
+
+  return entries;
 }
 
 function StatusBadge({ status }: { status: MapCheckpointStatus }) {
@@ -853,6 +902,160 @@ export default function MashwarNaturalLanguageRouteModal({
                       </div>
                     </div>
                   </section>
+
+                  {result.resolution.travelWindow ||
+                  result.resolution.forecast?.travelWindow ? (
+                    <section className="space-y-3">
+                      <div>
+                        <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                          TRAVEL WINDOW
+                        </p>
+                        <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">
+                          Best and worst crossing windows
+                        </h4>
+                      </div>
+
+                      {buildTravelWindowEntries(
+                        result.resolution.travelWindow ??
+                          result.resolution.forecast?.travelWindow ??
+                          null,
+                      ).length > 0 ? (
+                        <div className="space-y-3">
+                          {buildTravelWindowEntries(
+                            result.resolution.travelWindow ??
+                              result.resolution.forecast?.travelWindow ??
+                              null,
+                          ).map((entry) => {
+                            const status =
+                              entry.kind === "best"
+                                ? entry.item?.leavingPrediction?.predictedStatus ??
+                                  entry.item?.enteringPrediction?.predictedStatus ??
+                                  "غير معروف"
+                                : entry.item?.leavingPrediction?.predictedStatus ??
+                                  entry.item?.enteringPrediction?.predictedStatus ??
+                                  "غير معروف";
+                            const visual =
+                              STATUS_VISUALS[status as MapCheckpointStatus] ??
+                              STATUS_VISUALS["غير معروف"];
+
+                            return (
+                              <article
+                                key={entry.kind}
+                                className="rounded-[16px] border border-[#2d3139] bg-white/[0.03] p-4"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div>
+                                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.26em] text-[#6b7280]">
+                                      {entry.kind.toUpperCase()}
+                                    </p>
+                                    <h5 className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                      {entry.label}
+                                    </h5>
+                                  </div>
+                                  <Pill
+                                    label={entry.item?.windowLabel ?? "n/a"}
+                                    text={visual.text}
+                                    bg={visual.bg}
+                                    border={visual.border}
+                                  />
+                                </div>
+
+                                <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                  <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                                      Day
+                                    </p>
+                                    <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                      {entry.item?.dayOfWeek ?? "n/a"}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                                      Hour
+                                    </p>
+                                    <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                      {formatTravelWindowHour(entry.item?.hour ?? null)}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3 xl:col-span-2">
+                                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                                      Target time
+                                    </p>
+                                    <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                      {formatDateTimeLabel(
+                                        entry.item?.targetDateTime ?? null,
+                                      )}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                                  <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                                      Entering
+                                    </p>
+                                    <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                      {entry.item?.enteringPrediction?.predictedStatus ??
+                                        "n/a"}
+                                    </p>
+                                    <p className="mt-1 text-[12px] text-[#94a3b8]">
+                                      Confidence{" "}
+                                      {formatPercent(
+                                        entry.item?.enteringPrediction?.confidence ??
+                                          null,
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
+                                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
+                                      Leaving
+                                    </p>
+                                    <p className="mt-2 text-[16px] font-semibold text-[#f9fafb]">
+                                      {entry.item?.leavingPrediction?.predictedStatus ??
+                                        "n/a"}
+                                    </p>
+                                    <p className="mt-1 text-[12px] text-[#94a3b8]">
+                                      Confidence{" "}
+                                      {formatPercent(
+                                        entry.item?.leavingPrediction?.confidence ??
+                                          null,
+                                      )}
+                                    </p>
+                                  </div>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="rounded-[12px] border border-dashed border-[#2d3139] bg-white/[0.03] px-4 py-3 text-[13px] text-[#94a3b8]">
+                          Travel window data was not included in this response.
+                        </div>
+                      )}
+
+                      {result.resolution.travelWindow?.referenceTime ||
+                      result.resolution.travelWindow?.scope ||
+                      result.resolution.forecast?.travelWindow?.referenceTime ||
+                      result.resolution.forecast?.travelWindow?.scope ? (
+                        <div className="flex flex-wrap gap-2 text-[11px] text-[#94a3b8]">
+                          <span className="rounded-full border border-[#2d3139] px-3 py-1">
+                            Reference{" "}
+                            {formatDateTimeLabel(
+                              result.resolution.travelWindow?.referenceTime ??
+                                result.resolution.forecast?.travelWindow?.referenceTime ??
+                                null,
+                            )}
+                          </span>
+                          <span className="rounded-full border border-[#2d3139] px-3 py-1">
+                            Scope{" "}
+                            {result.resolution.travelWindow?.scope ??
+                              result.resolution.forecast?.travelWindow?.scope ??
+                              "n/a"}
+                          </span>
+                        </div>
+                      ) : null}
+                    </section>
+                  ) : null}
 
                   {result.resolution.forecast ? (
                     <section className="space-y-3">

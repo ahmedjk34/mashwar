@@ -92,6 +92,28 @@ export interface CheckpointForecastPredictionsDto {
   leaving?: CheckpointForecastPredictionItemDto[] | null;
 }
 
+export interface CheckpointTravelWindowPredictionItemDto {
+  day_of_week?: string | null;
+  hour?: number | string | null;
+  window_label?: string | null;
+  target_datetime?: string | null;
+  metrics?: Record<string, unknown> | null;
+  entering_prediction?: CheckpointForecastPredictionDto | null;
+  leaving_prediction?: CheckpointForecastPredictionDto | null;
+  enteringPrediction?: CheckpointForecastPredictionDto | null;
+  leavingPrediction?: CheckpointForecastPredictionDto | null;
+  entering?: CheckpointForecastPredictionDto | null;
+  leaving?: CheckpointForecastPredictionDto | null;
+}
+
+export interface CheckpointTravelWindowDto {
+  best?: CheckpointTravelWindowPredictionItemDto | null;
+  worst?: CheckpointTravelWindowPredictionItemDto | null;
+  reference_time?: string | null;
+  referenceTime?: string | null;
+  scope?: string | null;
+}
+
 export interface CheckpointForecastRequestDto {
   checkpoint_id?: number | string | null;
   status_type?: string | null;
@@ -102,6 +124,11 @@ export interface CheckpointForecastResponseDataDto {
   checkpoint?: CheckpointApiRecord | null;
   request?: CheckpointForecastRequestDto | null;
   predictions?: CheckpointForecastPredictionItemDto[] | CheckpointForecastPredictionsDto | null;
+  travel_window?: CheckpointTravelWindowDto | null;
+  travelWindow?: CheckpointTravelWindowDto | null;
+  reference_time?: string | null;
+  referenceTime?: string | null;
+  scope?: string | null;
 }
 
 export interface CheckpointForecastApiEnvelope {
@@ -125,6 +152,23 @@ export interface NormalizedCheckpointForecastTimelineItem {
   prediction: NormalizedCheckpointForecastPrediction;
 }
 
+export interface NormalizedCheckpointTravelWindowItem {
+  dayOfWeek: string | null;
+  hour: number | null;
+  windowLabel: string | null;
+  targetDateTime: string | null;
+  metrics: Record<string, unknown>;
+  enteringPrediction: NormalizedCheckpointForecastPrediction | null;
+  leavingPrediction: NormalizedCheckpointForecastPrediction | null;
+}
+
+export interface NormalizedCheckpointTravelWindow {
+  best: NormalizedCheckpointTravelWindowItem | null;
+  worst: NormalizedCheckpointTravelWindowItem | null;
+  referenceTime: string | null;
+  scope: string | null;
+}
+
 export interface NormalizedCheckpointForecast {
   checkpoint: MapCheckpoint;
   request: {
@@ -137,6 +181,7 @@ export interface NormalizedCheckpointForecast {
     entering: NormalizedCheckpointForecastTimelineItem[];
     leaving: NormalizedCheckpointForecastTimelineItem[];
   };
+  travelWindow: NormalizedCheckpointTravelWindow | null;
 }
 
 export interface CheckpointPredictionRequestDto {

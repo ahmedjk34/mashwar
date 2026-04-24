@@ -1,7 +1,7 @@
 import { getWorstStatus } from "@/lib/config/map";
 import { findCityMatchesInText, getCityDisplayLabel, resolveCityPoint, normalizePlaceLabel } from "@/lib/data/cities";
 import { getCheckpoints } from "@/lib/services/checkpoints";
-import { getCheckpointForecast, getCheckpointPrediction } from "@/lib/services/forecast";
+import { getCheckpointForecast, getCheckpointPrediction, getCheckpointTravelWindow } from "@/lib/services/forecast";
 import { getRoute } from "@/lib/services/routing";
 import { logRoutingDebug } from "@/lib/utils/routing-debug";
 import { parseDateTimeExpressionInPalestine } from "@/lib/utils/palestine-time";
@@ -139,6 +139,14 @@ function shouldSimulateRoute(prompt: string, parse: ParsedNaturalLanguageIntent)
 
   const normalized = normalizeText(prompt);
   return /(?:what if|simulate|compare|earlier|later|قبل|بعد|لو بدي|لو\s+).*?/.test(normalized);
+}
+
+function shouldUseTravelWindow(prompt: string): boolean {
+  const normalized = normalizeText(prompt);
+
+  return /(?:best time to travel|best time to cross|worst time to travel|worst time to cross|when should i cross|what'?s the safest time|travel window|travel-window|safest time|safest time to cross|time to cross|best time|worst time|احسن وقت|أفضل وقت|افضل وقت|اسوأ وقت|أسوأ وقت|شو احسن وقت|شو افضل وقت|امتى افضل وقت|متى افضل وقت|امتى اسوأ وقت|متى اسوأ وقت|متى احسن وقت|متى احسن وقت|وقت\s+(?:ال)?(?:مرور|عبور)|للعبور|للمرور|امر?ق|اعبر)/.test(
+    normalized,
+  );
 }
 
 function resolveDateTimeFromExpression(
@@ -653,6 +661,58 @@ async function resolveCheckpointExecution(
   const checkpoint = match;
   const targetDateTime = resolvePromptTime(prompt, parse);
   const checkpointStatusLabel = getCurrentStatusLabel(checkpoint);
+  const useTravelWindow = shouldUseTravelWindow(prompt);
+
+  if (useTravelWindow) {
+    const asOf = targetDateTime;
+    const travelWindow = await getCheckpointTravelWindow(checkpoint.id, asOf ?? undefined);
+    logRoutingDebug("checkpoint travel-window resolution", {
+      prompt,
+      parse,
+      resolution: {
+        checkpointId: checkpoint.id,
+        mode: "travel-window",
+        asOf: travelWindow.request.asOf,
+        travelWindow: {
+          checkpointId: travelWindow.request.checkpointId,
+          referenceTime: travelWindow.travelWindow.referenceTime,
+          scope: travelWindow.travelWindow.scope,
+          best: travelWindow.travelWindow.best
+            ? {
+                dayOfWeek: travelWindow.travelWindow.best.dayOfWeek,
+                hour: travelWindow.travelWindow.best.hour,
+                windowLabel: travelWindow.travelWindow.best.windowLabel,
+                targetDateTime: travelWindow.travelWindow.best.targetDateTime,
+              }
+            : null,
+          worst: travelWindow.travelWindow.worst
+            ? {
+                dayOfWeek: travelWindow.travelWindow.worst.dayOfWeek,
+                hour: travelWindow.travelWindow.worst.hour,
+                windowLabel: travelWindow.travelWindow.worst.windowLabel,
+                targetDateTime: travelWindow.travelWindow.worst.targetDateTime,
+              }
+            : null,
+        },
+      },
+    });
+
+    return {
+      kind: "checkpoint",
+      prompt,
+      parse,
+      resolution: {
+        checkpoint: travelWindow.checkpoint,
+        mode: "travel-window",
+        targetDateTime: null,
+        referenceTime: travelWindow.travelWindow.referenceTime,
+        currentStatusLabel: checkpointStatusLabel,
+        predictions: [],
+        forecast: null,
+        travelWindow: travelWindow.travelWindow,
+      },
+    };
+  }
 
   if (!targetDateTime) {
     const forecast = await getCheckpointForecast(checkpoint.id, "both");
@@ -663,6 +723,7 @@ async function resolveCheckpointExecution(
         checkpointId: checkpoint.id,
         mode: "forecast",
         targetDateTime: null,
+        referenceTime: forecast.travelWindow?.referenceTime ?? null,
         currentStatusLabel: checkpointStatusLabel,
         forecast: {
           checkpointId: forecast.request.checkpointId,
@@ -670,6 +731,26 @@ async function resolveCheckpointExecution(
           asOf: forecast.request.asOf,
           enteringCount: forecast.predictions.entering.length,
           leavingCount: forecast.predictions.leaving.length,
+        },
+        travelWindow: {
+          referenceTime: forecast.travelWindow?.referenceTime ?? null,
+          scope: forecast.travelWindow?.scope ?? null,
+          best: forecast.travelWindow?.best
+            ? {
+                dayOfWeek: forecast.travelWindow.best.dayOfWeek,
+                hour: forecast.travelWindow.best.hour,
+                windowLabel: forecast.travelWindow.best.windowLabel,
+                targetDateTime: forecast.travelWindow.best.targetDateTime,
+              }
+            : null,
+          worst: forecast.travelWindow?.worst
+            ? {
+                dayOfWeek: forecast.travelWindow.worst.dayOfWeek,
+                hour: forecast.travelWindow.worst.hour,
+                windowLabel: forecast.travelWindow.worst.windowLabel,
+                targetDateTime: forecast.travelWindow.worst.targetDateTime,
+              }
+            : null,
         },
       },
     });
@@ -682,9 +763,11 @@ async function resolveCheckpointExecution(
         checkpoint,
         mode: "forecast",
         targetDateTime: null,
+        referenceTime: forecast.travelWindow?.referenceTime ?? null,
         currentStatusLabel: checkpointStatusLabel,
         predictions: [],
         forecast,
+        travelWindow: forecast.travelWindow,
       },
     };
   }
@@ -741,9 +824,11 @@ async function resolveCheckpointExecution(
       checkpoint,
       mode: "predict",
       targetDateTime,
+      referenceTime: targetDateTime,
       currentStatusLabel: checkpointStatusLabel,
       predictions,
       forecast: null,
+      travelWindow: null,
     },
   };
 }
