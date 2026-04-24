@@ -346,7 +346,7 @@
     "noEnglishExplanation": "No English explanation returned.",
     "noArabicExplanation": "No Arabic explanation.",
     "comparison": "Route comparison",
-    "comparisonSub": "Every returned route is shown, sorted by rank.",
+    "comparisonSub": "Sorted by rank. Tap a row to show it on the map.",
     "jumpWinner": "Jump to winner",
     "winnerBadge": "Winner",
     "recommendedBadge": "Recommended",
@@ -398,7 +398,21 @@
     "bilingual": "Bilingual text",
     "collapsedHint": "{name} is summarized here. Expand to inspect all returned routes.",
     "focusWinner": "Focus winner",
-    "noComparisonFacts": "No comparison facts returned."
+    "noComparisonFacts": "No comparison facts returned.",
+    "valueNa": "n/a",
+    "corridor": "Corridor",
+    "narrativeToggleShow": "Read full explanation",
+    "narrativeToggleHide": "Hide explanation",
+    "moreSpreadMetrics": "More spread metrics",
+    "minutesWithUnit": "{n} min",
+    "viability": {
+      "good": "Good",
+      "risky": "Risky",
+      "avoid": "Avoid",
+      "unknown": "Unknown"
+    },
+    "routeDeepDive": "Charts, lists & checkpoint detail",
+    "setSpreadsHint": "Optional: extra spreads across the whole set"
   },
   "nlRoute": {
     "samplePrompt": "If I want to leave Ramallah for Jenin tomorrow at 8",

@@ -346,7 +346,7 @@
     "noEnglishExplanation": "ما في شرح إنجليزي.",
     "noArabicExplanation": "ما في شرح عربي.",
     "comparison": "مقارنة المسارات",
-    "comparisonSub": "كل المسارات اللي رجعت، مرتّبة.",
+    "comparisonSub": "مرتّبة حسب الترتيب. اضغط الصف عشان يطلع على الخريطة.",
     "jumpWinner": "روح للفايز",
     "winnerBadge": "فايز",
     "recommendedBadge": "مقترح",
@@ -398,7 +398,21 @@
     "bilingual": "نصّين عربي وإنجليزي",
     "collapsedHint": "{name} ملخّص هون. وسّع لشوف الباقي.",
     "focusWinner": "ركّز على الفايز",
-    "noComparisonFacts": "ما في نقاط مقارنة."
+    "noComparisonFacts": "ما في نقاط مقارنة.",
+    "valueNa": "مش متوفر",
+    "corridor": "الممر",
+    "narrativeToggleShow": "اقرأ الشرح الكامل",
+    "narrativeToggleHide": "طيّ الشرح",
+    "moreSpreadMetrics": "مقاييس الفروقات الإضافية",
+    "minutesWithUnit": "{n} د",
+    "viability": {
+      "good": "منيح",
+      "risky": "في مخاطرة",
+      "avoid": "تجنّب",
+      "unknown": "مش واضح"
+    },
+    "routeDeepDive": "الرسوم والقوائم وتفاصيل الحواجز",
+    "setSpreadsHint": "اختياري: فروقات إضافية على كل المجموعة"
   },
   "nlRoute": {
     "samplePrompt": "لو بدّي اطلع من رام الله على جنين بكرا الساعة 8",

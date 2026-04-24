@@ -1050,12 +1050,20 @@ export default function MashwarHome() {
 
       <div className="fixed left-1/2 top-5 z-[1100] flex w-[min(calc(100vw-24px),864px)] -translate-x-1/2 flex-col items-stretch gap-2">
         <div
-          className="overflow-hidden rounded-full border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
+          className="overflow-hidden rounded-full border border-white/[0.14] shadow-[0_12px_44px_rgba(0,0,0,0.5),0_0_0_1px_rgba(0,98,51,0.14),0_0_28px_-8px_rgba(238,42,53,0.12)]"
           style={{
-            backgroundColor: "rgba(20,20,20,0.85)",
-            backdropFilter: "blur(12px)",
+            backgroundColor: "rgba(12,14,16,0.9)",
+            backgroundImage:
+              "linear-gradient(155deg, rgba(0,98,51,0.18) 0%, transparent 45%), linear-gradient(325deg, rgba(238,42,53,0.14) 0%, transparent 42%), linear-gradient(180deg, rgba(245,245,240,0.06) 0%, transparent 28%)",
+            backdropFilter: "blur(14px)",
           }}
         >
+          <div className="pointer-events-none flex h-[3px] w-full shrink-0 opacity-95" aria-hidden>
+            <span className="h-full flex-[2] bg-[var(--clr-black)]" />
+            <span className="h-full flex-[2] bg-[var(--clr-white)]" />
+            <span className="h-full flex-[2] bg-[var(--clr-green)]" />
+            <span className="h-full flex-[1.25] bg-[var(--clr-red)]" />
+          </div>
           <div
             dir="ltr"
             className="flex w-full max-w-full items-center justify-between gap-2 overflow-x-hidden px-2 py-1.5"
@@ -1064,7 +1072,11 @@ export default function MashwarHome() {
               type="button"
               onClick={handleRouteButtonClick}
               disabled={isRouteLoading}
-              className="mashwar-arabic shrink-0 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_2px_12px_rgba(5,150,105,0.35)] transition hover:bg-emerald-500 hover:shadow-[0_4px_18px_rgba(5,150,105,0.45)] active:scale-[0.98] disabled:cursor-wait disabled:opacity-60"
+              className={`mashwar-arabic shrink-0 rounded-full px-4 py-2 text-sm font-semibold text-[var(--clr-white)] shadow-[0_2px_14px_rgba(0,0,0,0.35)] transition active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 ${
+                routePaths.length > 0
+                  ? "bg-[var(--clr-red-deep)] hover:bg-[var(--clr-red)] hover:shadow-[0_4px_18px_rgba(238,42,53,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--clr-red)]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,14,16,0.95)]"
+                  : "bg-[var(--clr-green)] hover:brightness-110 hover:shadow-[0_4px_20px_rgba(0,98,51,0.42)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--clr-green-bright)]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,14,16,0.95)]"
+              }`}
             >
               {routePaths.length > 0 ? tRoute("clear") : tRoute("start")}
             </button>
@@ -1074,11 +1086,11 @@ export default function MashwarHome() {
               className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-1.5"
             >
               <div
-                className={`flex min-w-0 shrink items-center gap-0.5 rounded-full bg-white/5 px-1 py-0.5 transition-all duration-300 ease-out ${
+                className={`flex min-w-0 shrink items-center gap-0.5 rounded-full border border-transparent bg-[rgba(245,245,240,0.04)] px-1 py-0.5 transition-all duration-300 ease-out ${
                   endpointPlacementMode === "to" ? "opacity-40" : ""
                 } ${swapAnimating ? "translate-y-3.5" : ""} ${
                   endpointPlacementMode === "from"
-                    ? "ring-2 ring-emerald-400/95 ring-offset-2 ring-offset-[rgba(20,20,20,0.85)] shadow-[0_0_22px_rgba(52,211,153,0.38)]"
+                    ? "border-[var(--clr-green)]/35 ring-2 ring-[var(--clr-green)]/90 ring-offset-2 ring-offset-[rgba(12,14,16,0.92)] shadow-[0_0_24px_rgba(0,166,81,0.28)]"
                     : ""
                 }`}
               >
@@ -1087,13 +1099,13 @@ export default function MashwarHome() {
                   onClick={() => handleActivateEndpointPlacement("from")}
                   className="flex min-w-0 max-w-[min(30vw,160px)] flex-1 flex-col rounded-full px-2 py-1.5 text-end transition hover:bg-white/8"
                 >
-                  <span className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-white/45">
+                  <span className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-[var(--clr-green-soft)]/65">
                     {tRoute("from")}
                   </span>
                   <div className="flex min-w-0 items-center justify-end gap-1">
                     {fromResolving ? (
                       <span
-                        className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/20 border-t-emerald-300"
+                        className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/20 border-t-[var(--clr-green-bright)]"
                         aria-hidden
                       />
                     ) : (
@@ -1126,29 +1138,29 @@ export default function MashwarHome() {
                   gpsErrorField === "from" ? tErrors("geoUnavailable") : tRoute("gpsFromTitle")
                 }
                 aria-label={tRoute("gpsFromAria")}
-                className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border shadow-inner transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(20,20,20,0.92)] active:scale-[0.96] disabled:cursor-wait ${
+                className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border shadow-inner transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--clr-green-bright)]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,14,16,0.92)] active:scale-[0.96] disabled:cursor-wait ${
                   gpsErrorField === "from" ? "mashwar-gps-shake" : ""
                 } ${
                   fromGpsSet
-                    ? "border-emerald-400/75 bg-emerald-500/20 text-emerald-200 shadow-[0_0_0_1px_rgba(52,211,153,0.45)]"
-                    : "border-white/18 bg-white/[0.04] text-white/60 hover:border-emerald-400/45 hover:bg-emerald-500/12 hover:text-emerald-200"
+                    ? "border-[var(--clr-green)]/80 bg-[rgba(0,98,51,0.22)] text-[var(--clr-green-soft)] shadow-[0_0_0_1px_rgba(0,166,81,0.4)]"
+                    : "border-white/16 bg-white/[0.04] text-white/60 hover:border-[var(--clr-green)]/50 hover:bg-[rgba(0,98,51,0.12)] hover:text-[var(--clr-green-soft)]"
                 }`}
               >
                 {fromGpsSet ? (
                   <span
-                    className="pointer-events-none absolute inset-0 rounded-full bg-emerald-400/20 animate-ping"
+                    className="pointer-events-none absolute inset-0 rounded-full bg-[var(--clr-green)]/25 animate-ping"
                     style={{ animationDuration: "1.8s" }}
                     aria-hidden
                   />
                 ) : null}
                 {gpsLoading.from ? (
                   <span
-                    className="absolute h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-emerald-300"
+                    className="absolute h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[var(--clr-green-bright)]"
                     aria-hidden
                   />
                 ) : null}
                 <MdMyLocation
-                  className={`relative h-5 w-5 transition duration-200 ${fromGpsSet ? "scale-105 fill-current" : ""}`}
+                  className={`relative h-5 w-5 transition duration-200 ${fromGpsSet ? "scale-105 fill-[var(--clr-green-soft)]" : ""}`}
                   aria-hidden
                 />
               </button>
@@ -1157,7 +1169,7 @@ export default function MashwarHome() {
                 type="button"
                 onClick={handleSwapEndpoints}
                 disabled={swapAnimating}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-sky-400/40 bg-sky-500/15 text-sky-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:border-sky-300/70 hover:bg-sky-500/25 hover:text-white disabled:cursor-wait disabled:opacity-50"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/18 bg-[rgba(245,245,240,0.05)] text-[var(--clr-sand)] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] transition hover:border-[var(--clr-green)]/45 hover:bg-[rgba(0,98,51,0.12)] hover:text-[var(--clr-green-soft)] active:scale-[0.96] disabled:cursor-wait disabled:opacity-50"
                 title={tRoute("swapEndpointsTitle")}
                 aria-label={tRoute("swapEndpointsAria")}
               >
@@ -1165,11 +1177,11 @@ export default function MashwarHome() {
               </button>
 
               <div
-                className={`flex min-w-0 shrink items-center gap-0.5 rounded-full bg-white/5 px-1 py-0.5 transition-all duration-300 ease-out ${
+                className={`flex min-w-0 shrink items-center gap-0.5 rounded-full border border-transparent bg-[rgba(245,245,240,0.04)] px-1 py-0.5 transition-all duration-300 ease-out ${
                   endpointPlacementMode === "from" ? "opacity-40" : ""
                 } ${swapAnimating ? "-translate-y-3.5" : ""} ${
                   endpointPlacementMode === "to"
-                    ? "ring-2 ring-red-500/90 ring-offset-2 ring-offset-[rgba(20,20,20,0.85)] shadow-[0_0_22px_rgba(248,113,113,0.35)]"
+                    ? "border-[var(--clr-red)]/40 ring-2 ring-[var(--clr-red)]/85 ring-offset-2 ring-offset-[rgba(12,14,16,0.92)] shadow-[0_0_24px_rgba(238,42,53,0.25)]"
                     : ""
                 }`}
               >
@@ -1178,7 +1190,7 @@ export default function MashwarHome() {
                   onClick={() => handleActivateEndpointPlacement("to")}
                   className="flex min-w-0 max-w-[min(30vw,160px)] flex-1 flex-col rounded-full px-2 py-1.5 text-end transition hover:bg-white/8"
                 >
-                  <span className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-white/45">
+                  <span className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-[#fca5a5]/75">
                     {tRoute("to")}
                   </span>
                   <div className="flex min-w-0 items-center justify-end gap-1">
@@ -1215,29 +1227,29 @@ export default function MashwarHome() {
                 disabled={gpsLoading.to}
                 title={gpsErrorField === "to" ? tErrors("geoUnavailable") : tRoute("gpsToTitle")}
                 aria-label={tRoute("gpsToAria")}
-                className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border shadow-inner transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/75 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(20,20,20,0.92)] active:scale-[0.96] disabled:cursor-wait ${
+                className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border shadow-inner transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--clr-red)]/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,14,16,0.92)] active:scale-[0.96] disabled:cursor-wait ${
                   gpsErrorField === "to" ? "mashwar-gps-shake" : ""
                 } ${
                   toGpsSet
-                    ? "border-emerald-400/75 bg-emerald-500/20 text-emerald-200 shadow-[0_0_0_1px_rgba(52,211,153,0.45)]"
-                    : "border-white/18 bg-white/[0.04] text-white/60 hover:border-red-400/45 hover:bg-red-500/12 hover:text-red-100"
+                    ? "border-[var(--clr-red)]/80 bg-[rgba(238,42,53,0.18)] text-[#fecaca] shadow-[0_0_0_1px_rgba(238,42,53,0.42)]"
+                    : "border-white/16 bg-white/[0.04] text-white/60 hover:border-[var(--clr-red)]/50 hover:bg-[rgba(238,42,53,0.12)] hover:text-[#fecaca]"
                 }`}
               >
                 {toGpsSet ? (
                   <span
-                    className="pointer-events-none absolute inset-0 rounded-full bg-emerald-400/20 animate-ping"
+                    className="pointer-events-none absolute inset-0 rounded-full bg-[var(--clr-red)]/22 animate-ping"
                     style={{ animationDuration: "1.8s" }}
                     aria-hidden
                   />
                 ) : null}
                 {gpsLoading.to ? (
                   <span
-                    className="absolute h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-red-300"
+                    className="absolute h-5 w-5 animate-spin rounded-full border-2 border-white/15 border-t-[var(--clr-red)]"
                     aria-hidden
                   />
                 ) : null}
                 <MdMyLocation
-                  className={`relative h-5 w-5 transition duration-200 ${toGpsSet ? "scale-105 fill-current" : ""}`}
+                  className={`relative h-5 w-5 transition duration-200 ${toGpsSet ? "scale-105 fill-[#fecaca]" : ""}`}
                   aria-hidden
                 />
               </button>
@@ -1248,7 +1260,7 @@ export default function MashwarHome() {
           locationError ||
           checkpointError ||
           (heatmapEnabled && heatmapError) ? (
-            <div className="border-t border-white/10 px-3 py-2 text-center text-[11px] text-red-200">
+            <div className="border-t border-[var(--clr-red)]/25 bg-[rgba(238,42,53,0.08)] px-3 py-2 text-center text-[11px] text-[#fecaca]">
               {errorBannerText}
             </div>
           ) : null}
@@ -1256,7 +1268,7 @@ export default function MashwarHome() {
 
         {endpointPlacementMode === "from" ? (
           <p
-            className="mashwar-arabic pointer-events-none mx-auto rounded-full border border-emerald-500/35 bg-[rgba(16,24,20,0.92)] px-4 py-2 text-center text-[12px] font-medium text-emerald-100 shadow-[0_8px_28px_rgba(0,0,0,0.35)]"
+            className="mashwar-arabic pointer-events-none mx-auto rounded-full border border-[var(--clr-green)]/40 bg-[rgba(0,98,51,0.18)] px-4 py-2 text-center text-[12px] font-medium text-[var(--clr-green-soft)] shadow-[0_8px_28px_rgba(0,0,0,0.35)]"
             style={{ backdropFilter: "blur(10px)" }}
             dir={locale === "ar" ? "rtl" : "ltr"}
           >
@@ -1264,7 +1276,7 @@ export default function MashwarHome() {
           </p>
         ) : endpointPlacementMode === "to" ? (
           <p
-            className="mashwar-arabic pointer-events-none mx-auto rounded-full border border-red-500/35 bg-[rgba(24,16,18,0.92)] px-4 py-2 text-center text-[12px] font-medium text-red-100 shadow-[0_8px_28px_rgba(0,0,0,0.35)]"
+            className="mashwar-arabic pointer-events-none mx-auto rounded-full border border-[var(--clr-red)]/45 bg-[rgba(238,42,53,0.14)] px-4 py-2 text-center text-[12px] font-medium text-[#fecaca] shadow-[0_8px_28px_rgba(0,0,0,0.35)]"
             style={{ backdropFilter: "blur(10px)" }}
             dir={locale === "ar" ? "rtl" : "ltr"}
           >
@@ -1273,55 +1285,79 @@ export default function MashwarHome() {
         ) : null}
       </div>
 
-      <div className="fixed right-4 top-5 z-[1100] flex flex-col items-end gap-2 sm:right-5">
-        <button
-          type="button"
-          onClick={handleSmartRouterCardClick}
-          title={tFloat("smartRouterTitle")}
-          aria-label={tFloat("smartRouterAria")}
-          aria-pressed={smartRouterOn}
-          className={`inline-flex max-w-[9.5rem] items-center gap-2 rounded-xl border px-2 py-1.5 shadow-lg transition duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,12,12,0.9)] active:scale-[0.98] sm:max-w-[10.5rem] ${
-            smartRouterOn
-              ? "border-emerald-400/90 bg-emerald-500/[0.14] text-emerald-100 shadow-[0_0_0_1px_rgba(52,211,153,0.45),0_0_20px_rgba(16,185,129,0.22)]"
-              : "border-white/12 bg-[rgba(20,20,20,0.88)] text-white/85 hover:border-emerald-400/40 hover:bg-emerald-500/[0.1] hover:text-emerald-50 hover:shadow-[0_0_0_1px_rgba(52,211,153,0.2),0_8px_24px_rgba(0,0,0,0.35)]"
-          }`}
-          style={{ backdropFilter: "blur(10px)" }}
-          dir={locale === "ar" ? "rtl" : "ltr"}
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/50">
-            <IoSearch className="h-4 w-4" aria-hidden />
-          </span>
-          <span className="mashwar-arabic min-w-0 flex-1 text-end text-[10px] font-semibold leading-snug sm:text-[11px]">
-            {tFloat("smartRouterCta")}
-          </span>
-        </button>
+      <div className="fixed right-4 top-5 z-[1100] flex flex-col items-end sm:right-5">
+        <div className="flex w-[9.5rem] flex-col gap-2 sm:w-[10.5rem]">
+          <button
+            type="button"
+            onClick={handleSmartRouterCardClick}
+            title={tFloat("smartRouterTitle")}
+            aria-label={tFloat("smartRouterAria")}
+            aria-pressed={smartRouterOn}
+            className={`group inline-flex w-full items-center gap-2 rounded-full border px-2 py-1.5 shadow-[0_8px_22px_rgba(0,0,0,0.28)] transition duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/25 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--clr-white)] active:scale-[0.98] ${
+              locale === "ar" ? "justify-start" : "justify-end"
+            } ${
+              smartRouterOn
+                ? "border-black/45 bg-[#1a1a19] text-white hover:border-black/55 hover:bg-[#222221]"
+                : "border-black/50 bg-[#121211] text-white hover:border-black/40 hover:bg-[#181817]"
+            }`}
+            dir={locale === "ar" ? "rtl" : "ltr"}
+          >
+            <span
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition duration-200 ${
+                smartRouterOn
+                  ? "bg-white/14 text-white ring-1 ring-white/22"
+                  : "bg-white/10 text-[#e8e8e4] ring-1 ring-white/16 group-hover:bg-white/14 group-hover:text-white"
+              }`}
+            >
+              <IoSearch className="h-4 w-4" aria-hidden />
+            </span>
+            <span
+              className={`mashwar-arabic min-w-0 shrink text-[10px] font-semibold leading-snug sm:text-[11px] ${
+                locale === "ar" ? "text-right" : "text-left"
+              }`}
+            >
+              {tFloat("smartRouterCta")}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={handleToggleHeatmap}
-          title={tFloat("heatmapTitle")}
-          aria-label={tFloat("heatmapAria")}
-          aria-pressed={heatmapEnabled}
-          className={`inline-flex max-w-[9.5rem] items-center gap-2 rounded-xl border px-2 py-1.5 shadow-lg transition duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,12,12,0.9)] active:scale-[0.98] sm:max-w-[10.5rem] ${
-            heatmapEnabled
-              ? "border-amber-400/90 bg-amber-500/[0.14] text-amber-100 shadow-[0_0_0_1px_rgba(251,191,36,0.45),0_0_20px_rgba(245,158,11,0.2)]"
-              : "border-white/12 bg-[rgba(20,20,20,0.88)] text-white/85 hover:border-amber-400/40 hover:bg-amber-500/[0.1] hover:text-amber-50 hover:shadow-[0_0_0_1px_rgba(251,191,36,0.2),0_8px_24px_rgba(0,0,0,0.35)]"
-          }`}
-          style={{ backdropFilter: "blur(10px)" }}
-          dir={locale === "ar" ? "rtl" : "ltr"}
-        >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/50">
-            <FaFire
-              className={`h-4 w-4 ${isHeatmapLoading || isHeatmapBuilding ? "animate-pulse" : ""}`}
-              aria-hidden
-            />
-          </span>
-          <span className="mashwar-arabic min-w-0 flex-1 text-end text-[10px] font-semibold leading-snug sm:text-[11px]">
-            {tFloat("heatmapCta")}
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={handleToggleHeatmap}
+            title={tFloat("heatmapTitle")}
+            aria-label={tFloat("heatmapAria")}
+            aria-pressed={heatmapEnabled}
+            className={`group inline-flex w-full items-center gap-2 rounded-full border px-2 py-1.5 text-white shadow-[0_8px_22px_rgba(160,24,36,0.35)] transition duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e85c66]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--clr-white)] active:scale-[0.98] ${
+              locale === "ar" ? "justify-start" : "justify-end"
+            } ${
+              heatmapEnabled
+                ? "border-[#9f1522]/90 bg-[#9f1522] hover:border-[#b81d2c] hover:bg-[#ae1a28]"
+                : "border-[#c41f29]/85 bg-[#d42a35] hover:border-[#e03a45] hover:bg-[#df333f]"
+            }`}
+            dir={locale === "ar" ? "rtl" : "ltr"}
+          >
+            <span
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 transition duration-200 ${
+                heatmapEnabled
+                  ? "bg-black/28 text-[#ffe8e6] ring-white/22"
+                  : "bg-black/18 text-[#ffe8e6] ring-white/18 group-hover:bg-black/24"
+              }`}
+            >
+              <FaFire
+                className={`h-4 w-4 ${isHeatmapLoading || isHeatmapBuilding ? "animate-pulse" : ""}`}
+                aria-hidden
+              />
+            </span>
+            <span
+              className={`mashwar-arabic min-w-0 shrink text-[10px] font-semibold leading-snug sm:text-[11px] ${
+                locale === "ar" ? "text-right" : "text-left"
+              }`}
+            >
+              {tFloat("heatmapCta")}
+            </span>
+          </button>
 
-        <LocaleToggle />
+          <LocaleToggle />
+        </div>
       </div>
 
       <aside className="pointer-events-auto fixed inset-x-0 bottom-0 z-[1050] px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 sm:bottom-6 sm:left-4 sm:right-4 sm:mx-auto sm:max-w-2xl sm:px-0 sm:pb-6 sm:pt-0">

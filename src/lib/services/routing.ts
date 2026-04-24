@@ -1,6 +1,6 @@
 import { validateRoutePoint } from "@/lib/config/map";
 import { getGeoApiBaseUrl } from "@/lib/services/geo-api";
-import { logRoutingDebug } from "@/lib/utils/routing-debug";
+import { isRoutingDebugEnabled, logRoutingDebug } from "@/lib/utils/routing-debug";
 import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 import type {
   LngLatCoordinate,
@@ -824,6 +824,27 @@ export async function getRoute(
 
     const data = extractRoutingData(payload);
 
+    const tradeoffExplainer = normalizeTradeoffExplainer(data.tradeoff_explainer);
+    if (process.env.NODE_ENV === "development" || isRoutingDebugEnabled()) {
+      const raw = data.tradeoff_explainer ?? null;
+      console.log(
+        "[Mashwar tradeoff explainer] Raw backend `tradeoff_explainer` (API snake_case):",
+        raw,
+      );
+      console.log(
+        "[Mashwar tradeoff explainer] Raw backend JSON (pretty):",
+        JSON.stringify(raw, null, 2),
+      );
+      console.log(
+        "[Mashwar tradeoff explainer] Normalized for UI (camelCase object):",
+        tradeoffExplainer,
+      );
+      console.log(
+        "[Mashwar tradeoff explainer] Normalized JSON (pretty):",
+        JSON.stringify(tradeoffExplainer, null, 2),
+      );
+    }
+
     const departAt =
       typeof data.depart_at === "string" && data.depart_at.trim()
         ? data.depart_at.trim()
@@ -949,7 +970,7 @@ export async function getRoute(
       selectedRouteId: routesWithDelay[0]?.routeId ?? null,
       mainRoute: routesWithDelay[0] ?? null,
       alternativeRoutes: routesWithDelay.slice(1, 3),
-      tradeoffExplainer: normalizeTradeoffExplainer(data.tradeoff_explainer),
+      tradeoffExplainer,
     };
   } catch (error) {
     if (error instanceof Error) {

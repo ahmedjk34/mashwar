@@ -375,6 +375,74 @@ select {
   }
 }
 
+/* Route trade-off explainer: Levantine night-map palette */
+.mashwar-tradeoff-shell {
+  --tradeoff-border: rgba(255, 255, 255, 0.09);
+  --tradeoff-fg-muted: #dbe4f0;
+  border-color: var(--tradeoff-border);
+  background: rgba(8, 10, 13, 0.88);
+  color: var(--tradeoff-fg-muted);
+}
+
+.mashwar-tradeoff-sheen {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(90, 124, 72, 0.12), transparent 38%),
+    radial-gradient(circle at 0% 0%, rgba(45, 95, 98, 0.16), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 32%);
+}
+
+.mashwar-tradeoff-panel {
+  border-color: var(--tradeoff-border, rgba(255, 255, 255, 0.09));
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mashwar-tradeoff-chip {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mashwar-tradeoff-winner-pill {
+  border-color: rgba(107, 143, 86, 0.45);
+  background: rgba(90, 110, 72, 0.22);
+  color: #e8f0df;
+}
+
+.mashwar-tradeoff-winner-pill:hover {
+  background: rgba(107, 143, 86, 0.28);
+}
+
+.mashwar-tradeoff-corridor-pill {
+  border-color: rgba(72, 130, 128, 0.35);
+  background: rgba(35, 72, 70, 0.25);
+}
+
+.mashwar-tradeoff-route-card {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mashwar-tradeoff-route-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.mashwar-tradeoff-route-selected {
+  border-color: rgba(72, 130, 138, 0.45) !important;
+  background: rgba(45, 90, 95, 0.12) !important;
+  box-shadow: 0 12px 28px rgba(45, 90, 95, 0.18);
+}
+
+.mashwar-tradeoff-collapsed-cta {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(11, 15, 20, 0.82);
+  color: #f4f6f8;
+}
+
+.mashwar-tradeoff-collapsed-cta:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(11, 15, 20, 0.92);
+}
+
 @keyframes mashwar-shake {
   0%,
   100% {

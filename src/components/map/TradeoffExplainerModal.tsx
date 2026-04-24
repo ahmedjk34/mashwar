@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 
-import type { NormalizedRoutes, RoutingStatusBucket } from "@/lib/types/map";
+import type {
+  NormalizedRoutes,
+  RoutingRiskLevel,
+  RoutingRouteViability,
+  RoutingStatusBucket,
+} from "@/lib/types/map";
 
 type TradeoffExplainer = NonNullable<NormalizedRoutes["tradeoffExplainer"]>;
 type TradeoffRoute = TradeoffExplainer["routes"][number];
@@ -15,38 +21,28 @@ interface TradeoffExplainerModalProps {
 
 const RISK_VISUALS: Record<
   "low" | "medium" | "high" | "unknown",
-  {
-    label: string;
-    text: string;
-    bg: string;
-    border: string;
-    meter: string;
-  }
+  { text: string; bg: string; border: string; meter: string }
 > = {
   low: {
-    label: "SAFE",
-    text: "#86efac",
-    bg: "rgba(34, 197, 94, 0.12)",
-    border: "rgba(34, 197, 94, 0.32)",
-    meter: "#22c55e",
+    text: "#b8d4a8",
+    bg: "rgba(90, 124, 72, 0.18)",
+    border: "rgba(120, 148, 96, 0.42)",
+    meter: "#6b8f56",
   },
   medium: {
-    label: "CAUTION",
-    text: "#fbbf24",
-    bg: "rgba(245, 158, 11, 0.12)",
-    border: "rgba(245, 158, 11, 0.32)",
-    meter: "#f59e0b",
+    text: "#e8c98a",
+    bg: "rgba(168, 124, 48, 0.16)",
+    border: "rgba(200, 155, 72, 0.38)",
+    meter: "#c49a3c",
   },
   high: {
-    label: "AVOID",
-    text: "#fca5a5",
-    bg: "rgba(239, 68, 68, 0.12)",
-    border: "rgba(239, 68, 68, 0.32)",
-    meter: "#ef4444",
+    text: "#f0b4a8",
+    bg: "rgba(160, 64, 52, 0.2)",
+    border: "rgba(200, 90, 72, 0.42)",
+    meter: "#c45c48",
   },
   unknown: {
-    label: "UNKNOWN",
-    text: "#cbd5e1",
+    text: "#c8cdd4",
     bg: "rgba(148, 163, 184, 0.12)",
     border: "rgba(148, 163, 184, 0.28)",
     meter: "#94a3b8",
@@ -55,89 +51,98 @@ const RISK_VISUALS: Record<
 
 const STATUS_VISUALS: Record<
   RoutingStatusBucket,
-  {
-    label: string;
-    text: string;
-    bg: string;
-    border: string;
-  }
+  { text: string; bg: string; border: string }
 > = {
   green: {
-    label: "GREEN",
-    text: "#86efac",
-    bg: "rgba(34, 197, 94, 0.12)",
-    border: "rgba(34, 197, 94, 0.32)",
+    text: "#b8d4a8",
+    bg: "rgba(90, 124, 72, 0.18)",
+    border: "rgba(120, 148, 96, 0.42)",
   },
   yellow: {
-    label: "YELLOW",
-    text: "#fbbf24",
-    bg: "rgba(245, 158, 11, 0.12)",
-    border: "rgba(245, 158, 11, 0.32)",
+    text: "#e8c98a",
+    bg: "rgba(168, 124, 48, 0.16)",
+    border: "rgba(200, 155, 72, 0.38)",
   },
   red: {
-    label: "RED",
-    text: "#fca5a5",
-    bg: "rgba(239, 68, 68, 0.12)",
-    border: "rgba(239, 68, 68, 0.32)",
+    text: "#f0b4a8",
+    bg: "rgba(160, 64, 52, 0.2)",
+    border: "rgba(200, 90, 72, 0.42)",
   },
   unknown: {
-    label: "UNKNOWN",
-    text: "#cbd5e1",
+    text: "#c8cdd4",
     bg: "rgba(148, 163, 184, 0.12)",
     border: "rgba(148, 163, 184, 0.28)",
   },
 };
 
-function formatNumber(value: number | null, fractionDigits = 0): string {
+function formatNumber(value: number | null, fractionDigits = 0, na: string): string {
   if (value === null || !Number.isFinite(value)) {
-    return "n/a";
+    return na;
   }
 
   return value.toFixed(fractionDigits);
 }
 
-function formatSignedNumber(value: number | null, fractionDigits = 0): string {
+function formatSignedNumber(value: number | null, fractionDigits: number, na: string): string {
   if (value === null || !Number.isFinite(value)) {
-    return "n/a";
+    return na;
   }
 
   const rounded = value.toFixed(fractionDigits);
   return value > 0 ? `+${rounded}` : rounded;
 }
 
-function formatMinutes(value: number | null): string {
+function formatMinutesI18n(
+  value: number | null,
+  na: string,
+  locale: string,
+  t: (key: "minutesWithUnit", values: { n: string }) => string,
+): string {
   if (value === null || !Number.isFinite(value)) {
-    return "n/a";
+    return na;
   }
 
-  return `${Math.round(value)} min`;
+  const n = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(
+    Math.round(value),
+  );
+  return t("minutesWithUnit", { n });
 }
 
-function formatDistance(value: number | null): string {
+function formatDistance(value: number | null, locale: string, na: string): string {
   if (value === null || !Number.isFinite(value)) {
-    return "n/a";
+    return na;
   }
 
   if (value >= 1000) {
-    return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)} km`;
+    const km = value / 1000;
+    const digits = value >= 10000 ? 0 : 1;
+    const n = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: digits ? 1 : 0,
+      maximumFractionDigits: digits,
+    }).format(km);
+    return locale === "ar" ? `${n} كم` : `${n} km`;
   }
 
-  return `${Math.round(value)} m`;
+  const n = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(value));
+  return locale === "ar" ? `${n} م` : `${n} m`;
 }
 
-function formatPercent(value: number | null): string {
+function formatPercent(value: number | null, locale: string, na: string): string {
   if (value === null || !Number.isFinite(value)) {
-    return "n/a";
+    return na;
   }
 
-  return `${Math.round(value * 100)}%`;
+  const n = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(
+    Math.round(value * 100),
+  );
+  return locale === "ar" ? `${n}٪` : `${n}%`;
 }
 
-function joinList(values: string[]): string {
-  return values.length > 0 ? values.join(" · ") : "n/a";
+function joinList(values: string[], na: string): string {
+  return values.length > 0 ? values.join(" · ") : na;
 }
 
-function normalizeStatus(value: RoutingStatusBucket | string | null | undefined) {
+function normalizeStatus(value: RoutingStatusBucket | string | null | undefined): RoutingStatusBucket {
   if (
     value === "green" ||
     value === "yellow" ||
@@ -150,12 +155,11 @@ function normalizeStatus(value: RoutingStatusBucket | string | null | undefined)
   return "unknown";
 }
 
-function getStatusBadge(status: RoutingStatusBucket | string | null | undefined) {
+function getStatusStyle(status: RoutingStatusBucket | string | null | undefined) {
   const normalized = normalizeStatus(status);
   const visual = STATUS_VISUALS[normalized];
 
   return {
-    label: visual.label,
     text: visual.text,
     bg: visual.bg,
     border: visual.border,
@@ -164,6 +168,24 @@ function getStatusBadge(status: RoutingStatusBucket | string | null | undefined)
 
 function getRiskVisual(level: TradeoffRoute["riskLevel"]) {
   return RISK_VISUALS[level ?? "unknown"] ?? RISK_VISUALS.unknown;
+}
+
+function normalizeRiskLevel(level: TradeoffRoute["riskLevel"]): RoutingRiskLevel {
+  if (level === "low" || level === "medium" || level === "high" || level === "unknown") {
+    return level;
+  }
+
+  return "unknown";
+}
+
+type ViabilityKey = "good" | "risky" | "avoid" | "unknown";
+
+function viabilityKey(value: string | null | undefined): ViabilityKey {
+  if (value === "good" || value === "risky" || value === "avoid") {
+    return value;
+  }
+
+  return "unknown";
 }
 
 function MetricChip({
@@ -183,13 +205,13 @@ function MetricChip({
     <div
       className="rounded-[14px] border px-3 py-2"
       style={{
-        color: tone?.text ?? "#dbe4f0",
+        color: tone?.text ?? "var(--tradeoff-fg-muted, #dbe4f0)",
         backgroundColor: tone?.bg ?? "rgba(255,255,255,0.03)",
         borderColor: tone?.border ?? "rgba(255,255,255,0.08)",
       }}
     >
       <p
-        className="mashwar-mono text-[9px] uppercase tracking-[0.24em]"
+        className="mashwar-mono text-[9px] uppercase tracking-[0.2em]"
         style={{ color: tone?.text ? `${tone.text}cc` : "#94a3b8" }}
       >
         {label}
@@ -199,39 +221,23 @@ function MetricChip({
   );
 }
 
-function FlagChip({
-  children,
-  tone,
-}: {
-  children: string;
-  tone: {
-    text: string;
-    bg: string;
-    border: string;
-  };
-}) {
-  return (
-    <span
-      className="inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]"
-      style={{
-        color: tone.text,
-        backgroundColor: tone.bg,
-        borderColor: tone.border,
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
 export default function TradeoffExplainerModal({
   explainer,
   selectedRouteId,
   onRouteSelect,
 }: TradeoffExplainerModalProps) {
+  const locale = useLocale();
+  const isArabic = locale === "ar";
+  const t = useTranslations("tradeoff");
+  const tRisk = useTranslations("routing.risk");
+  const tBucket = useTranslations("routing.bucket");
+  const tDir = useTranslations("routing.direction");
+
   const [isOpen, setIsOpen] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const routeRefs = useRef(new Map<string, HTMLButtonElement | null>());
+  const routeRefs = useRef(new Map<string, HTMLDivElement | null>());
+
+  const na = t("valueNa");
 
   const explainerKey = useMemo(
     () =>
@@ -273,23 +279,12 @@ export default function TradeoffExplainerModal({
     ? [...explainer.routes].sort((left, right) => left.rank - right.rank)
     : [];
   const winnerRoute = explainer
-    ? routes.find((route) => route.routeId === explainer.winnerRouteId) ??
-      routes[0] ??
-      null
+    ? routes.find((route) => route.routeId === explainer.winnerRouteId) ?? routes[0] ?? null
     : null;
   const selectedOrWinnerRouteId = selectedRouteId ?? winnerRoute?.routeId ?? null;
-  const maxDuration = Math.max(
-    0,
-    ...routes.map((route) => route.durationMinutes ?? 0),
-  );
-  const maxRisk = Math.max(
-    0,
-    ...routes.map((route) => route.riskScore ?? 0),
-  );
-  const maxDelay = Math.max(
-    0,
-    ...routes.map((route) => route.expectedDelayMinutes ?? 0),
-  );
+  const maxDuration = Math.max(0, ...routes.map((route) => route.durationMinutes ?? 0));
+  const maxRisk = Math.max(0, ...routes.map((route) => route.riskScore ?? 0));
+  const maxDelay = Math.max(0, ...routes.map((route) => route.expectedDelayMinutes ?? 0));
 
   useEffect(() => {
     if (!isOpen || !winnerRoute?.uiKey) {
@@ -330,6 +325,54 @@ export default function TradeoffExplainerModal({
     }
   };
 
+  const winnerDisplay =
+    isArabic
+      ? (winnerRoute?.labelAr ?? winnerRoute?.labelEn ?? explainer.winnerRouteId ?? na)
+      : (winnerRoute?.labelEn ?? winnerRoute?.labelAr ?? explainer.winnerRouteId ?? na);
+
+  const decisionDriver =
+    isArabic
+      ? (explainer.setSummary.decisionDriverAr ??
+        explainer.setSummary.decisionDriverEn ??
+        t("noDriverAr"))
+      : (explainer.setSummary.decisionDriverEn ??
+        explainer.setSummary.decisionDriverAr ??
+        t("noDriverEn"));
+
+  const narrativeBody = isArabic
+    ? (explainer.arabicText?.trim() ||
+        explainer.fullText?.trim() ||
+        t("noArabicExplanation"))
+    : (explainer.englishText?.trim() ||
+        explainer.fullText?.trim() ||
+        t("noEnglishExplanation"));
+
+  const comparedCount =
+    explainer.comparedRouteCount !== null && explainer.comparedRouteCount !== undefined
+      ? Math.round(explainer.comparedRouteCount)
+      : routes.length;
+
+  const riskLabel = (level: TradeoffRoute["riskLevel"]) =>
+    tRisk(normalizeRiskLevel(level));
+
+  const bucketLabel = (status: RoutingStatusBucket | string | null | undefined) =>
+    tBucket(normalizeStatus(status));
+
+  const viabilityLabel = (value: string | null | undefined) => {
+    switch (viabilityKey(value)) {
+      case "good":
+        return t("viability.good");
+      case "risky":
+        return t("viability.risky");
+      case "avoid":
+        return t("viability.avoid");
+      default:
+        return t("viability.unknown");
+    }
+  };
+
+  const directionLabel = (key: "entering" | "leaving" | "transit" | "unknown") => tDir(key);
+
   if (!isOpen) {
     return (
       <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2" style={{ zIndex: 60 }}>
@@ -339,18 +382,17 @@ export default function TradeoffExplainerModal({
             setIsOpen(true);
             setIsCollapsed(false);
           }}
-          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[rgba(11,15,20,0.82)] px-4 py-2 text-[11px] font-semibold text-[#f9fafb] shadow-[0_18px_48px_rgba(0,0,0,0.45)] backdrop-blur-xl transition hover:border-white/20 hover:bg-[rgba(11,15,20,0.94)]"
+          className="mashwar-tradeoff-collapsed-cta inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[11px] font-semibold shadow-[0_18px_48px_rgba(0,0,0,0.45)] backdrop-blur-xl transition"
         >
-          <span className="h-2 w-2 rounded-full bg-[#22c55e]" />
-          Show route tradeoff explainer
+          <span className="h-2 w-2 rounded-full bg-[#6b8f56]" />
+          {t("showExplainer")}
         </button>
       </div>
     );
   }
 
-  const hasTextSections =
-    Boolean(explainer.englishText) ||
-    Boolean(explainer.arabicText);
+  const shellClass =
+    "mashwar-tradeoff-shell pointer-events-auto w-[min(100vw-1rem,1180px)] overflow-hidden rounded-[26px] border shadow-[0_30px_100px_rgba(0,0,0,0.72)] backdrop-blur-2xl";
 
   return (
     <div
@@ -361,64 +403,157 @@ export default function TradeoffExplainerModal({
       <section
         role="dialog"
         aria-modal="false"
-        aria-label="Route tradeoff explainer"
-        className="pointer-events-auto w-[min(100vw-1rem,1180px)] overflow-hidden rounded-[28px] border border-white/10 bg-[rgba(10,12,16,0.78)] shadow-[0_30px_100px_rgba(0,0,0,0.72)] backdrop-blur-2xl"
+        aria-label={t("ariaLabel")}
+        className={shellClass}
         style={{ animation: "mashwar-modal-in 220ms ease-out" }}
       >
-        <div className="bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_24%),radial-gradient(circle_at_top_left,rgba(34,197,94,0.12),transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.02),transparent_28%)]">
-          <header className="flex items-start justify-between gap-4 border-b border-white/8 px-4 py-4 sm:px-5">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="mashwar-mono text-[10px] uppercase tracking-[0.34em] text-[#6b7280]">
-                  Tradeoff explainer
+        <div className="mashwar-tradeoff-sheen">
+          <header
+            className={`flex items-start justify-between gap-4 border-b px-4 py-4 sm:px-5 ${
+              isArabic ? "text-right mashwar-rtl" : "text-left"
+            }`}
+            style={{ borderColor: "var(--tradeoff-border)" }}
+            dir={isArabic ? "rtl" : "ltr"}
+          >
+            <div className="min-w-0 flex-1">
+              <div className={`flex flex-wrap items-center gap-2 ${isArabic ? "justify-end" : ""}`}>
+                <span className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#8a939e]">
+                  {t("header")}
                 </span>
                 <button
                   type="button"
                   onClick={scrollToWinner}
-                  className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-400/15"
+                  className="rounded-full border px-3 py-1 text-[11px] font-semibold transition mashwar-tradeoff-winner-pill"
                 >
-                  Winner #{explainer.winnerRank ?? "n/a"}
+                  {t("winner", {
+                    rank:
+                      explainer.winnerRank !== null && explainer.winnerRank !== undefined
+                        ? String(Math.round(explainer.winnerRank))
+                        : "—",
+                  })}
                 </button>
-                {explainer.comparedRouteCount !== null ? (
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] text-[#dbe4f0]">
-                    {explainer.comparedRouteCount} routes compared
-                  </span>
-                ) : null}
+                <span className="rounded-full border px-3 py-1 text-[11px] text-[#dbe4f0] mashwar-tradeoff-chip">
+                  {t("routesCompared", { count: comparedCount })}
+                </span>
               </div>
 
-              <h2 className="mt-3 text-[20px] font-semibold text-[#f9fafb] sm:text-[24px]">
-                Best route today
+              <h2
+                className={`mt-3 text-[20px] font-semibold text-[#f4f6f8] sm:text-[23px] ${
+                  isArabic ? "mashwar-arabic" : "mashwar-display"
+                }`}
+              >
+                {t("title")}
               </h2>
 
-              <div className="mt-2 grid gap-2 text-[13px] leading-6 text-[#dbe4f0]">
-                <p>
-                  Recommended route:{" "}
-                  <span className="font-semibold text-[#f9fafb]">
-                    {winnerRoute?.labelEn ?? explainer.winnerRouteId ?? "n/a"}
+              <p className="mt-1 text-[12px] text-[#a8b0ba]">
+                <span className="font-medium text-[#dbe4f0]">{t("recommended")}</span>{" "}
+                <span className="font-semibold text-[#f4f6f8]">{winnerDisplay}</span>
+              </p>
+
+              <p
+                className={`mt-2 text-[14px] leading-relaxed text-[#dce2e8] ${
+                  isArabic ? "mashwar-arabic" : ""
+                }`}
+              >
+                {decisionDriver}
+              </p>
+
+              {explainer.setSummary.corridorNote ? (
+                <p className="mt-3">
+                  <span className="mashwar-tradeoff-corridor-pill inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] text-[#c8e6e4]">
+                    <span className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-[#7a9e9a]">
+                      {t("corridor")}
+                    </span>
+                    <span className={isArabic ? "mashwar-arabic" : ""}>
+                      {explainer.setSummary.corridorNote}
+                    </span>
                   </span>
                 </p>
-                <p className="text-[#cbd5e1]">
-                  {explainer.setSummary.decisionDriverEn ?? "No English summary returned."}
-                </p>
-                <p dir="rtl" className="mashwar-rtl text-[#cbd5e1]">
-                  {explainer.setSummary.decisionDriverAr ?? "لا يوجد ملخص عربي."}
-                </p>
+              ) : null}
+
+              <div
+                className={`mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-white/[0.06] pt-4 text-[13px] ${
+                  isArabic ? "mashwar-rtl justify-end" : ""
+                }`}
+              >
+                <span>
+                  <span className="block text-[10px] font-medium uppercase tracking-[0.16em] text-[#7d8692]">
+                    {t("metric.timeSpread")}
+                  </span>
+                  <span className="font-semibold text-[#eef2f6]">
+                    {formatMinutesI18n(explainer.setSummary.timeSpreadMinutes, na, locale, t)}
+                  </span>
+                </span>
+                <span>
+                  <span className="block text-[10px] font-medium uppercase tracking-[0.16em] text-[#7d8692]">
+                    {t("metric.delaySpread")}
+                  </span>
+                  <span className="font-semibold text-[#eef2f6]">
+                    {formatMinutesI18n(explainer.setSummary.delaySpreadMinutes, na, locale, t)}
+                  </span>
+                </span>
+                <span>
+                  <span className="block text-[10px] font-medium uppercase tracking-[0.16em] text-[#7d8692]">
+                    {t("metric.checkpointSpread")}
+                  </span>
+                  <span className="font-semibold text-[#eef2f6]">
+                    {formatNumber(explainer.setSummary.checkpointSpread, 0, na)}
+                  </span>
+                </span>
               </div>
+
+              <details className="mt-3 group border-t border-white/[0.06] pt-3">
+                <summary className="cursor-pointer list-none text-[11px] text-[#8fb0ac] marker:content-none [&::-webkit-details-marker]:hidden hover:text-[#b5d4d0]">
+                  <span className="underline-offset-2 group-open:no-underline hover:underline">
+                    {t("moreSpreadMetrics")}
+                  </span>
+                </summary>
+                <div
+                  className={`mt-3 flex flex-wrap gap-x-8 gap-y-2 text-[13px] ${
+                    isArabic ? "mashwar-rtl justify-end" : ""
+                  }`}
+                >
+                  <span>
+                    <span className="block text-[10px] font-medium uppercase tracking-[0.16em] text-[#7d8692]">
+                      {t("metric.riskSpread")}
+                    </span>
+                    <span className="font-semibold text-[#eef2f6]">
+                      {formatNumber(explainer.setSummary.riskSpread, 2, na)}
+                    </span>
+                  </span>
+                  <span>
+                    <span className="block text-[10px] font-medium uppercase tracking-[0.16em] text-[#7d8692]">
+                      {t("metric.confidenceSpread")}
+                    </span>
+                    <span className="font-semibold text-[#eef2f6]">
+                      {formatPercent(explainer.setSummary.confidenceSpread, locale, na)}
+                    </span>
+                  </span>
+                  <span>
+                    <span className="block text-[10px] font-medium uppercase tracking-[0.16em] text-[#7d8692]">
+                      {t("metric.volatilitySpread")}
+                    </span>
+                    <span className="font-semibold text-[#eef2f6]">
+                      {formatNumber(explainer.setSummary.volatilitySpread, 2, na)}
+                    </span>
+                  </span>
+                </div>
+              </details>
             </div>
 
-            <div className="flex flex-col items-end gap-2">
+            <div className={`flex shrink-0 flex-col gap-2 ${isArabic ? "items-start" : "items-end"}`}>
               <button
                 type="button"
                 onClick={() => setIsCollapsed((current) => !current)}
-                className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] font-semibold text-[#dbe4f0] transition hover:bg-white/[0.06]"
+                className="rounded-full border px-3 py-2 text-[11px] font-semibold text-[#dbe4f0] transition mashwar-tradeoff-chip hover:bg-white/[0.06]"
               >
-                {isCollapsed ? "Expand" : "Collapse"}
+                {isCollapsed ? t("expand") : t("collapse")}
               </button>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-[#dbe4f0] transition hover:bg-white/[0.06] hover:text-[#f9fafb]"
-                aria-label="Close route tradeoff explainer"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border text-[#dbe4f0] transition mashwar-tradeoff-chip hover:bg-white/[0.06] hover:text-[#f9fafb]"
+                aria-label={t("closeAria")}
               >
                 ×
               </button>
@@ -427,127 +562,52 @@ export default function TradeoffExplainerModal({
 
           {!isCollapsed ? (
             <div className="max-h-[calc(100dvh-7.5rem)] overflow-y-auto mashwar-scroll px-4 py-4 sm:px-5">
-              <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-                <article className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                      Summary
-                    </span>
-                    {explainer.setSummary.corridorNote ? (
-                      <span className="rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-[11px] text-sky-100">
-                        {explainer.setSummary.corridorNote}
-                      </span>
-                    ) : null}
-                  </div>
+              {narrativeBody ? (
+                <details className="mb-5 rounded-2xl border border-white/[0.07] bg-black/15 px-4 py-3 mashwar-tradeoff-panel">
+                  <summary className="cursor-pointer list-none text-[13px] font-semibold text-[#e8ecef] marker:content-none [&::-webkit-details-marker]:hidden">
+                    <span className="underline-offset-2 hover:underline">{t("narrativeToggleShow")}</span>
+                  </summary>
+                  <p
+                    className={`mt-3 whitespace-pre-line text-[13px] leading-relaxed text-[#b4bcc6] ${
+                      isArabic ? "mashwar-arabic mashwar-rtl text-right" : ""
+                    }`}
+                    dir={isArabic ? "rtl" : "ltr"}
+                  >
+                    {narrativeBody}
+                  </p>
+                </details>
+              ) : null}
 
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                    <MetricChip
-                      label="Time spread"
-                      value={formatMinutes(explainer.setSummary.timeSpreadMinutes)}
-                    />
-                    <MetricChip
-                      label="Risk spread"
-                      value={formatNumber(explainer.setSummary.riskSpread, 2)}
-                    />
-                    <MetricChip
-                      label="Delay spread"
-                      value={formatMinutes(explainer.setSummary.delaySpreadMinutes)}
-                    />
-                    <MetricChip
-                      label="Checkpoint spread"
-                      value={formatNumber(explainer.setSummary.checkpointSpread, 0)}
-                    />
-                    <MetricChip
-                      label="Confidence spread"
-                      value={formatPercent(explainer.setSummary.confidenceSpread)}
-                    />
-                    <MetricChip
-                      label="Volatility spread"
-                      value={formatNumber(explainer.setSummary.volatilitySpread, 2)}
-                    />
-                  </div>
-
-                  <div className="mt-4 grid gap-3 rounded-[18px] border border-white/8 bg-black/20 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                        Decision driver
-                      </p>
-                      <span className="text-[11px] text-[#94a3b8]">
-                        Winner: {explainer.winnerRouteId ?? "n/a"}
-                      </span>
-                    </div>
-                    <p className="text-[13px] leading-6 text-[#e5e7eb]">
-                      {explainer.setSummary.decisionDriverEn ?? "No English decision driver returned."}
+              <section>
+                <div
+                  className={`flex flex-wrap items-center justify-between gap-3 ${
+                    isArabic ? "flex-row-reverse text-right" : ""
+                  }`}
+                >
+                  <div className={isArabic ? "mashwar-rtl" : ""}>
+                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#8a939e]">
+                      {t("comparison")}
                     </p>
-                    <p dir="rtl" className="mashwar-rtl text-[13px] leading-6 text-[#dbe4f0]">
-                      {explainer.setSummary.decisionDriverAr ?? "لا يوجد سبب قرار باللغة العربية."}
-                    </p>
-                  </div>
-                </article>
-
-                <article className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                      Full explanation
-                    </p>
-                    <span className="text-[11px] text-[#94a3b8]">Source of truth</span>
-                  </div>
-
-                  {explainer.fullText ? (
-                    <p className="mt-3 whitespace-pre-line text-[13px] leading-7 text-[#dbe4f0]">
-                      {explainer.fullText}
-                    </p>
-                  ) : (
-                    <div className="mt-3 space-y-3">
-                      <p className="rounded-[16px] border border-white/8 bg-black/20 p-3 text-[13px] leading-7 text-[#dbe4f0]">
-                        <span className="mashwar-mono block text-[10px] uppercase tracking-[0.22em] text-[#6b7280]">
-                          English
-                        </span>
-                        <span className="mt-2 block whitespace-pre-line">
-                          {explainer.englishText ?? "No English explanation returned."}
-                        </span>
-                      </p>
-                      <p dir="rtl" className="rounded-[16px] border border-white/8 bg-black/20 p-3 text-[13px] leading-7 text-[#dbe4f0]">
-                        <span className="mashwar-mono block text-[10px] uppercase tracking-[0.22em] text-[#6b7280]">
-                          العربية
-                        </span>
-                        <span className="mt-2 block whitespace-pre-line mashwar-rtl">
-                          {explainer.arabicText ?? "لا يوجد شرح عربي."}
-                        </span>
-                      </p>
-                    </div>
-                  )}
-                </article>
-              </section>
-
-              <section className="mt-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                      Route comparison
-                    </p>
-                    <p className="mt-1 text-[13px] text-[#94a3b8]">
-                      Every returned route is shown, sorted by rank.
-                    </p>
+                    <p className="mt-1 text-[13px] text-[#94a3b8]">{t("comparisonSub")}</p>
                   </div>
                   {winnerRoute ? (
                     <button
                       type="button"
                       onClick={scrollToWinner}
-                      className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-[11px] font-semibold text-emerald-100 transition hover:bg-emerald-400/15"
+                      className="rounded-full border px-3 py-2 text-[11px] font-semibold transition mashwar-tradeoff-winner-pill"
                     >
-                      Jump to winner
+                      {t("jumpWinner")}
                     </button>
                   ) : null}
                 </div>
 
                 {routes.length > 0 ? (
-                  <div className="mt-4 grid gap-3">
+                  <div className="mt-3 grid gap-2">
                     {routes.map((route) => {
                       const isWinner = route.routeId === explainer.winnerRouteId;
                       const isSelected = route.routeId === selectedOrWinnerRouteId;
                       const riskVisual = getRiskVisual(route.riskLevel);
-                      const statusBadge = getStatusBadge(route.worstPredictedStatus);
+                      const statusStyle = getStatusStyle(route.worstPredictedStatus);
                       const durationPct =
                         maxDuration > 0 && route.durationMinutes !== null
                           ? Math.max(0.06, route.durationMinutes / maxDuration)
@@ -560,333 +620,433 @@ export default function TradeoffExplainerModal({
                         maxDelay > 0 && route.expectedDelayMinutes !== null
                           ? Math.max(0.06, route.expectedDelayMinutes / maxDelay)
                           : 0.12;
-                      const facts = route.comparisonFacts.english.length
-                        ? route.comparisonFacts.english
-                        : route.comparisonFacts.arabic;
-                      const whyLine = facts[0] ?? "No comparison facts returned.";
+                      const facts =
+                        isArabic ? route.comparisonFacts.arabic : route.comparisonFacts.english;
+                      const whyLine = facts[0] ?? t("noComparisonFacts");
+                      const routeTitle =
+                        isArabic
+                          ? (route.labelAr ?? route.labelEn ?? t("unnamedRoute"))
+                          : (route.labelEn ?? route.labelAr ?? t("unnamedRoute"));
 
                       return (
-                        <button
+                        <div
                           key={route.uiKey}
-                          type="button"
                           ref={(node) => {
                             routeRefs.current.set(route.uiKey, node);
                           }}
-                          onClick={() => focusRoute(route)}
-                          className={`w-full rounded-[22px] border p-4 text-left transition ${
-                            isSelected
-                              ? "border-sky-400/35 bg-sky-400/[0.08] shadow-[0_12px_28px_rgba(59,130,246,0.14)]"
-                              : "border-white/8 bg-white/[0.03] hover:border-white/16 hover:bg-white/[0.05]"
+                          className={`overflow-hidden rounded-2xl border transition mashwar-tradeoff-route-card ${
+                            isSelected ? "mashwar-tradeoff-route-selected" : ""
                           }`}
+                          dir={isArabic ? "rtl" : "ltr"}
                         >
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-semibold text-[#f9fafb]">
+                          <button
+                            type="button"
+                            onClick={() => focusRoute(route)}
+                            className={`w-full px-4 py-3 text-left transition hover:bg-white/[0.04] ${
+                              isArabic ? "text-right mashwar-rtl" : ""
+                            }`}
+                          >
+                            <div
+                              className={`flex flex-wrap items-center justify-between gap-2 ${
+                                isArabic ? "flex-row-reverse" : ""
+                              }`}
+                            >
+                              <div
+                                className={`flex flex-wrap items-center gap-2 ${
+                                  isArabic ? "justify-end" : ""
+                                }`}
+                              >
+                                <span className="mashwar-mono text-[12px] font-semibold text-[#9aa5b2]">
                                   #{route.rank}
                                 </span>
                                 {isWinner ? (
-                                  <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold text-emerald-100">
-                                    Winner
+                                  <span className="rounded-full border px-2.5 py-0.5 text-[10px] font-semibold mashwar-tradeoff-winner-pill">
+                                    {t("winnerBadge")}
                                   </span>
-                                ) : null}
-                                {route.isRecommended ? (
-                                  <span className="rounded-full border border-sky-400/20 bg-sky-400/10 px-3 py-1 text-[11px] font-semibold text-sky-100">
-                                    Recommended
-                                  </span>
-                                ) : null}
-                                {route.isFastest ? (
-                                  <FlagChip
-                                    tone={{
-                                      text: "#bfdbfe",
-                                      bg: "rgba(59, 130, 246, 0.12)",
-                                      border: "rgba(59, 130, 246, 0.28)",
-                                    }}
-                                  >
-                                    Fastest
-                                  </FlagChip>
-                                ) : null}
-                                {route.isSafest ? (
-                                  <FlagChip tone={RISK_VISUALS.low}>Safest</FlagChip>
-                                ) : null}
-                                {route.isLowestDelay ? (
-                                  <FlagChip tone={RISK_VISUALS.medium}>Lowest delay</FlagChip>
-                                ) : null}
-                                {route.isHighestRisk ? (
-                                  <FlagChip tone={RISK_VISUALS.high}>Highest risk</FlagChip>
                                 ) : null}
                               </div>
-
-                              <h3 className="mt-3 text-[18px] font-semibold text-[#f9fafb]">
-                                {route.labelEn ?? "Unnamed route"}
-                              </h3>
-                              <p dir="rtl" className="mt-1 mashwar-rtl text-[13px] leading-6 text-[#cbd5e1]">
-                                {route.labelAr ?? "لا يوجد اسم عربي"}
-                              </p>
-                            </div>
-
-                            <div className="flex flex-col items-end gap-2">
-                              <span
-                                className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
-                                style={{
-                                  color: riskVisual.text,
-                                  backgroundColor: riskVisual.bg,
-                                  borderColor: riskVisual.border,
-                                }}
-                              >
-                                {riskVisual.label}
-                              </span>
-                              <span
-                                className="rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
-                                style={{
-                                  color: statusBadge.text,
-                                  backgroundColor: statusBadge.bg,
-                                  borderColor: statusBadge.border,
-                                }}
-                              >
-                                {statusBadge.label}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                            <MetricChip
-                              label="Duration"
-                              value={formatMinutes(route.durationMinutes)}
-                            />
-                            <MetricChip
-                              label="Smart ETA"
-                              value={formatMinutes(route.smartEtaMinutes)}
-                            />
-                            <MetricChip
-                              label="Expected delay"
-                              value={formatMinutes(route.expectedDelayMinutes)}
-                            />
-                            <MetricChip
-                              label="Risk score"
-                              value={formatNumber(route.riskScore, 2)}
-                              tone={{
-                                text: riskVisual.text,
-                                bg: riskVisual.bg,
-                                border: riskVisual.border,
-                              }}
-                            />
-                          </div>
-
-                          <div className="mt-4 grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
-                            <div className="rounded-[18px] border border-white/8 bg-black/20 p-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[#6b7280]">
-                                  Time vs risk
-                                </p>
-                                <span className="text-[11px] text-[#94a3b8]">
-                                  {formatSignedNumber(route.durationDeltaVsRecommendedMinutes, 0)} min vs recommended
+                              <div className={`flex flex-wrap gap-1.5 ${isArabic ? "justify-end" : ""}`}>
+                                <span
+                                  className="rounded-full border px-2.5 py-0.5 text-[10px] font-medium"
+                                  style={{
+                                    color: riskVisual.text,
+                                    backgroundColor: riskVisual.bg,
+                                    borderColor: riskVisual.border,
+                                  }}
+                                >
+                                  {riskLabel(route.riskLevel)}
+                                </span>
+                                <span
+                                  className="rounded-full border px-2.5 py-0.5 text-[10px] font-medium"
+                                  style={{
+                                    color: statusStyle.text,
+                                    backgroundColor: statusStyle.bg,
+                                    borderColor: statusStyle.border,
+                                  }}
+                                >
+                                  {bucketLabel(route.worstPredictedStatus)}
                                 </span>
                               </div>
-                              <div className="mt-3 space-y-2">
-                                <div>
-                                  <div className="flex items-center justify-between text-[11px] text-[#94a3b8]">
-                                    <span>Time</span>
-                                    <span>{formatMinutes(route.durationMinutes)}</span>
-                                  </div>
-                                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/8">
-                                    <div
-                                      className="h-full rounded-full"
-                                      style={{
-                                        width: `${Math.min(100, durationPct * 100)}%`,
-                                        background:
-                                          "linear-gradient(90deg, rgba(59,130,246,0.95), rgba(59,130,246,0.55))",
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="flex items-center justify-between text-[11px] text-[#94a3b8]">
-                                    <span>Risk</span>
-                                    <span>{formatNumber(route.riskScore, 2)}</span>
-                                  </div>
-                                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/8">
-                                    <div
-                                      className="h-full rounded-full"
-                                      style={{
-                                        width: `${Math.min(100, riskPct * 100)}%`,
-                                        background:
-                                          "linear-gradient(90deg, rgba(239,68,68,0.95), rgba(245,158,11,0.72))",
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="flex items-center justify-between text-[11px] text-[#94a3b8]">
-                                    <span>Delay</span>
-                                    <span>{formatMinutes(route.expectedDelayMinutes)}</span>
-                                  </div>
-                                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/8">
-                                    <div
-                                      className="h-full rounded-full"
-                                      style={{
-                                        width: `${Math.min(100, delayPct * 100)}%`,
-                                        background:
-                                          "linear-gradient(90deg, rgba(245,158,11,0.95), rgba(34,197,94,0.55))",
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
                             </div>
 
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              <MetricChip
-                                label="Checkpoint count"
-                                value={formatNumber(route.checkpointCount, 0)}
-                              />
-                              <MetricChip
-                                label="Route viability"
-                                value={route.routeViability}
-                              />
-                              <MetricChip
-                                label="Risk level"
-                                value={route.riskLevel}
-                              />
-                              <MetricChip
-                                label="Risk confidence"
-                                value={formatPercent(route.riskConfidence)}
-                              />
-                              <MetricChip
-                                label="Volatility"
-                                value={formatNumber(route.historicalVolatility, 2)}
-                              />
-                              <MetricChip
-                                label="Distance"
-                                value={formatDistance(route.distanceM)}
-                              />
-                            </div>
-                          </div>
+                            <h3
+                              className={`mt-2 text-[18px] font-semibold leading-snug text-[#f4f6f8] ${
+                                isArabic ? "mashwar-arabic" : "mashwar-display"
+                              }`}
+                            >
+                              {routeTitle}
+                            </h3>
 
-                          <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                            <div className="rounded-[18px] border border-white/8 bg-black/20 p-3">
-                              <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[#6b7280]">
-                                Status counts
-                              </p>
-                              <p className="mt-2 text-[13px] text-[#dbe4f0]">
-                                Green {route.statusCounts.green} · Yellow {route.statusCounts.yellow} · Red {route.statusCounts.red} · Unknown {route.statusCounts.unknown}
-                              </p>
+                            <div
+                              className={`mt-2 flex flex-wrap gap-x-5 gap-y-1.5 text-[11px] ${
+                                isArabic ? "justify-end" : ""
+                              }`}
+                            >
+                              <span className="text-[#8e97a3]">
+                                <span className="text-[#5f6772]">{t("metric.smartEta")}</span>{" "}
+                                <span className="font-medium text-[#dce2e8]">
+                                  {formatMinutesI18n(route.smartEtaMinutes, na, locale, t)}
+                                </span>
+                              </span>
+                              <span className="text-[#8e97a3]">
+                                <span className="text-[#5f6772]">{t("metric.expectedDelay")}</span>{" "}
+                                <span className="font-medium text-[#dce2e8]">
+                                  {formatMinutesI18n(route.expectedDelayMinutes, na, locale, t)}
+                                </span>
+                              </span>
+                              <span className="text-[#8e97a3]">
+                                <span className="text-[#5f6772]">{t("metric.riskScore")}</span>{" "}
+                                <span className="font-medium text-[#dce2e8]">
+                                  {formatNumber(route.riskScore, 0, na)}
+                                </span>
+                              </span>
+                              <span className="text-[#8e97a3]">
+                                <span className="text-[#5f6772]">{t("metric.distance")}</span>{" "}
+                                <span className="font-medium text-[#dce2e8]">
+                                  {formatDistance(route.distanceM, locale, na)}
+                                </span>
+                              </span>
                             </div>
-                            <div className="rounded-[18px] border border-white/8 bg-black/20 p-3">
-                              <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[#6b7280]">
-                                Direction counts
-                              </p>
-                              <p className="mt-2 text-[13px] text-[#dbe4f0]">
-                                Entering {route.routeDirectionCounts.entering} · Leaving {route.routeDirectionCounts.leaving} · Transit {route.routeDirectionCounts.transit} · Unknown {route.routeDirectionCounts.unknown}
-                              </p>
-                            </div>
-                            <div className="rounded-[18px] border border-white/8 bg-black/20 p-3">
-                              <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[#6b7280]">
-                                Corridor cities
-                              </p>
-                              <p className="mt-2 text-[13px] text-[#dbe4f0]">
-                                {joinList(route.routeCorridorCities)}
-                              </p>
-                            </div>
-                          </div>
+                          </button>
 
-                          <div className="mt-4 rounded-[18px] border border-white/8 bg-black/20 p-3">
-                            <p className="mashwar-mono text-[9px] uppercase tracking-[0.24em] text-[#6b7280]">
-                              Why this route matters
-                            </p>
-                            <p className="mt-2 text-[13px] leading-6 text-[#e5e7eb]">
-                              {whyLine}
-                            </p>
-                            {route.comparisonFacts.english.length > 1 || route.comparisonFacts.arabic.length > 1 ? (
-                              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                                {route.comparisonFacts.english.length > 0 ? (
-                                  <ul className="space-y-2 text-[12px] leading-6 text-[#cbd5e1]">
-                                    {route.comparisonFacts.english.map((fact) => (
-                                      <li key={fact} className="rounded-[14px] border border-white/8 bg-white/[0.03] px-3 py-2">
-                                        {fact}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : null}
-                                {route.comparisonFacts.arabic.length > 0 ? (
-                                  <ul dir="rtl" className="space-y-2 text-[12px] leading-6 text-[#cbd5e1]">
-                                    {route.comparisonFacts.arabic.map((fact) => (
-                                      <li key={fact} className="rounded-[14px] border border-white/8 bg-white/[0.03] px-3 py-2 mashwar-rtl">
+                          <details className="group border-t border-white/[0.06] bg-black/10">
+                            <summary
+                              className={`cursor-pointer list-none px-4 py-2.5 text-[12px] font-medium text-[#8fb0ac] marker:content-none [&::-webkit-details-marker]:hidden hover:bg-white/[0.03] hover:text-[#b8dad6] ${
+                                isArabic ? "text-right mashwar-arabic" : "text-left"
+                              }`}
+                            >
+                              {t("routeDeepDive")}
+                            </summary>
+
+                            <div className="space-y-4 px-4 pb-4 pt-1">
+                              <div
+                                className={`rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2.5 text-[12px] leading-relaxed text-[#c5cdd6] ${
+                                  isArabic ? "mashwar-arabic text-right" : ""
+                                }`}
+                              >
+                                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#6d7682]">
+                                  {t("whyMatters")}
+                                </p>
+                                <p className="mt-1.5">{whyLine}</p>
+                                {facts.length > 1 ? (
+                                  <ul className="mt-2 space-y-1.5">
+                                    {facts.slice(1).map((fact) => (
+                                      <li key={fact} className="border-t border-white/[0.05] pt-1.5 first:border-t-0 first:pt-0">
                                         {fact}
                                       </li>
                                     ))}
                                   </ul>
                                 ) : null}
                               </div>
-                            ) : null}
-                          </div>
 
-                          <details className="mt-4 rounded-[18px] border border-white/8 bg-black/20 p-3">
-                            <summary className="cursor-pointer list-none text-[13px] font-semibold text-[#f9fafb]">
-                              Risky checkpoints
-                              {route.riskyCheckpointCount > 0 ? ` (${route.riskyCheckpointCount})` : " (none)"}
+                              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                <MetricChip
+                                  label={t("metric.duration")}
+                                  value={formatMinutesI18n(route.durationMinutes, na, locale, t)}
+                                />
+                                <MetricChip
+                                  label={t("metric.smartEta")}
+                                  value={formatMinutesI18n(route.smartEtaMinutes, na, locale, t)}
+                                />
+                                <MetricChip
+                                  label={t("metric.expectedDelay")}
+                                  value={formatMinutesI18n(route.expectedDelayMinutes, na, locale, t)}
+                                />
+                                <MetricChip
+                                  label={t("metric.riskScore")}
+                                  value={formatNumber(route.riskScore, 2, na)}
+                                  tone={{
+                                    text: riskVisual.text,
+                                    bg: riskVisual.bg,
+                                    border: riskVisual.border,
+                                  }}
+                                />
+                              </div>
+
+                              <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
+                                <div className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
+                              <div
+                                className={`flex items-center justify-between gap-3 ${
+                                  isArabic ? "flex-row-reverse" : ""
+                                }`}
+                              >
+                                <p className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-[#6b7280]">
+                                  {t("timeVsRisk")}
+                                </p>
+                                <span className="text-[11px] text-[#94a3b8]">
+                                  {t("vsRecommended", {
+                                    signed: formatSignedNumber(
+                                      route.durationDeltaVsRecommendedMinutes,
+                                      0,
+                                      na,
+                                    ),
+                                  })}
+                                </span>
+                              </div>
+                                  <div className="mt-3 space-y-2">
+                                    <div>
+                                      <div
+                                        className={`flex items-center justify-between text-[11px] text-[#94a3b8] ${
+                                          isArabic ? "flex-row-reverse" : ""
+                                        }`}
+                                      >
+                                        <span>{t("time")}</span>
+                                        <span>
+                                          {formatMinutesI18n(route.durationMinutes, na, locale, t)}
+                                        </span>
+                                      </div>
+                                      <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/8">
+                                        <div
+                                          className="h-full rounded-full"
+                                          style={{
+                                            width: `${Math.min(100, durationPct * 100)}%`,
+                                            background:
+                                              "linear-gradient(90deg, rgba(72,130,138,0.95), rgba(45,90,95,0.55))",
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div
+                                        className={`flex items-center justify-between text-[11px] text-[#94a3b8] ${
+                                          isArabic ? "flex-row-reverse" : ""
+                                        }`}
+                                      >
+                                        <span>{t("risk")}</span>
+                                        <span>{formatNumber(route.riskScore, 2, na)}</span>
+                                      </div>
+                                      <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/8">
+                                        <div
+                                          className="h-full rounded-full"
+                                          style={{
+                                            width: `${Math.min(100, riskPct * 100)}%`,
+                                            background:
+                                              "linear-gradient(90deg, rgba(196,92,72,0.9), rgba(196,154,60,0.75))",
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <div
+                                        className={`flex items-center justify-between text-[11px] text-[#94a3b8] ${
+                                          isArabic ? "flex-row-reverse" : ""
+                                        }`}
+                                      >
+                                        <span>{t("delay")}</span>
+                                        <span>
+                                          {formatMinutesI18n(
+                                            route.expectedDelayMinutes,
+                                            na,
+                                            locale,
+                                            t,
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/8">
+                                        <div
+                                          className="h-full rounded-full"
+                                          style={{
+                                            width: `${Math.min(100, delayPct * 100)}%`,
+                                            background:
+                                              "linear-gradient(90deg, rgba(196,154,60,0.92), rgba(107,143,86,0.55))",
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <MetricChip
+                                    label={t("metric.checkpointCount")}
+                                    value={formatNumber(route.checkpointCount, 0, na)}
+                                  />
+                                  <MetricChip
+                                    label={t("metric.routeViability")}
+                                    value={viabilityLabel(route.routeViability)}
+                                  />
+                                  <MetricChip
+                                    label={t("metric.riskLevel")}
+                                    value={riskLabel(route.riskLevel)}
+                                  />
+                                  <MetricChip
+                                    label={t("metric.riskConfidence")}
+                                    value={formatPercent(route.riskConfidence, locale, na)}
+                                  />
+                                  <MetricChip
+                                    label={t("metric.volatility")}
+                                    value={formatNumber(route.historicalVolatility, 2, na)}
+                                  />
+                                  <MetricChip
+                                    label={t("metric.distance")}
+                                    value={formatDistance(route.distanceM, locale, na)}
+                                  />
+                                </div>
+                              </div>
+
+                              <div
+                                className={`rounded-xl border border-white/[0.06] bg-black/15 px-3 py-2.5 text-[12px] leading-relaxed text-[#b4bcc6] ${
+                                  isArabic ? "mashwar-arabic text-right" : ""
+                                }`}
+                              >
+                                <p>
+                                  <span className="font-medium text-[#7d8692]">
+                                    {t("statusCounts")}
+                                  </span>{" "}
+                                  {t("statusCountsLine", {
+                                    green: route.statusCounts.green,
+                                    yellow: route.statusCounts.yellow,
+                                    red: route.statusCounts.red,
+                                    unknown: route.statusCounts.unknown,
+                                  })}
+                                </p>
+                                <p className="mt-1.5">
+                                  <span className="font-medium text-[#7d8692]">
+                                    {t("directionCounts")}
+                                  </span>{" "}
+                                  {t("directionCountsLine", {
+                                    entering: route.routeDirectionCounts.entering,
+                                    leaving: route.routeDirectionCounts.leaving,
+                                    transit: route.routeDirectionCounts.transit,
+                                    unknown: route.routeDirectionCounts.unknown,
+                                  })}
+                                </p>
+                                <p className={`mt-1.5 ${isArabic ? "mashwar-arabic" : ""}`}>
+                                  <span className="font-medium text-[#7d8692]">
+                                    {t("corridorCities")}
+                                  </span>{" "}
+                                  {joinList(route.routeCorridorCities, na)}
+                                </p>
+                              </div>
+
+                              <details className="rounded-xl border border-white/[0.06] bg-black/20 p-3">
+                            <summary
+                              className={`cursor-pointer list-none text-[13px] font-semibold text-[#f4f6f8] marker:content-none [&::-webkit-details-marker]:hidden ${
+                                isArabic ? "mashwar-arabic" : ""
+                              }`}
+                            >
+                              {t("riskyCheckpoints")}
+                              {route.riskyCheckpointCount > 0
+                                ? t("riskyCount", { count: route.riskyCheckpointCount })
+                                : t("riskyNone")}
                             </summary>
 
                             {route.riskyCheckpointCount > 0 ? (
                               <div className="mt-3 grid gap-2">
                                 {route.riskyCheckpoints.map((checkpoint) => {
-                                  const currentStatus = getStatusBadge(checkpoint.currentStatus);
-                                  const etaStatus = getStatusBadge(checkpoint.predictedStatusAtEta);
+                                  const currentStyle = getStatusStyle(checkpoint.currentStatus);
+                                  const etaStyle = getStatusStyle(checkpoint.predictedStatusAtEta);
 
                                   return (
                                     <div
                                       key={`${checkpoint.checkpointId ?? checkpoint.name}-${checkpoint.name}`}
-                                      className="rounded-[16px] border border-white/8 bg-white/[0.03] p-3"
+                                      className="rounded-[14px] border border-white/8 bg-white/[0.03] p-3"
                                     >
-                                      <div className="flex flex-wrap items-start justify-between gap-3">
-                                        <div>
-                                          <p className="text-[13px] font-semibold text-[#f9fafb]">
+                                      <div
+                                        className={`flex flex-wrap items-start justify-between gap-3 ${
+                                          isArabic ? "flex-row-reverse" : ""
+                                        }`}
+                                      >
+                                        <div className={isArabic ? "text-right mashwar-arabic" : ""}>
+                                          <p className="text-[13px] font-semibold text-[#f4f6f8]">
                                             {checkpoint.name}
                                           </p>
                                           <p className="mt-1 text-[12px] text-[#94a3b8]">
-                                            {checkpoint.city ?? "Unknown city"} · {checkpoint.routeDirection ?? "Unknown direction"}
+                                            {checkpoint.city ?? t("unknownCity")} ·{" "}
+                                            {checkpoint.routeDirection === "entering" ||
+                                            checkpoint.routeDirection === "leaving" ||
+                                            checkpoint.routeDirection === "transit" ||
+                                            checkpoint.routeDirection === "unknown"
+                                              ? directionLabel(checkpoint.routeDirection)
+                                              : (checkpoint.routeDirection ?? t("unknownDirection"))}
                                           </p>
                                         </div>
-                                        <div className="flex flex-wrap gap-2">
+                                        <div
+                                          className={`flex flex-wrap gap-2 ${
+                                            isArabic ? "justify-start" : "justify-end"
+                                          }`}
+                                        >
                                           <span
-                                            className="rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]"
+                                            className="rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-tight"
                                             style={{
-                                              color: etaStatus.text,
-                                              backgroundColor: etaStatus.bg,
-                                              borderColor: etaStatus.border,
+                                              color: etaStyle.text,
+                                              backgroundColor: etaStyle.bg,
+                                              borderColor: etaStyle.border,
                                             }}
                                           >
-                                            ETA {etaStatus.label}
+                                            {t("etaBadge", {
+                                              status: bucketLabel(checkpoint.predictedStatusAtEta),
+                                            })}
                                           </span>
                                           <span
-                                            className="rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]"
+                                            className="rounded-full border px-2.5 py-1 text-[10px] font-semibold tracking-tight"
                                             style={{
-                                              color: currentStatus.text,
-                                              backgroundColor: currentStatus.bg,
-                                              borderColor: currentStatus.border,
+                                              color: currentStyle.text,
+                                              backgroundColor: currentStyle.bg,
+                                              borderColor: currentStyle.border,
                                             }}
                                           >
-                                            Current {currentStatus.label}
+                                            {t("currentBadge", {
+                                              status: bucketLabel(checkpoint.currentStatus),
+                                            })}
                                           </span>
                                         </div>
                                       </div>
 
                                       <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
                                         <MetricChip
-                                          label="ETA"
-                                          value={formatMinutes(checkpoint.etaMinutes)}
+                                          label={t("metric.smartEta")}
+                                          value={formatMinutesI18n(
+                                            checkpoint.etaMinutes,
+                                            na,
+                                            locale,
+                                            t,
+                                          )}
                                         />
                                         <MetricChip
-                                          label="Forecast confidence"
-                                          value={formatPercent(checkpoint.forecastConfidence)}
+                                          label={t("forecastConfidence")}
+                                          value={formatPercent(
+                                            checkpoint.forecastConfidence,
+                                            locale,
+                                            na,
+                                          )}
                                         />
                                         <MetricChip
-                                          label="Expected delay"
-                                          value={formatMinutes(checkpoint.expectedDelayMinutes)}
+                                          label={t("metric.expectedDelay")}
+                                          value={formatMinutesI18n(
+                                            checkpoint.expectedDelayMinutes,
+                                            na,
+                                            locale,
+                                            t,
+                                          )}
                                         />
                                         <MetricChip
-                                          label="Distance from route"
-                                          value={formatDistance(checkpoint.distanceFromRouteM)}
+                                          label={t("distanceFromRoute")}
+                                          value={formatDistance(
+                                            checkpoint.distanceFromRouteM,
+                                            locale,
+                                            na,
+                                          )}
                                         />
                                       </div>
                                     </div>
@@ -895,47 +1055,33 @@ export default function TradeoffExplainerModal({
                               </div>
                             ) : null}
                           </details>
-                        </button>
+                            </div>
+                          </details>
+                        </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="mt-4 rounded-[22px] border border-dashed border-white/12 bg-white/[0.03] p-6 text-[13px] leading-7 text-[#94a3b8]">
-                    No tradeoff routes were returned. The explanation text is still available, but there are no route cards to compare.
+                  <div className="mt-4 rounded-[20px] border border-dashed p-6 text-[13px] leading-7 text-[#94a3b8] mashwar-tradeoff-panel">
+                    {t("emptyRoutes")}
                   </div>
                 )}
               </section>
-
-              {!explainer.fullText && hasTextSections ? (
-                <section className="mt-4 rounded-[22px] border border-white/8 bg-white/[0.03] p-4">
-                  <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-                    Bilingual text
-                  </p>
-                  {explainer.englishText ? (
-                    <p className="mt-3 whitespace-pre-line text-[13px] leading-7 text-[#dbe4f0]">
-                      {explainer.englishText}
-                    </p>
-                  ) : null}
-                  {explainer.arabicText ? (
-                    <p dir="rtl" className="mt-3 whitespace-pre-line text-[13px] leading-7 text-[#dbe4f0] mashwar-rtl">
-                      {explainer.arabicText}
-                    </p>
-                  ) : null}
-                </section>
-              ) : null}
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-3 px-4 py-3 text-[13px] text-[#cbd5e1] sm:px-5">
-              <p>
-                {winnerRoute?.labelEn ?? "Winner route"} is summarized here. Expand to inspect all returned routes.
-              </p>
+            <div
+              className={`flex items-center justify-between gap-3 px-4 py-3 text-[13px] text-[#cbd5e1] sm:px-5 ${
+                isArabic ? "flex-row-reverse mashwar-rtl text-right" : ""
+              }`}
+            >
+              <p>{t("collapsedHint", { name: winnerDisplay })}</p>
               {winnerRoute ? (
                 <button
                   type="button"
                   onClick={scrollToWinner}
-                  className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] font-semibold text-[#f9fafb] transition hover:bg-white/[0.06]"
+                  className="shrink-0 rounded-full border px-3 py-2 text-[11px] font-semibold text-[#f4f6f8] transition mashwar-tradeoff-chip hover:bg-white/[0.06]"
                 >
-                  Focus winner
+                  {t("focusWinner")}
                 </button>
               ) : null}
             </div>
