@@ -854,37 +854,178 @@ Return up to 3 GraphHopper candidate routes, enrich them with nearby checkpoint 
 
 V1 remains unchanged at `POST /api/routing`.
 
+### V5 Architecture Overview
+
+V5 significantly improves checkpoint matching and direction-aware logic compared to V4:
+
+**Static Data Sources:**
+- `API/data/checkpoints.json`: Source of truth for checkpoint geometry, ID, name, and city
+- `API/data/cities.json`: Broad routing city centers for origin/destination inference
+- Live status from Supabase: Merged by checkpoint ID with static registry
+
+**Strict Checkpoint Matching (V5):**
+- **Old approach (V4):** 2500m radius was too broad, caused false positives
+- **New approach (V5):** 300m is only an outer candidate radius
+- Candidates must pass strict geometric validation:
+  - Projection quality (`projection_t` between 0.12-0.88 for medium, 0.20-0.80 for weak)
+  - Local route window length (minimum 120m of continuous route)
+  - Route endpoint rejection (rejected if within 180m of route start/end unless very close to route)
+  - Nearest-vertex snap distance (weak matches must be >70m from route corners)
+  - Confidence classification: `strong` (0-80m), `medium` (80-150m), `weak` (150-300m)
+
+**Direction-Aware Logic (V5):**
+- Route direction is derived from checkpoint city vs trip origin/destination:
+  - `leaving`: checkpoint city matches origin city
+  - `entering`: checkpoint city matches destination city
+  - `transit`: checkpoint city is neither origin nor destination
+  - `unknown`: origin/destination cities are unknown
+- Current status selection uses direction:
+  - `leaving`: use leaving_status
+  - `entering`: use entering_status
+  - `transit`/`unknown`: use worst of both (conservative)
+- Forecast selection uses direction (similar logic)
+
+**Cumulative Delay Propagation (V4/V5):**
+- Checkpoints are evaluated sequentially
+- Each checkpoint's expected delay is added to the cumulative total
+- Downstream checkpoints are forecast at their effective ETA (base ETA + cumulative prior delay)
+- This creates realistic Smart ETA that compounds delays through the route
+
+**Risk Scoring (V4/V5):**
+- Combines: checkpoint burden (30%), severity ratio (35%), confidence penalty (20%), volatility ratio (15%)
+- Risk level: `low` (0-33), `medium` (34-66), `high` (67-100)
+
 ### Request Body
 
 ```json
 {
   "origin": { "lat": 32.221, "lng": 35.262 },
   "destination": { "lat": 32.281, "lng": 35.183 },
+  "origin_city": "جنين",
+  "destination_city": "نابلس",
   "depart_at": "2026-04-23T08:00:00Z",
   "profile": "car"
 }
 ```
 
+### Request Field Reference
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `origin` | object | Yes | `{ "lat": number, "lng": number }` |
+| `destination` | object | Yes | `{ "lat": number, "lng": number }` |
+| `origin_city` | string | No | Broad routing city label (e.g., "جنين", "نابلس") |
+| `destination_city` | string | No | Broad routing city label |
+| `depart_at` | string | No | ISO 8601 UTC datetime; defaults to current time |
+| `profile` | string | No | Only `"car"` is supported |
+
 ### Request Notes
 
-- `origin` and `destination` are required
-- `depart_at` is optional and defaults to the current UTC time
-- `profile` currently only accepts `car`
-- legacy aliases `startPoint` and `endPoint` are accepted for V2 request parsing
+**City Inference:**
+- If `origin_city` / `destination_city` are not provided:
+  - Backend infers them from `API/data/cities.json` using haversine distance to route endpoints
+  - Inference priority: request-provided > nearest city center > checkpoint city in first/last 5km > unknown
+  - City inference enables direction-aware checkpoint status/forecast selection
+- If cities cannot be inferred, direction defaults to `unknown` for all checkpoints (conservative fallback)
 
-### Backend Flow
+**Static Data Sources:**
+- `API/data/checkpoints.json`: Static checkpoint registry with ID, name, city, latitude, longitude
+  - Source of truth for checkpoint geometry and broad routing city
+  - Merged with live status from Supabase by checkpoint ID
+- `API/data/cities.json`: City centers used for origin/destination inference
+  - Supports multiple JSON formats (direct list, `routing_city_centers` object, `west_bank_cities` object)
+  - Used for haversine distance calculations
+  - Preferred city centers are broad routing labels (e.g., "جنين", "نابلس", not micro-location names)
 
-- GraphHopper still generates the routes
-- the backend requests up to 3 alternative routes using `algorithm=alternative_route`
-- GraphHopper flexible mode is required for V2 custom-model routing and route alternatives; free-tier keys cannot produce the 3-route checkpoint-aware response
-- the backend matches checkpoints within `2500m` of each route polyline
-- checkpoint ETA is interpolated from GraphHopper instructions when available
-- checkpoint forecasts are evaluated sequentially, so delay from an earlier checkpoint shifts the arrival time used for downstream checkpoints
-- current checkpoint status is collapsed from entering/leaving using worst severity
-- forecast status is requested for both entering and leaving, then collapsed using worst severity
-- route-level Smart ETA adds the expected delay from matched checkpoints to the raw GraphHopper duration
-- route-level risk scoring uses checkpoint burden, forecast severity, forecast confidence, and historical volatility
-- routes are scored and reranked before the response is returned
+**Backward Compatibility:**
+- Legacy aliases `startPoint` / `endPoint` are auto-converted to `origin` / `destination`
+- Camel-case aliases `originCity` / `destinationCity` are auto-converted to snake_case
+- All V4 response fields are preserved; new V5 fields are additions only
+
+**Grouped Checkpoint Labels (V5):**
+- Checkpoint city values like `أريحا - طوباس` (grouped labels) are resolved to a single routing city:
+  - Backend uses checkpoint coordinates to infer which city in the group is most likely
+  - This ensures consistent direction-aware status selection across grouped checkpoints
+
+### Backend Flow (V5)
+
+**Stage 1: Data Loading**
+- Load static checkpoint registry from `API/data/checkpoints.json`
+  - Validate coordinates, skip invalid rows
+  - Log total/usable/skipped counts
+- Load city centers from `API/data/cities.json`
+  - Support multiple JSON root formats
+  - Validate coordinate bounds
+  - Normalize aliases_ar
+- Load live checkpoint statuses from Supabase
+- Merge static + live by checkpoint ID
+  - Keep static geometry as source of truth
+  - Add live status fields (entering_status, leaving_status, timestamps)
+
+**Stage 2: Route Generation**
+- GraphHopper generates up to 3 alternative routes using `algorithm=alternative_route`
+- GraphHopper flexible mode required for custom-model routing (free tier cannot produce 3-route response)
+- Multi-pass fallback:
+  - Pass 1: Unrestricted routes
+  - Pass 2: Avoid RED checkpoints (if < 3 routes)
+  - Pass 3: Avoid RED + penalize YELLOW (if still < 3 routes)
+
+**Stage 3: City Inference**
+- Infer origin/destination cities if not provided
+- Priority: request > nearest city center > checkpoint city in route segment > unknown
+- Enables direction-aware checkpoint selection
+
+**Stage 4: Strict Checkpoint Matching (V5)**
+- Project route to 2D for geometry calculations
+- For each checkpoint in merged catalog:
+  - Find closest route segment
+  - Calculate perpendicular distance
+  - If > 300m: reject as out of corridor
+  - If <= 300m: validate using strict geometric rules:
+    - Check projection_t (parametric position on segment)
+    - Check local route window (120m minimum continuous route)
+    - Check route endpoint distance (reject if too near start/end)
+    - Check nearest vertex distance (weak matches must be far from corners)
+  - Classify as `strong` / `medium` / `weak` based on distance + geometry
+  - Accept or reject based on classification rules
+- Log all rejected candidates (within 300m but failed validation)
+- Sort accepted checkpoints by chainage_m (distance along route)
+
+**Stage 5: Direction-Aware Enrichment**
+- For each accepted checkpoint:
+  - Derive route_direction from checkpoint.city vs origin_city / destination_city
+  - Select current status based on direction (entering/leaving/worst)
+  - Calculate base ETA using instruction-based interpolation
+  - Apply cumulative delays from prior checkpoints → effective ETA
+  - Calculate crossing_time = depart_at + effective_eta_ms
+  - Get direction-aware forecast at crossing_time
+  - Extract forecast_probabilities and expected_delay_ms
+  - Add expected_delay to cumulative total for downstream checkpoints
+  - Build complete checkpoint payload
+
+**Stage 6: Route Scoring & Risk**
+- Calculate predicted_burden (sum of predicted status penalties)
+- Calculate current_burden (sum of current status penalties)
+- Calculate checkpoint_penalty (checkpoint_count - 1) * 5
+- route_score = duration_minutes + predicted_burden + current_burden + checkpoint_penalty
+- Calculate risk_score from 4 components:
+  - 30% checkpoint_burden = checkpoint_count / 5 (clamped to 1.0)
+  - 35% severity_ratio = expected delays normalized
+  - 20% confidence_penalty = 1 - average forecast confidence
+  - 15% volatility_ratio = average checkpoint volatility
+- Determine risk_level: low (0-33), medium (34-66), high (67-100)
+- Derive route_viability: good / risky / avoid
+
+**Stage 7: Route Ranking**
+- Tiered sort by: has_any_red, worst_status_bucket, count_red, count_yellow_or_unknown, earliest_risky_eta, duration
+- Deduplicate similar routes (< 8% distance difference + > 85% bbox overlap)
+- Select top 3 routes
+
+**Stage 8: Response Building**
+- Add `checkpoint_matching` metadata describing V5 matcher configuration
+- Set version = "v5"
+- Include all V4 fields (smart_eta, risk_score, etc.) + V5 new fields
+- Return in API response envelope
 
 ### Success Response
 
@@ -893,11 +1034,22 @@ V1 remains unchanged at `POST /api/routing`.
   "success": true,
   "data": {
     "generated_at": "2026-04-23T08:00:02Z",
-    "version": "v4",
+    "version": "v5",
     "origin": { "lat": 32.221, "lng": 35.262 },
     "destination": { "lat": 32.281, "lng": 35.183 },
     "depart_at": "2026-04-23T08:00:00Z",
     "warnings": [],
+    "checkpoint_matching": {
+      "mode": "route_corridor_geometric_confidence",
+      "outer_threshold_m": 300.0,
+      "strong_match_distance_m": 80.0,
+      "medium_match_distance_m": 150.0,
+      "weak_match_distance_m": 300.0,
+      "static_checkpoint_source": "API/data/checkpoints.json",
+      "city_source": "API/data/cities.json",
+      "city_inference": "request_city_then_nearest_city_center",
+      "direction_mode": "origin_destination_city"
+    },
     "graphhopper_info": { "took": 7 },
     "routes": [
       {
@@ -921,6 +1073,7 @@ V1 remains unchanged at `POST /api/routing`.
         "smart_eta_datetime": "2026-04-23T08:58:00Z",
         "expected_delay_ms": 300000,
         "expected_delay_minutes": 5.0,
+        "city": "نابلس",
         "route_score": 58.0,
         "risk_score": 8,
         "risk_level": "low",
@@ -940,12 +1093,19 @@ V1 remains unchanged at `POST /api/routing`.
           {
             "checkpoint_id": 12,
             "name": "Huwwara",
+            "city": "نابلس",
             "lat": 32.24,
             "lng": 35.23,
+            "route_direction": "entering",
             "distance_from_route_m": 812.3,
+            "match_confidence": "strong",
+            "projection_t": 0.54,
             "nearest_segment_index": 0,
             "projected_point_on_route": [35.233, 32.239],
             "chainage_m": 14567.8,
+            "base_eta_ms": 2040000,
+            "effective_eta_ms": 2340000,
+            "cumulative_delay_ms_before_checkpoint": 300000,
             "base_eta_ms": 2040000,
             "effective_eta_ms": 2340000,
             "cumulative_delay_ms_before_checkpoint": 300000,
@@ -975,7 +1135,13 @@ V1 remains unchanged at `POST /api/routing`.
             "expected_delay_minutes": 0.0,
             "severity_ratio": 0.0,
             "selected_status_type": "entering",
-            "historical_volatility": 0.0
+            "historical_volatility": 0.0,
+            "match_confidence_details": {
+              "distance_m": 42.3,
+              "projection_quality": "good",
+              "local_window_route_length_m": 500.0,
+              "distance_to_nearest_vertex_m": 123.4
+            }
           }
         ],
         "graphhopper": {
@@ -983,21 +1149,93 @@ V1 remains unchanged at `POST /api/routing`.
           "instructions": []
         }
       }
-    ]
+    ],
+    "tradeoff_explainer": {
+      "mode": "rule_based_bilingual",
+      "language": "bilingual",
+      "compared_route_count": 3,
+      "winner_route_id": "route_1",
+      "fastest_route_id": "route_2",
+      "safest_route_id": "route_1",
+      "set_summary": {
+        "time_spread_minutes": 5.0,
+        "risk_spread": 12,
+        "delay_spread_minutes": 3.0,
+        "checkpoint_spread": 1,
+        "confidence_spread": 0.12,
+        "volatility_spread": 0.08,
+        "corridor_note": "جنين -> نابلس",
+        "decision_driver_en": "speed and safety align on the same route",
+        "decision_driver_ar": "السرعة والأمان يتطابقان على المسار نفسه"
+      },
+      "routes": [
+        {
+          "route_id": "route_1",
+          "rank": 1,
+          "label_en": "Route 1",
+          "label_ar": "المسار 1",
+          "is_recommended": true,
+          "is_fastest": false,
+          "is_safest": true,
+          "duration_minutes": 53.0,
+          "smart_eta_minutes": 58.0,
+          "expected_delay_minutes": 5.0,
+          "risk_score": 8,
+          "risk_level": "low",
+          "route_viability": "good",
+          "worst_predicted_status": "green",
+          "comparison_facts": {
+            "english": ["This is the recommended route and it is also the safest option in the set."],
+            "arabic": ["هذا هو المسار الموصى به، وهو أيضا الأكثر أمانا ضمن المجموعة."]
+          }
+        }
+      ],
+      "english_text": "Route 1 is best overall.",
+      "arabic_text": "المسار 1 هو الأفضل إجمالا.",
+      "full_text": "English: Route 1 is best overall.\n\nالعربية: المسار 1 هو الأفضل إجمالا."
+    }
   }
 }
 ```
 
-### Status Clarification
+### Status Normalization & Direction-Awareness (V5)
 
-This endpoint does not return the raw ML label directly in `predicted_status_at_eta`.
+**Status Buckets:**
+- `green` (سالك): Open, flowing traffic
+- `yellow` (أزمة, ازمة): Congested, busy
+- `red` (مغلق): Closed, blocked
+- `unknown`: Unrecognized or unavailable
 
-- `POST /checkpoints/{checkpoint_id}/predict` returns the model label in `predicted_status`
-- `POST /api/routing/v2` normalizes that label into a routing bucket for ranking and display
-- the routing buckets are `green`, `yellow`, `red`, and `unknown`
-- raw checkpoint source values are preserved under `current_status_raw`
+**Current Status Selection (V5):**
+- If `route_direction == "leaving"`: use `leaving_status` from live checkpoint data
+- If `route_direction == "entering"`: use `entering_status` from live checkpoint data  
+- If `route_direction == "transit"` or `"unknown"`: use worst of both (conservative)
+- This replaces V4 behavior which always used worst-of-both
 
-So in the routing response, `predicted_status_at_eta: "green"` is valid and expected when the forecasted checkpoint risk is low.
+**Predicted Status Selection (V5):**
+- Prediction service returns both entering and leaving forecasts
+- Backend selects forecast based on `route_direction`:
+  - `leaving`: use leaving forecast
+  - `entering`: use entering forecast
+  - `transit`/`unknown`: use worst of both
+- `selected_status_type` field indicates which was chosen
+
+**Why Direction Matters:**
+- A checkpoint's status depends on which direction you're crossing it
+- Entering side may have congestion while leaving side is clear (or vice versa)
+- V5 makes this explicit; V4 always used conservative worst-of-both
+- Results in more accurate ETAs and risk scores
+
+**Example:**
+```
+Checkpoint entering_status: yellow (congestion on entry side)
+Checkpoint leaving_status: green (clear on exit side)
+Route direction: "entering"
+→ selected current_status: yellow
+→ selected predicted_status: yellow forecast
+```
+
+Raw source values (before direction selection) are always available in `current_status_raw` for transparency.
 
 ### Field Reference
 
@@ -1013,13 +1251,31 @@ So in the routing response, `predicted_status_at_eta: "green"` is valid and expe
 | Field | Type | Possible values |
 | --- | --- | --- |
 | `generated_at` | string | ISO 8601 UTC timestamp such as `2026-04-23T08:00:02Z` |
-| `version` | string | Always `"v4"` for this endpoint |
+| `version` | string | Always `"v5"` for this endpoint |
 | `origin` | object | `{ "lat": number, "lng": number }` |
 | `destination` | object | `{ "lat": number, "lng": number }` |
 | `depart_at` | string | ISO 8601 UTC timestamp used for ETA calculations |
 | `warnings` | array of strings | Empty when there are no soft failures; otherwise human-readable warnings |
+| `checkpoint_matching` | object | **NEW in V5**: Configuration of the strict geometric matcher |
 | `graphhopper_info` | object or null | Upstream GraphHopper `info` object passthrough; shape is not fixed by this API |
 | `routes` | array of objects | Ranked routes, usually 1 to 3 items |
+| `tradeoff_explainer` | object | Deterministic bilingual comparison across all returned routes |
+
+#### `checkpoint_matching` (NEW in V5)
+
+Metadata describing the V5 strict checkpoint matcher configuration:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `mode` | string | Always `"route_corridor_geometric_confidence"` |
+| `outer_threshold_m` | number | Outer candidate radius (300m) |
+| `strong_match_distance_m` | number | Strong match threshold (0-80m) |
+| `medium_match_distance_m` | number | Medium match threshold (80-150m) |
+| `weak_match_distance_m` | number | Weak match threshold (150-300m) |
+| `static_checkpoint_source` | string | Source file for static checkpoint registry |
+| `city_source` | string | Source file for city centers |
+| `city_inference` | string | City inference priority order |
+| `direction_mode` | string | Direction derivation method |
 
 #### Route Object
 
@@ -1043,14 +1299,15 @@ So in the routing response, `predicted_status_at_eta: "green"` is valid and expe
 | `expected_delay_ms` | integer | Total expected delay contributed by matched checkpoints |
 | `expected_delay_minutes` | number | `expected_delay_ms / 60000` |
 | `route_score` | number | Lower is better; used for reranking |
-| `risk_score` | number | Composite journey risk score |
-| `risk_level` | string | `low`, `medium`, `high`, or `unknown` |
+| `risk_score` | integer | Composite `0-100` journey risk score |
+| `risk_level` | string | `low`, `medium`, or `high` |
 | `risk_confidence` | number | Average forecast confidence used in the risk score |
-| `risk_components` | object | Normalized components used to compute `risk_score`; may contain short explanation fields |
+| `risk_components` | object | Normalized components used to compute `risk_score` |
 | `historical_volatility` | number | Average checkpoint volatility used in the risk score |
 | `route_viability` | string | `good`, `risky`, or `avoid` |
 | `worst_predicted_status` | string | `green`, `yellow`, `red`, or `unknown` |
 | `reason_summary` | string | Human-readable explanation of the ranking decision |
+| `tradeoff_explainer` | object | Bilingual comparison across all returned routes |
 | `checkpoints` | array of objects | Matched checkpoints in route order |
 | `graphhopper` | object | Passthrough of the route geometry details and instructions |
 
@@ -1074,36 +1331,52 @@ GraphHopper detail keys currently requested by the backend are:
 
 #### Checkpoint Object
 
-| Field | Type | Possible values |
-| --- | --- | --- |
-| `checkpoint_id` | integer | Numeric checkpoint ID from the live checkpoint catalog |
-| `name` | string | Checkpoint name, or `Checkpoint {id}` when the source name is missing |
-| `lat` | number | Latitude in decimal degrees |
-| `lng` | number | Longitude in decimal degrees |
-| `distance_from_route_m` | number | Non-negative distance from the route polyline in meters |
-| `nearest_segment_index` | integer | Zero-based segment index on the matched route polyline |
-| `projected_point_on_route` | array | `[lng, lat]` projection of the checkpoint onto the route |
-| `chainage_m` | number | Distance along the route polyline to the matched point |
-| `base_eta_ms` | integer | ETA from route start to the checkpoint before checkpoint delay propagation |
-| `effective_eta_ms` | integer | ETA used for forecasting after adding cumulative prior delay |
-| `cumulative_delay_ms_before_checkpoint` | integer | Delay already accumulated before this checkpoint |
-| `eta_ms` | integer | Estimated travel time from route start to the checkpoint |
-| `eta_seconds` | integer | `eta_ms / 1000`, rounded |
+| Field | Type | Meaning | V5 New? |
+| --- | --- | --- | --- |
+| `checkpoint_id` | integer | Numeric checkpoint ID from static registry + live status | |
+| `name` | string | Checkpoint display name | |
+| `city` | string | Broad routing label from static checkpoint registry | ✅ |
+| `lat` | number | Latitude in decimal degrees | |
+| `lng` | number | Longitude in decimal degrees | |
+| `route_direction` | string | Trip direction: `leaving`, `entering`, `transit`, `unknown` | ✅ |
+| `distance_from_route_m` | number | Perpendicular distance to route polyline in meters | |
+| `match_confidence` | string | V5 geometric match quality: `strong`, `medium`, `weak` | ✅ |
+| `projection_t` | number | Parametric position on segment [0=start, 1=end] | ✅ |
+| `nearest_segment_index` | integer | Zero-based route segment index for closest point | |
+| `projected_point_on_route` | array | `[lng, lat]` of closest point on route | |
+| `chainage_m` | number | Distance along route to checkpoint projection | |
+| `base_eta_ms` | integer | ETA before cumulative delay propagation | ✅ |
+| `effective_eta_ms` | integer | ETA after adding delays from prior checkpoints | ✅ |
+| `cumulative_delay_ms_before_checkpoint` | integer | Total delay from all upstream checkpoints | ✅ |
+| `eta_ms` | integer | Equivalent to `effective_eta_ms` |
+| `eta_seconds` | integer | `eta_ms / 1000` rounded |
 | `eta_minutes` | number | `eta_ms / 60000` |
-| `crossing_datetime` | string | ISO 8601 UTC timestamp for the expected crossing time |
-| `current_status` | string | `green`, `yellow`, `red`, or `unknown` |
-| `current_status_raw` | object | Raw upstream checkpoint status values and timestamps |
-| `predicted_status_at_eta` | string | `green`, `yellow`, `red`, or `unknown` |
-| `forecast_confidence` | number or null | Confidence score between `0` and `1` when a forecast is available |
-| `forecast_source` | string | Usually `model` or `baseline`; `fallback_unavailable` when no forecast service is available |
-| `forecast_model_version` | integer or null | Currently `2` when forecast data comes from Level 2, otherwise null |
-| `forecast_reason` | string or null | Null in the normal path; `"No forecast service available"` in the fallback path |
-| `forecast_probabilities` | object | Normalized `green` / `yellow` / `red` / `unknown` probability vector used for delay estimation |
-| `expected_delay_ms` | integer | Expected delay contributed by this checkpoint |
+| `crossing_datetime` | string | ISO 8601 UTC arrival time at this checkpoint |
+| `current_status` | string | Direction-aware current status: `green`, `yellow`, `red`, `unknown` | ✅ |
+| `current_status_raw` | object | Raw upstream entering_status, leaving_status, timestamps |
+| `predicted_status_at_eta` | string | Direction-aware forecast status: `green`, `yellow`, `red`, `unknown` | ✅ |
+| `forecast_confidence` | number \| null | Prediction confidence [0-1] when available |
+| `forecast_source` | string | `level2_bundle`, `baseline`, or `fallback_unavailable` |
+| `forecast_model_version` | integer \| null | Model version (currently `2` for Level 2) |
+| `forecast_reason` | string \| null | Error message if forecast unavailable |
+| `forecast_probabilities` | object | Normalized `{green, yellow, red, unknown}` probabilities |
+| `expected_delay_ms` | integer | Delay expected at this checkpoint (from probabilities) |
 | `expected_delay_minutes` | number | `expected_delay_ms / 60000` |
-| `severity_ratio` | number | Normalized severity mass used by the risk model |
-| `selected_status_type` | string or null | The entering/leaving prediction chosen for the delay calculation |
-| `historical_volatility` | number | Checkpoint volatility proxy from historical status distribution |
+| `severity_ratio` | number | Normalized severity [0-1] from forecast probabilities |
+| `selected_status_type` | string | Which direction was selected: `entering`, `leaving`, `worst` | ✅ |
+| `historical_volatility` | number | Checkpoint traffic unpredictability [0-1] |
+| `match_confidence_details` | object | Detailed V5 matching metrics (V5 optional debug) | ✅ |
+
+#### match_confidence_details (V5 Debug Field - Optional)
+
+When present, contains detailed geometric matching information:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `distance_m` | number | Final perpendicular distance to route |
+| `projection_quality` | string | `good`, `medium`, or `poor` based on parametric position |
+| `local_window_route_length_m` | number | Route geometry continuity around checkpoint |
+| `distance_to_nearest_vertex_m` | number | Proximity to route corner/vertex |
 
 #### Raw Status Values
 
@@ -1120,9 +1393,75 @@ GraphHopper detail keys currently requested by the backend are:
 
 | Field | Values |
 | --- | --- |
-| `route_viability` | `good` when the route has no severe forecast risk, `risky` when it has yellow or unknown forecast risk, high composite risk, or a red current status, `avoid` when any checkpoint is forecast red |
-| `worst_predicted_status` | The highest-severity checkpoint forecast on that route, using the same `green` / `yellow` / `red` / `unknown` scale |
-| `warnings` | Free-form warning strings such as fewer-than-3-routes, malformed GraphHopper paths, or checkpoint catalog warnings |
+| `route_viability` | `good` when no severe risk; `risky` when yellow/unknown predicted OR high composite risk (≥67) OR current red; `avoid` when any predicted red |
+| `worst_predicted_status` | Highest-severity checkpoint forecast using `green`/`yellow`/`red`/`unknown` scale |
+| `reason_summary` | Human-readable ranking explanation (e.g., "Low checkpoint burden with favorable forecast windows") |
+| `tradeoff_explainer` | Deterministic all-route comparison object with structured evidence and bilingual natural-language output |
+| `warnings` | Soft failures such as fewer-than-3-routes, missing live status, or insufficient city inference confidence |
+
+#### Tradeoff Explainer (NEW in V5)
+
+`tradeoff_explainer` compares every returned route, not just the top two.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `mode` | string | Currently `rule_based_bilingual` |
+| `language` | string | Currently `bilingual` |
+| `compared_route_count` | integer | Number of routes compared in the explainer |
+| `winner_route_id` | string | Route ID of the recommended route |
+| `fastest_route_id` | string | Route ID of the raw fastest route |
+| `safest_route_id` | string | Route ID of the lowest-risk route |
+| `set_summary` | object | Overall spread across the route set |
+| `routes` | array | Per-route comparison snapshots in reranked order |
+| `english_text` | string | Full English explanation |
+| `arabic_text` | string | Full Arabic explanation |
+| `full_text` | string | Combined bilingual explanation for direct display |
+
+Recommended frontend behavior:
+
+- show the reranked routes first
+- then render `tradeoff_explainer.full_text` as the human-readable summary
+- use `tradeoff_explainer.routes` for richer visual comparison cards
+
+#### Smart ETA Calculation (V4/V5)
+
+Smart ETA accounts for cumulative checkpoint delays through the route:
+
+```
+smart_eta_ms = base_duration_ms + sum(expected_delay_ms per checkpoint)
+smart_eta_minutes = smart_eta_ms / 60000
+```
+
+Each checkpoint's expected delay is calculated from forecast probabilities:
+
+```
+expected_delay_ms = ∑(probability[status] × delay_ms[status])
+
+Where delays are:
+- green: 0 ms
+- yellow: 360000 ms (6 minutes)
+- red: 1080000 ms (18 minutes)
+- unknown: 540000 ms (9 minutes)
+```
+
+#### Journey Risk Score Calculation (V4/V5)
+
+Risk score combines 4 weighted components into a 0-100 scale:
+
+```
+risk_score = ⌊30×checkpoint_burden + 35×severity_ratio + 20×confidence_penalty + 15×volatility_ratio⌋
+
+Where:
+- checkpoint_burden = min(checkpoint_count / 5, 1.0)
+- severity_ratio = average expected delay / max possible delay
+- confidence_penalty = 1 - average forecast confidence
+- volatility_ratio = average historical checkpoint volatility
+```
+
+Risk levels:
+- **low**: 0-33
+- **medium**: 34-66
+- **high**: 67-100
 
 ### Status Codes
 
@@ -1133,13 +1472,48 @@ GraphHopper detail keys currently requested by the backend are:
 
 ### Frontend Notes
 
-- render routes in reranked order using `rank`
-- preserve `original_index` if you want to compare against GraphHopper raw ordering
-- geometry remains in `[lng, lat]` order
-- `checkpoints` is always present, even when empty
-- `predicted_status_at_eta` is a routing bucket, not the raw ML label
-- `current_status_raw` is the raw checkpoint payload; `current_status` is the normalized routing bucket
-- `warnings` may explain degraded cases such as fewer than 3 routes or unavailable live status
+**Route Rendering:**
+- Render routes in reranked order using `rank` (1 is best)
+- `original_index` shows GraphHopper raw order before reranking
+- Geometry is in `[lng, lat]` order; render directly to map library
+- `smart_eta_datetime` is the recommended ETA to display (accounts for checkpoint delays)
+- `risk_score` + `risk_level` provide single-number risk summary; use for color-coding
+- `reason_summary` provides human-readable explanation for ranking
+
+**Checkpoint Rendering:**
+- Render checkpoints in order within each route
+- Use `match_confidence` for visual confidence indicator (strong > medium > weak)
+- Show `effective_eta_ms` as arrival time (already includes prior delays)
+- Use `route_direction` to determine if checkpoint is on entry, exit, or transit through route
+- `forecast_probabilities` can be rendered as stacked bar or pie chart (optional debug UI)
+- Current and predicted status may differ; show both or use direction-aware selected status
+- `selected_status_type` explains which direction was selected (helpful for debug)
+
+**Status & Forecast:**
+- `predicted_status_at_eta` is a routing bucket (`green`/`yellow`/`red`/`unknown`), not raw ML label
+- `current_status` is direction-aware; `current_status_raw` contains raw upstream values
+- `forecast_confidence` indicates prediction reliability; show warning if low (<0.7)
+- If `forecast_source` is `fallback_unavailable`, backend could not reach prediction service
+
+**Data Source Transparency (V5):**
+- `checkpoint_matching` metadata shows:
+  - Checkpoint data from `API/data/checkpoints.json`
+  - City inference from `API/data/cities.json`
+  - Strict 300m geometric validation (not old 2500m)
+  - V5 mode for reproducibility and audit
+- Show this info in debug/transparency view if available
+
+**Warnings:**
+- May explain fewer than 3 routes generated
+- May indicate weak city inference confidence (fallback to unknown direction)
+- May indicate missing live status for some checkpoints
+- Non-fatal; route is still valid, just with reduced intelligence
+
+**Error Handling:**
+- `502 Bad Gateway`: Backend infrastructure failure; show retry option
+- `503 Service Unavailable`: Missing config (GraphHopper API key, Supabase, etc.); show service status
+- `422 Unprocessable Entity`: Invalid coordinates; validate client input
+- `200 with warnings`: Route succeeded but degraded; display route anyway
 
 ---
 

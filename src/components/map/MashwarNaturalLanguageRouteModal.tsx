@@ -15,6 +15,9 @@ interface NaturalLanguageRouteModalProps {
   open: boolean;
   onClose: () => void;
   currentLocation?: UserLocation | null;
+  onApplyRoute?: (
+    resolution: NaturalLanguageRouteExecution["resolution"],
+  ) => void;
 }
 
 const SAMPLE_PROMPT = "لو بدي اطلع من رام الله الى جنين بكرة 8";
@@ -317,6 +320,7 @@ export default function MashwarNaturalLanguageRouteModal({
   open,
   onClose,
   currentLocation,
+  onApplyRoute,
 }: NaturalLanguageRouteModalProps) {
   const [isMounted, setIsMounted] = useState(open);
   const [isVisible, setIsVisible] = useState(open);
@@ -740,9 +744,16 @@ export default function MashwarNaturalLanguageRouteModal({
                             WHAT-IF SIMULATION
                           </p>
                           <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">
-                            Departure windows
+                          Departure windows
                           </h4>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => onApplyRoute?.(result.resolution)}
+                          className="inline-flex h-10 items-center justify-center rounded-[8px] border border-[#2d3139] bg-transparent px-4 text-[12px] font-semibold text-[#e5e7eb] transition hover:bg-white/5 hover:text-[#f9fafb]"
+                        >
+                          Apply on Map
+                        </button>
                       </div>
 
                       <div className="space-y-3">
@@ -767,6 +778,13 @@ export default function MashwarNaturalLanguageRouteModal({
                             Main route
                           </h4>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => onApplyRoute?.(result.resolution)}
+                          className="inline-flex h-10 items-center justify-center rounded-[8px] border border-[#2d3139] bg-transparent px-4 text-[12px] font-semibold text-[#e5e7eb] transition hover:bg-white/5 hover:text-[#f9fafb]"
+                        >
+                          Apply on Map
+                        </button>
                       </div>
                       <RouteWindowCard
                         title="Live route"

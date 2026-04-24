@@ -365,27 +365,71 @@ function similarityScore(left: string, right: string): number {
   return Math.max(0, 1 - distance / longest);
 }
 
-function getCheckpointCandidateLabels(checkpoint: MapCheckpoint): string[] {
-  return Array.from(
-    new Set(
-      [
-        checkpoint.id,
-        checkpoint.name,
-        checkpoint.city,
-        [checkpoint.name, checkpoint.city].filter(Boolean).join(" "),
-        [checkpoint.id, checkpoint.name].filter(Boolean).join(" "),
-      ]
-        .map((value) => normalizePlaceLabel(value ?? ""))
-        .filter((value) => value.length > 0),
-    ),
+function getCheckpointMatchScore(
+  checkpoint: MapCheckpoint,
+  prompt: string,
+  parse: ParsedNaturalLanguageIntent,
+): number {
+  const promptLabel = normalizePlaceLabel(prompt);
+  const checkpointLabel = normalizePlaceLabel(
+    [checkpoint.id, checkpoint.name, checkpoint.city].filter(Boolean).join(" "),
+  );
+  const checkpointNameLabel = normalizePlaceLabel(checkpoint.name);
+  const checkpointCityLabel = normalizePlaceLabel(checkpoint.city ?? "");
+  const parsedHintLabel = normalizePlaceLabel(
+    [
+      parse.entities.checkpointId ?? "",
+      parse.entities.checkpointName ?? "",
+      parse.entities.sourceHint ?? "",
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+
+  const promptScore = Math.max(
+    similarityScore(promptLabel, checkpointLabel),
+    similarityScore(promptLabel, checkpointNameLabel),
+  );
+  const parseScore = Math.max(
+    similarityScore(parsedHintLabel, checkpointLabel),
+    similarityScore(parsedHintLabel, checkpointNameLabel),
+    similarityScore(parsedHintLabel, checkpointCityLabel),
+  );
+
+  const exactIdMatch =
+    parse.entities.checkpointId &&
+    normalizePlaceLabel(parse.entities.checkpointId) ===
+      normalizePlaceLabel(checkpoint.id)
+      ? 1
+      : 0;
+
+  const exactNameMatch =
+    parse.entities.checkpointName &&
+    normalizePlaceLabel(parse.entities.checkpointName) === checkpointNameLabel
+      ? 0.98
+      : 0;
+
+  const cityMatch =
+    parse.entities.checkpointName &&
+    checkpointCityLabel &&
+    normalizePlaceLabel(parse.entities.checkpointName) === checkpointCityLabel
+      ? 0.92
+      : 0;
+
+  return Math.max(
+    promptScore,
+    parseScore,
+    exactIdMatch,
+    exactNameMatch,
+    cityMatch,
   );
 }
 
-function findCheckpointMatches(
+function findBestCheckpointMatch(
   checkpoints: MapCheckpoint[],
   prompt: string,
   parse: ParsedNaturalLanguageIntent,
-): MapCheckpoint[] {
+): MapCheckpoint | null {
   if (parse.entities.checkpointId) {
     const exactById = checkpoints.filter(
       (checkpoint) =>
@@ -394,75 +438,23 @@ function findCheckpointMatches(
     );
 
     if (exactById.length > 0) {
-      return exactById;
+      return exactById[0] ?? null;
     }
   }
 
-  const candidates: string[] = [];
-  if (parse.entities.checkpointName) {
-    candidates.push(parse.entities.checkpointName);
-  }
-
-  const normalizedPrompt = normalizePlaceLabel(prompt);
-  const promptMatches = checkpoints.filter((checkpoint) => {
-    const checkpointLabel = getCheckpointCandidateLabels(checkpoint)[0] ?? "";
-    return checkpointLabel.length > 0 && normalizedPrompt.includes(checkpointLabel);
-  });
-
-  if (promptMatches.length > 0) {
-    return promptMatches;
-  }
-
-  if (candidates.length > 0) {
-    const normalizedCandidates = candidates.map((candidate) =>
-      normalizePlaceLabel(candidate),
-    );
-
-    const exactMatches = checkpoints.filter((checkpoint) => {
-      const checkpointLabel = normalizePlaceLabel(checkpoint.name);
-      const checkpointCity = normalizePlaceLabel(checkpoint.city ?? "");
-      return normalizedCandidates.some(
-        (candidate) =>
-          candidate === checkpointLabel ||
-          (candidate.length > 0 && checkpointCity === candidate),
-      );
-    });
-
-    if (exactMatches.length > 0) {
-      return exactMatches;
-    }
-  }
-
-  const promptScore = normalizedPrompt;
   const scoredMatches = checkpoints
-    .map((checkpoint) => {
-      const candidateLabels = getCheckpointCandidateLabels(checkpoint);
-      const bestScore = candidateLabels.reduce((best, candidate) => {
-        return Math.max(best, similarityScore(promptScore, candidate));
-      }, 0);
-
-      return {
-        checkpoint,
-        score: bestScore,
-      };
-    })
+    .map((checkpoint) => ({
+      checkpoint,
+      score: getCheckpointMatchScore(checkpoint, prompt, parse),
+    }))
     .sort((left, right) => right.score - left.score);
 
   const best = scoredMatches[0];
-  const second = scoredMatches[1];
-  if (!best || best.score < 0.62) {
-    return [];
+  if (!best || best.score < 0.35) {
+    return null;
   }
 
-  if (second && best.score - second.score < 0.06) {
-    return scoredMatches
-      .filter((entry) => entry.score >= best.score - 0.02)
-      .map((entry) => entry.checkpoint);
-  }
-
-  return [best.checkpoint];
-
-  return [];
+  return best.checkpoint;
 }
 
 function buildClarificationMessage(parse: ParsedNaturalLanguageIntent): string {
@@ -633,20 +625,22 @@ async function resolveCheckpointExecution(
   parse: ParsedNaturalLanguageIntent,
 ): Promise<NaturalLanguageCheckpointExecution | NaturalLanguageExecution> {
   const checkpoints = await getCachedCheckpoints();
-  const matches = findCheckpointMatches(checkpoints, prompt, parse);
+  const match = findBestCheckpointMatch(checkpoints, prompt, parse);
 
   logRoutingDebug("checkpoint resolver matches", {
     prompt,
     parse,
     checkpointCount: checkpoints.length,
-    matches: matches.map((checkpoint) => ({
-      id: checkpoint.id,
-      name: checkpoint.name,
-      city: checkpoint.city,
-    })),
+    match: match
+      ? {
+          id: match.id,
+          name: match.name,
+          city: match.city,
+        }
+      : null,
   });
 
-  if (matches.length === 0) {
+  if (!match) {
     return {
       kind: "clarification",
       prompt,
@@ -656,17 +650,7 @@ async function resolveCheckpointExecution(
     };
   }
 
-  if (matches.length > 1) {
-    return {
-      kind: "clarification",
-      prompt,
-      parse,
-      message:
-        "I found multiple checkpoint matches. Please name the checkpoint more specifically.",
-    };
-  }
-
-  const checkpoint = matches[0];
+  const checkpoint = match;
   const targetDateTime = resolvePromptTime(prompt, parse);
   const checkpointStatusLabel = getCurrentStatusLabel(checkpoint);
 

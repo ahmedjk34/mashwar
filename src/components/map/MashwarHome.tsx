@@ -673,6 +673,31 @@ export default function MashwarHome() {
     [handleSelectRoute],
   );
 
+  const handleApplyNaturalLanguageRoute = useCallback(
+    (resolution: {
+      origin: { lat: number; lng: number };
+      destination: { lat: number; lng: number };
+      route: NormalizedRoutes;
+    }) => {
+      setRouteError(null);
+      setRoutes(resolution.route);
+      setRouteFrom({
+        kind: "map-point",
+        lat: resolution.origin.lat,
+        lng: resolution.origin.lng,
+      });
+      setRouteTo({
+        kind: "map-point",
+        lat: resolution.destination.lat,
+        lng: resolution.destination.lng,
+      });
+      setRouteDetailsRouteId(null);
+      setEndpointPlacementMode(null);
+      setIsNaturalRouteModalOpen(false);
+    },
+    [],
+  );
+
   function handleRouteButtonClick(): void {
     if (routes.mainRoute) {
       handleClearRoute();
@@ -1315,6 +1340,7 @@ export default function MashwarHome() {
       <MashwarNaturalLanguageRouteModal
         open={isNaturalRouteModalOpen}
         currentLocation={userLocation}
+        onApplyRoute={handleApplyNaturalLanguageRoute}
         onClose={() => setIsNaturalRouteModalOpen(false)}
       />
       <RouteDetailsModal
