@@ -14,9 +14,9 @@
     "checkpointFallbackName": "حاجز {index}",
     "unitKm": "{value} كم",
     "unitM": "{value} م",
-    "durationMin": "{minutes} دقيقة",
-    "durationHM": "{hours}س {minutes}د",
-    "durationH": "{hours} ساعة"
+    "durationMin": "{minutes}\u00a0دقيقة",
+    "durationHM": "{hours}س\u00a0{minutes}د",
+    "durationH": "{hours}\u00a0ساعة"
   },
   "errors": {
     "checkpointsLoad": "ما قدرنا نحمّل بيانات الحواجز.",
@@ -301,6 +301,13 @@
       "metaForecastTitle": "أسوأ حالة متوقعة على المسار",
       "modelConfidenceLine": "ثقة النموذج {value}٪",
       "modelConfidenceNa": "ثقة النموذج غير متوفرة",
+      "riskScoreTitle": "مؤشر المخاطرة",
+      "riskLevelTitle": "مستوى الخطر",
+      "durationUnitMinutes": "دقيقة",
+      "riskBadgeLow": "واطية",
+      "riskBadgeMedium": "متوسطة",
+      "riskBadgeHigh": "عالية",
+      "riskBadgeUnknown": "مش واضحة",
       "forecastAlongRoute": "أسوأ توقع على المسار: {status}",
       "smartDurationCaption": "الوصول",
       "routeNumber": "مسار #{rank}",

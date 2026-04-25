@@ -88,6 +88,10 @@ const MASHWAR_PLACEMENT_CURSOR =
     '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36"><g stroke="rgba(255,255,255,0.95)" stroke-width="1.25" stroke-linecap="round"><path d="M18 3v6M18 27v6M3 18h6M27 18h6"/></g><path fill="#22c55e" stroke="#ffffff" stroke-width="1.4" d="M18 10.5c-2.6 0-4.7 2-4.7 4.7 0 3.2 4.7 10.3 4.7 10.3s4.7-7 4.7-10.3c0-2.6-2.1-4.7-4.7-4.7z"/></svg>',
   )}") 18 24, crosshair`;
 
+type DurationParts =
+  | { kind: "split"; amount: string; unit: string }
+  | { kind: "line"; text: string };
+
 interface RouteLabelItem {
   routeId: string;
   rank: number;
@@ -103,13 +107,14 @@ interface RouteLabelItem {
   opacity: number;
   baseWidth: number;
   baseHeight: number;
-  durationLabel: string;
+  /** Smart trip duration: split minutes vs single line for ≥1h. */
+  durationParts: DurationParts;
   arrivalLabel: string;
   delayLabel: string | null;
-  riskLabel: string;
+  riskBadgeLabel: string;
   riskTone: "good" | "warning" | "danger";
-  /** Primary numeric risk / route score line (e.g. “Risk 47.0”). */
-  scoreDetailLabel: string;
+  /** Localized risk index (digits only; title is `riskScoreTitle`). */
+  riskScoreDisplay: string;
   /** Localized full “model confidence …” line for section 3. */
   confidenceLineLabel: string;
   viabilityLabel: string;
@@ -168,6 +173,10 @@ function truncateLabel(value: string | null, maxLength: number): string | null {
   }
 
   return value.length > maxLength ? `${value.slice(0, maxLength - 1).trimEnd()}…` : value;
+}
+
+function hasArabicScript(value: string): boolean {
+  return /[\u0600-\u06FF]/.test(value);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -377,6 +386,18 @@ export default function MapView({
   const tViability = useTranslations("tradeoff.viability");
   const tBucket = useTranslations("routing.bucket");
   const dateIntlLocale = locale.startsWith("ar") ? "ar" : "en-US";
+  const numberLocale = locale.startsWith("ar") ? "ar-u-nu-latn" : dateIntlLocale;
+
+  function formatLocaleInt(value: number): string {
+    return new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 0 }).format(value);
+  }
+
+  function formatLocaleFixed1(value: number): string {
+    return new Intl.NumberFormat(numberLocale, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(value);
+  }
 
   const formatViabilityLabel = useCallback(
     (v: RoutingRouteViability) => {
@@ -428,6 +449,9 @@ export default function MapView({
     (route: RoutePath): string | null => {
       const summary = route.reasonSummary?.trim();
       if (summary) {
+        if (locale.startsWith("ar") && !hasArabicScript(summary)) {
+          return null;
+        }
         return truncateLabel(summary, 92);
       }
       if (route.riskComponents.length === 0) {
@@ -437,9 +461,12 @@ export default function MapView({
         .slice(0, 2)
         .map(humanizeRiskComponentLine)
         .join(" · ");
+      if (locale.startsWith("ar") && !hasArabicScript(lines)) {
+        return null;
+      }
       return truncateLabel(lines, 92);
     },
-    [humanizeRiskComponentLine],
+    [humanizeRiskComponentLine, locale],
   );
 
   function escapeHtml(text: string): string {
@@ -449,6 +476,28 @@ export default function MapView({
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
+  }
+
+  function getRouteRiskBadgeLabel(route: RoutePath): string {
+    const riskLevel: RoutingRiskLevel =
+      route.riskLevel !== "unknown"
+        ? route.riskLevel
+        : route.routeViability === "good"
+          ? "low"
+          : route.routeViability === "avoid"
+            ? "high"
+            : "medium";
+
+    switch (riskLevel) {
+      case "low":
+        return tCard("riskBadgeLow");
+      case "high":
+        return tCard("riskBadgeHigh");
+      case "medium":
+        return tCard("riskBadgeMedium");
+      default:
+        return tCard("riskBadgeUnknown");
+    }
   }
 
   function getRouteRiskLabel(route: RoutePath): {
@@ -481,7 +530,7 @@ export default function MapView({
       return null;
     }
 
-    return tMap("delay", { minutes: Math.round(delayMinutes) });
+    return tMap("delay", { minutes: formatLocaleInt(Math.max(1, Math.round(delayMinutes))) });
   }
 
   function formatRouteArrivalLabel(value: string | null): string {
@@ -496,26 +545,24 @@ export default function MapView({
     );
   }
 
-  function getRouteScoreLabel(route: RoutePath): string {
-    if (route.riskScore !== null && Number.isFinite(route.riskScore)) {
-      return tMap("scoreRisk", { score: route.riskScore.toFixed(1) });
-    }
-
-    if (Number.isFinite(route.routeScore)) {
-      return tMap("scoreRoute", { score: route.routeScore.toFixed(1) });
-    }
-
-    return tMap("scoreRiskNa");
-  }
-
   function getRouteRiskScoreParen(route: RoutePath): string {
     if (route.riskScore !== null && Number.isFinite(route.riskScore)) {
-      return route.riskScore.toFixed(1);
+      return formatLocaleFixed1(route.riskScore);
     }
     if (Number.isFinite(route.routeScore)) {
-      return route.routeScore.toFixed(1);
+      return formatLocaleFixed1(route.routeScore);
     }
     return tCommon("notAvailable");
+  }
+
+  function getRouteRiskScoreDisplay(route: RoutePath): string {
+    if (route.riskScore !== null && Number.isFinite(route.riskScore)) {
+      return formatLocaleFixed1(route.riskScore);
+    }
+    if (Number.isFinite(route.routeScore)) {
+      return formatLocaleFixed1(route.routeScore);
+    }
+    return tCommon("dash");
   }
 
   function formatDurationLabel(durationMs: number | null): string {
@@ -528,11 +575,40 @@ export default function MapView({
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
       return minutes > 0
-        ? tCommon("durationHM", { hours: String(hours), minutes: String(minutes) })
-        : tCommon("durationH", { hours: String(hours) });
+        ? tCommon("durationHM", {
+            hours: formatLocaleInt(hours),
+            minutes: formatLocaleInt(minutes),
+          })
+        : tCommon("durationH", { hours: formatLocaleInt(hours) });
     }
 
-    return tCommon("durationMin", { minutes: String(totalMinutes) });
+    return tCommon("durationMin", { minutes: formatLocaleInt(totalMinutes) });
+  }
+
+  function buildDurationParts(durationMs: number | null): DurationParts {
+    if (durationMs === null || !Number.isFinite(durationMs) || durationMs <= 0) {
+      return { kind: "line", text: tMap("durationNa") };
+    }
+
+    const totalMinutes = Math.round(durationMs / 60000);
+    if (totalMinutes >= 60) {
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      const text =
+        minutes > 0
+          ? tCommon("durationHM", {
+              hours: formatLocaleInt(hours),
+              minutes: formatLocaleInt(minutes),
+            })
+          : tCommon("durationH", { hours: formatLocaleInt(hours) });
+      return { kind: "line", text };
+    }
+
+    return {
+      kind: "split",
+      amount: formatLocaleInt(totalMinutes),
+      unit: tCard("durationUnitMinutes"),
+    };
   }
 
   function formatRouteDistance(distanceM: number): string {
@@ -541,12 +617,16 @@ export default function MapView({
     }
 
     if (distanceM >= 1000) {
-      return tCommon("unitKm", {
-        value: (distanceM / 1000).toFixed(distanceM >= 10000 ? 0 : 1),
-      });
+      const km = distanceM / 1000;
+      const rounded = distanceM >= 10000 ? Math.round(km) : Math.round(km * 10) / 10;
+      const value =
+        Number.isInteger(rounded) || Math.abs(rounded - Math.round(rounded)) < 1e-9
+          ? formatLocaleInt(Math.round(rounded))
+          : formatLocaleFixed1(rounded);
+      return tCommon("unitKm", { value });
     }
 
-    return tCommon("unitM", { value: String(Math.round(distanceM)) });
+    return tCommon("unitM", { value: formatLocaleInt(Math.round(distanceM)) });
   }
 
   function resolveRouteArrivalDateTime(route: RoutePath): string | null {
@@ -583,12 +663,15 @@ export default function MapView({
       route.reasonSummary?.trim() ||
       route.riskComponents.map(humanizeRiskComponentLine).join(" · ") ||
       "";
-    const summaryRaw = summarySource ? truncateLabel(summarySource, 120) : null;
+    const summaryAllowed =
+      !locale.startsWith("ar") || (summarySource ? hasArabicScript(summarySource) : false);
+    const summaryRaw =
+      summarySource && summaryAllowed ? truncateLabel(summarySource, 120) : null;
     const summary = summaryRaw ? escapeHtml(summaryRaw) : "";
     const viability = escapeHtml(formatViabilityLabel(route.routeViability));
     const routeMeta = escapeHtml(
       tCard("checkpointsDistance", {
-        count: route.checkpointCount,
+        count: formatLocaleInt(route.checkpointCount),
         distance: formatRouteDistance(route.distanceM),
       }),
     );
@@ -610,7 +693,7 @@ export default function MapView({
       route.riskConfidence !== null && Number.isFinite(route.riskConfidence)
         ? escapeHtml(
             tCard("modelConfidenceLine", {
-              value: String(Math.round(route.riskConfidence * 100)),
+              value: formatLocaleInt(Math.round(route.riskConfidence * 100)),
             }),
           )
         : escapeHtml(tCard("modelConfidenceNa"));
@@ -714,7 +797,7 @@ export default function MapView({
             const summaryLabel = isSelectedRoute ? buildRouteCardSummary(route) : null;
             const checkpointLabel = isSelectedRoute
               ? tCard("checkpointsDistance", {
-                  count: route.checkpointCount,
+                  count: formatLocaleInt(route.checkpointCount),
                   distance: formatRouteDistance(route.distanceM),
                 })
               : tCard("distanceOnly", { distance: formatRouteDistance(route.distanceM) });
@@ -742,18 +825,18 @@ export default function MapView({
                   opacity,
                   baseWidth: labelBaseWidth,
                   baseHeight: labelBaseHeight,
-                  durationLabel: formatDurationLabel(route.smartEtaMs ?? route.durationMs),
+                  durationParts: buildDurationParts(route.smartEtaMs ?? route.durationMs),
                   arrivalLabel,
                   delayLabel: formatDelayLabel(
                     route.expectedDelayMinutes ?? route.estimatedDelayMinutes,
                   ),
-                  riskLabel: risk.label,
+                  riskBadgeLabel: getRouteRiskBadgeLabel(route),
                   riskTone: risk.tone,
-                  scoreDetailLabel: getRouteScoreLabel(route),
+                  riskScoreDisplay: getRouteRiskScoreDisplay(route),
                   confidenceLineLabel:
                     route.riskConfidence !== null && Number.isFinite(route.riskConfidence)
                       ? tCard("modelConfidenceLine", {
-                          value: String(Math.round(route.riskConfidence * 100)),
+                          value: formatLocaleInt(Math.round(route.riskConfidence * 100)),
                         })
                       : tCard("modelConfidenceNa"),
                   viabilityLabel: formatViabilityLabel(route.routeViability),
@@ -849,18 +932,18 @@ export default function MapView({
                 opacity,
                 baseWidth: labelBaseWidth,
                 baseHeight: labelBaseHeight,
-                durationLabel: formatDurationLabel(route.smartEtaMs ?? route.durationMs),
+                durationParts: buildDurationParts(route.smartEtaMs ?? route.durationMs),
                 arrivalLabel,
                 delayLabel: formatDelayLabel(
                   route.expectedDelayMinutes ?? route.estimatedDelayMinutes,
                 ),
-                riskLabel: risk.label,
+                riskBadgeLabel: getRouteRiskBadgeLabel(route),
                 riskTone: risk.tone,
-                scoreDetailLabel: getRouteScoreLabel(route),
+                riskScoreDisplay: getRouteRiskScoreDisplay(route),
                 confidenceLineLabel:
                   route.riskConfidence !== null && Number.isFinite(route.riskConfidence)
                     ? tCard("modelConfidenceLine", {
-                        value: String(Math.round(route.riskConfidence * 100)),
+                        value: formatLocaleInt(Math.round(route.riskConfidence * 100)),
                       })
                     : tCard("modelConfidenceNa"),
                 viabilityLabel: formatViabilityLabel(route.routeViability),
@@ -1663,7 +1746,6 @@ export default function MapView({
     formatViabilityLabel,
     tBucket,
     humanizeRiskComponentLine,
-    locale,
   ]);
 
   return (
@@ -1757,15 +1839,26 @@ export default function MapView({
                           {tCard("sectionTime")}
                         </p>
                         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-                          <p className="text-[34px] font-semibold leading-none tracking-tight text-slate-950">
-                            {item.durationLabel}
-                          </p>
-                          <div className="flex min-w-0 max-w-full flex-col gap-1 sm:max-w-[min(260px,52%)] sm:items-end sm:text-end">
-                            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          {item.durationParts.kind === "split" ? (
+                            <div className="flex shrink-0 items-baseline gap-1.5 whitespace-nowrap">
+                              <span className="text-[40px] font-semibold tracking-tight text-slate-950 [font-variant-numeric:lining-nums]">
+                                {item.durationParts.amount}
+                              </span>
+                              <span className="pb-1 text-[15px] font-semibold text-slate-700">
+                                {item.durationParts.unit}
+                              </span>
+                            </div>
+                          ) : (
+                            <p className="min-w-0 text-[26px] font-semibold leading-snug tracking-tight text-slate-950 [font-variant-numeric:lining-nums]">
+                              {item.durationParts.text}
+                            </p>
+                          )}
+                          <div className="flex min-w-0 max-w-full flex-col gap-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 sm:max-w-[min(280px,56%)] sm:items-end sm:text-end">
+                            <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-700">
                               {tCard("smartDurationCaption")}
                             </span>
                             <span
-                              className="text-[13.5px] font-medium leading-snug text-slate-600 tabular-nums"
+                              className="text-[14px] font-semibold leading-snug text-emerald-900 [font-variant-numeric:lining-nums]"
                               dir="auto"
                             >
                               {item.arrivalLabel}
@@ -1777,7 +1870,7 @@ export default function MapView({
                             {tCard("delay")}
                           </span>
                           <span
-                            className="text-[15px] font-semibold tabular-nums tracking-tight text-slate-900"
+                            className="text-[15px] font-semibold tracking-tight text-slate-900 [font-variant-numeric:lining-nums]"
                             style={{ color: item.delayLabel ? item.accentColor : "#475569" }}
                           >
                             {item.delayLabel ?? tCard("clear")}
@@ -1785,26 +1878,38 @@ export default function MapView({
                         </div>
                       </div>
 
-                      <div className="relative space-y-2.5 px-4 pb-4 pt-4 ps-[18px]">
+                      <div className="relative space-y-3 px-4 pb-4 pt-4 ps-[18px]">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                           {tCard("sectionRisk")}
                         </p>
-                        <div className="flex flex-wrap items-center gap-2.5">
-                          <span className="text-[19px] font-semibold tabular-nums tracking-tight text-slate-900">
-                            {item.scoreDetailLabel}
-                          </span>
+                        <div className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200/90 bg-slate-50/80 px-3.5 py-3">
+                          <p className="text-[11px] font-semibold leading-none text-slate-500">
+                            {tCard("riskScoreTitle")}
+                          </p>
                           <span
-                            className="shrink-0 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] leading-none"
+                            className="text-[32px] font-semibold leading-none tracking-tight text-slate-950 [font-variant-numeric:lining-nums] sm:text-[34px]"
+                            dir="ltr"
+                            style={{ unicodeBidi: "isolate" }}
+                          >
+                            {item.riskScoreDisplay}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200/90 bg-slate-50/80 px-3.5 py-3">
+                          <p className="text-[11px] font-semibold leading-none text-slate-500">
+                            {tCard("riskLevelTitle")}
+                          </p>
+                          <span
+                            className="w-fit shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold leading-snug"
                             style={{
                               color: toneStyles.text,
                               backgroundColor: toneStyles.background,
                               borderColor: toneStyles.border,
                             }}
                           >
-                            {item.riskLabel}
+                            {item.riskBadgeLabel}
                           </span>
                         </div>
-                        <p className="text-[13px] font-medium leading-snug text-slate-600">
+                        <p className="rounded-xl border border-slate-200/90 bg-slate-50/80 px-3.5 py-2.5 text-[13px] font-medium leading-snug text-slate-700">
                           {item.confidenceLineLabel}
                         </p>
                         {item.summaryLabel ? (
@@ -1835,15 +1940,24 @@ export default function MapView({
                           {tCard("routeNumber", { rank: item.rank })}
                         </p>
                         <div className="mt-1 flex min-w-0 items-baseline gap-2">
-                          <span className="shrink-0 text-[19px] font-semibold leading-none tracking-tight text-slate-950">
-                            {item.durationLabel}
+                          <span className="inline-flex shrink-0 items-baseline gap-1 text-[19px] font-semibold leading-none tracking-tight text-slate-950 [font-variant-numeric:lining-nums]">
+                            {item.durationParts.kind === "split" ? (
+                              <>
+                                <span>{item.durationParts.amount}</span>
+                                <span className="text-[11px] font-semibold text-slate-600">
+                                  {item.durationParts.unit}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="truncate">{item.durationParts.text}</span>
+                            )}
                           </span>
-                          <span className="min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">
-                            {item.riskLabel}
+                          <span className="min-w-0 truncate text-[10px] font-semibold text-slate-600">
+                            {item.riskBadgeLabel}
                           </span>
                         </div>
                       </div>
-                      <p className="shrink-0 max-w-[44%] truncate text-end text-[11px] font-semibold tabular-nums text-slate-800">
+                      <p className="shrink-0 max-w-[44%] truncate text-end text-[11px] font-semibold text-slate-800 [font-variant-numeric:lining-nums]">
                         {item.checkpointLabel}
                       </p>
                     </div>

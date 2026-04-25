@@ -18,6 +18,7 @@ import type {
 
 export const DEFAULT_MAP_TILE_URL_TEMPLATE =
   "http://164.68.121.28/tiles/{z}/{x}/{y}.png";
+export const MAP_TILE_PROXY_URL_TEMPLATE = "/api/map-tiles/{z}/{x}/{y}.png";
 export const DEFAULT_MAP_GLYPHS_URL =
   "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf";
 
@@ -242,6 +243,14 @@ function isValidTileTemplate(
 }
 
 export function getMapTileUrlTemplate(): string {
+  if (process.env.NODE_ENV === "production") {
+    return MAP_TILE_PROXY_URL_TEMPLATE;
+  }
+
+  return getUpstreamMapTileUrlTemplate();
+}
+
+export function getUpstreamMapTileUrlTemplate(): string {
   const configured = process.env.NEXT_PUBLIC_MAP_TILE_URL_TEMPLATE;
   if (isValidTileTemplate(configured)) {
     return configured.trim();
