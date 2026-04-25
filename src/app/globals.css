@@ -562,6 +562,92 @@ select {
   animation: mashwar-modal-in 220ms ease-out both;
 }
 
+/* Trade-off explainer: full panel ↔ top-left FAB */
+.mashwar-tradeoff-shell-dock {
+  transition:
+    opacity 260ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0.33, 1, 0.68, 1),
+    box-shadow 240ms ease;
+}
+
+.mashwar-tradeoff-shell-dock--expanded {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition-delay: 75ms;
+}
+
+.mashwar-tradeoff-shell-dock--minimized {
+  opacity: 0;
+  transform: translateY(-12px) scale(0.93);
+  transition-delay: 0ms;
+}
+
+.mashwar-tradeoff-dock-host {
+  transform-origin: left top;
+  transition:
+    opacity 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 280ms cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+.mashwar-tradeoff-dock-host--visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition-delay: 72ms;
+}
+
+.mashwar-tradeoff-dock-host--hidden {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.92);
+  pointer-events: none;
+  transition-delay: 0ms;
+}
+
+/* Palestinian palette: green · white · red on black glass + watermelon accent */
+.mashwar-tradeoff-dock-card {
+  cursor: pointer;
+  color: #e8edf2;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(165deg, rgba(14, 16, 20, 0.97) 0%, rgba(6, 8, 11, 0.99) 100%) padding-box,
+    linear-gradient(118deg, #007a3d 0%, #f0f4f0 38%, #e4312b 72%, #0a0a0c 100%) border-box;
+  box-shadow:
+    0 14px 40px rgba(0, 0, 0, 0.58),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 0 32px -10px rgba(0, 122, 61, 0.22),
+    0 0 28px -12px rgba(228, 49, 43, 0.12);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.mashwar-tradeoff-dock-card:hover {
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.62),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+    0 0 36px -8px rgba(0, 122, 61, 0.28),
+    0 0 32px -10px rgba(228, 49, 43, 0.18);
+}
+
+.mashwar-tradeoff-watermelon {
+  flex-shrink: 0;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at 32% 38%, rgba(0, 0, 0, 0.72) 1.5px, transparent 2px),
+    radial-gradient(circle at 58% 34%, rgba(0, 0, 0, 0.68) 1.5px, transparent 2px),
+    radial-gradient(circle at 48% 58%, rgba(0, 0, 0, 0.55) 1.5px, transparent 2px),
+    linear-gradient(180deg, #146b3a 0%, #0d4d29 44%, #141814 44%, #161a16 50%, #c1121f 50%, #7f0f18 100%);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.14),
+    0 4px 14px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.mashwar-tradeoff-dock-dismiss:focus-visible {
+  outline: 2px solid rgba(0, 122, 61, 0.65);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

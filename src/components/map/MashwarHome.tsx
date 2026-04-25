@@ -9,6 +9,7 @@ import {
 import ForecastHorizonCard, {
   type ForecastRow,
 } from "@/components/map/checkpoint/ForecastHorizonCard";
+import HardshipIndexFeature from "@/components/map/HardshipIndexFeature";
 import LocaleToggle from "@/components/map/LocaleToggle";
 import MapView from "@/components/map/MapView";
 import MashwarNaturalLanguageRouteModal from "@/components/map/MashwarNaturalLanguageRouteModal";
@@ -1450,6 +1451,8 @@ export default function MashwarHome() {
               {tFloat("heatmapCta")}
             </span>
           </button>
+
+          <HardshipIndexFeature />
 
           <LocaleToggle />
         </div>

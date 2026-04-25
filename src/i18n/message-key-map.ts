@@ -110,4 +110,7 @@ export const SERVICE_ERROR_MESSAGE_KEY: Record<string, string> = {
   "Received a corridor without usable geometry.": "errors.heatmapCorridorInvalid",
   "Received an unknown uncertainty stream event.": "errors.heatmapUnknownEvent",
   "Unable to generate route intelligence right now.": "errors.nlIntelligence",
+  "Unable to load hardship index data.": "errors.hardshipIndexLoad",
+  "Unable to reach the hardship index service.": "errors.hardshipIndexUnreachable",
+  "Invalid hardship index response.": "errors.hardshipIndexInvalid",
 };

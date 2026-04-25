@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { MdUnfoldLess, MdUnfoldMore } from "react-icons/md";
 
 import { RouteLoadingFlagStripe } from "@/components/map/RouteLoadingCard";
 import type {
@@ -14,11 +15,14 @@ import type {
 type TradeoffExplainer = NonNullable<NormalizedRoutes["tradeoffExplainer"]>;
 type TradeoffRoute = TradeoffExplainer["routes"][number];
 
+/** Mirror `MashwarHome` top-right controls: `fixed right-4 top-5 sm:right-5 z-[1100]`. */
+const MAP_CORNER_OVERLAY_CLASS = "fixed left-4 top-5 z-[1100] sm:left-5";
+
 interface TradeoffExplainerModalProps {
   explainer: TradeoffExplainer | null;
   selectedRouteId: string | null;
   onRouteSelect: (routeId: string) => void;
-  /** Fired when the full explainer dialog is open vs collapsed/hidden (for coordinating top chrome). */
+  /** Fired when the full explainer panel is open (not minimized to the corner icon). */
   onExplainerOpenChange?: (isDialogOpen: boolean) => void;
 }
 
@@ -238,7 +242,12 @@ export default function TradeoffExplainerModal({
   const tDir = useTranslations("routing.direction");
 
   const [isOpen, setIsOpen] = useState(true);
+  /** True: only the top-left FAB is shown; full panel is hidden with transition. */
+  const [isMinimized, setIsMinimized] = useState(false);
+  /** Collapses the main body of the open explainer (expand / collapse control). */
   const [isCollapsed, setIsCollapsed] = useState(false);
+  /** One-shot entrance animation when a new explainer payload arrives. */
+  const [playEntrance, setPlayEntrance] = useState(false);
   const routeRefs = useRef(new Map<string, HTMLDivElement | null>());
 
   const na = t("valueNa");
@@ -257,11 +266,16 @@ export default function TradeoffExplainerModal({
   useEffect(() => {
     if (!explainer) {
       setIsOpen(false);
+      setPlayEntrance(false);
       return;
     }
 
     setIsOpen(true);
+    setIsMinimized(false);
     setIsCollapsed(false);
+    setPlayEntrance(true);
+    const id = window.setTimeout(() => setPlayEntrance(false), 260);
+    return () => window.clearTimeout(id);
   }, [explainerKey, explainer]);
 
   useEffect(() => {
@@ -269,8 +283,8 @@ export default function TradeoffExplainerModal({
       onExplainerOpenChange?.(false);
       return;
     }
-    onExplainerOpenChange?.(isOpen);
-  }, [explainer, isOpen, onExplainerOpenChange]);
+    onExplainerOpenChange?.(isOpen && !isMinimized);
+  }, [explainer, isOpen, isMinimized, onExplainerOpenChange]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -278,14 +292,19 @@ export default function TradeoffExplainerModal({
     }
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key !== "Escape") {
+        return;
+      }
+      if (!isMinimized) {
+        setIsMinimized(true);
+      } else {
         setIsOpen(false);
       }
     };
 
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [isOpen]);
+  }, [isOpen, isMinimized]);
 
   const routes = explainer
     ? [...explainer.routes].sort((left, right) => left.rank - right.rank)
@@ -299,7 +318,7 @@ export default function TradeoffExplainerModal({
   const maxDelay = Math.max(0, ...routes.map((route) => route.expectedDelayMinutes ?? 0));
 
   useEffect(() => {
-    if (!isOpen || !winnerRoute?.uiKey) {
+    if (!isOpen || isMinimized || !winnerRoute?.uiKey) {
       return;
     }
 
@@ -312,7 +331,7 @@ export default function TradeoffExplainerModal({
       block: "center",
       behavior: "smooth",
     });
-  }, [isOpen, winnerRoute?.uiKey]);
+  }, [isOpen, isMinimized, winnerRoute?.uiKey]);
 
   if (!explainer) {
     return null;
@@ -321,7 +340,7 @@ export default function TradeoffExplainerModal({
   const focusRoute = (route: TradeoffRoute) => {
     onRouteSelect(route.routeId);
     setIsOpen(true);
-    setIsCollapsed(false);
+    setIsMinimized(false);
 
     requestAnimationFrame(() => {
       routeRefs.current.get(route.uiKey)?.scrollIntoView({
@@ -387,19 +406,14 @@ export default function TradeoffExplainerModal({
 
   if (!isOpen) {
     return (
-      <div
-        className={`mashwar-tradeoff-anchor fixed z-[1150] flex ${
-          isArabic ? "left-3 sm:left-4" : "right-3 sm:right-4"
-        }`}
-        style={{ top: "1rem" }}
-      >
+      <div className={`${MAP_CORNER_OVERLAY_CLASS} flex justify-start`}>
         <div className="mashwar-tradeoff-collapsed-enter mashwar-tradeoff-collapsed-wrap w-full max-w-[min(calc(100vw-1.5rem),22rem)] overflow-hidden rounded-full border-2 border-[rgba(107,143,86,0.65)] backdrop-blur-xl">
           <RouteLoadingFlagStripe dense className="opacity-100" />
           <button
             type="button"
             onClick={() => {
               setIsOpen(true);
-              setIsCollapsed(false);
+              setIsMinimized(false);
             }}
             className="mashwar-tradeoff-collapsed-cta mashwar-arabic flex w-full items-center justify-center gap-2.5 border-0 border-t border-white/[0.12] px-4 py-2.5 text-center text-[13px] font-semibold leading-snug transition sm:px-5 sm:py-3 sm:text-[14px]"
           >
@@ -411,23 +425,76 @@ export default function TradeoffExplainerModal({
     );
   }
 
-  const shellClass =
-    "mashwar-tradeoff-shell mashwar-tradeoff-shell-enter pointer-events-auto w-[min(100vw-1.5rem,460px)] h-full flex flex-col overflow-hidden rounded-[26px] border shadow-[0_30px_100px_rgba(0,0,0,0.72)] backdrop-blur-2xl";
+  const shellMotionClass =
+    playEntrance && !isMinimized
+      ? "mashwar-tradeoff-shell-enter"
+      : [
+          "mashwar-tradeoff-shell-dock",
+          isMinimized
+            ? "mashwar-tradeoff-shell-dock--minimized"
+            : "mashwar-tradeoff-shell-dock--expanded",
+        ].join(" ");
+
+  const shellClass = [
+    "mashwar-tradeoff-shell pointer-events-auto w-[min(100vw-1.5rem,460px)] h-full flex flex-col overflow-hidden rounded-[26px] border shadow-[0_30px_100px_rgba(0,0,0,0.72)] backdrop-blur-2xl",
+    shellMotionClass,
+  ].join(" ");
 
   return (
-    <div
-      className={`mashwar-tradeoff-anchor fixed z-[1150] flex ${
-        isArabic ? "left-3 sm:left-4" : "right-3 sm:right-4"
-      }`}
-      style={{ top: "1rem", bottom: "1rem" }}
-      aria-live="polite"
-    >
-      <section
-        role="dialog"
-        aria-modal="false"
-        aria-label={t("ariaLabel")}
-        className={shellClass}
+    <>
+      <div
+        className={`mashwar-tradeoff-dock-host pointer-events-none ${MAP_CORNER_OVERLAY_CLASS} flex max-w-[min(calc(100vw-1.5rem),17.5rem)] flex-col items-stretch gap-1 ${
+          isMinimized ? "mashwar-tradeoff-dock-host--visible" : "mashwar-tradeoff-dock-host--hidden"
+        }`}
+        aria-hidden={!isMinimized}
       >
+        <button
+          type="button"
+          onClick={() => setIsMinimized(false)}
+          aria-label={`${t("dockTitle")}. ${t("dockHint")}`}
+          title={t("dockHint")}
+          dir={isArabic ? "rtl" : "ltr"}
+          className="mashwar-tradeoff-dock-card mashwar-arabic group pointer-events-auto flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-start transition duration-200 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(228,49,43,0.45)] active:scale-[0.98] sm:gap-3.5 sm:px-3.5 sm:py-3"
+        >
+          <span className="mashwar-tradeoff-watermelon" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-bold leading-snug text-[#f8fafc] sm:text-[14px]">
+              {t("dockTitle")}
+            </span>
+            <span className="mt-0.5 block text-[11px] font-medium leading-snug text-[#a8b5c4] sm:text-[12px]">
+              {t("dockHint")}
+            </span>
+          </span>
+          <MdUnfoldMore
+            className={`h-6 w-6 shrink-0 text-[#c8e8d4] opacity-75 transition duration-200 group-hover:scale-105 group-hover:opacity-100 sm:h-7 sm:w-7 ${
+              isArabic ? "scale-x-[-1]" : ""
+            }`}
+            aria-hidden
+          />
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsOpen(false)}
+          className="mashwar-tradeoff-dock-dismiss mashwar-arabic pointer-events-auto self-center rounded-lg px-2 py-1 text-[11px] font-medium text-[#7d8694] transition hover:text-[#cbd5e1]"
+        >
+          {t("dockHide")}
+        </button>
+      </div>
+
+      <div
+        className={`mashwar-tradeoff-anchor fixed z-[1150] flex ${
+          isArabic ? "left-3 sm:left-4" : "right-3 sm:right-4"
+        } ${isMinimized ? "pointer-events-none" : ""}`}
+        style={{ top: "1rem", bottom: "1rem" }}
+        aria-live="polite"
+        aria-hidden={isMinimized}
+      >
+        <section
+          role="dialog"
+          aria-modal="false"
+          aria-label={t("ariaLabel")}
+          className={shellClass}
+        >
         <div className="mashwar-tradeoff-sheen flex h-full flex-col">
           <header
             className={`flex items-start justify-between gap-4 border-b px-4 py-4 sm:px-5 ${
@@ -562,27 +629,23 @@ export default function TradeoffExplainerModal({
               </details>
             </div>
 
-            <div className={`flex shrink-0 flex-col gap-2 ${isArabic ? "items-start" : "items-end"}`}>
+            <div className={`flex shrink-0 ${isArabic ? "items-start" : "items-end"}`}>
               <button
                 type="button"
-                onClick={() => setIsCollapsed((current) => !current)}
-                className="rounded-full border px-3 py-2 text-[13px] font-semibold text-[#dbe4f0] transition mashwar-tradeoff-chip hover:bg-white/[0.06]"
+                onClick={() => setIsMinimized(true)}
+                aria-label={t("collapseDockAria")}
+                title={t("collapseDockTitle")}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/[0.14] bg-white/[0.05] text-[#e8edf2] shadow-[0_4px_20px_rgba(0,0,0,0.35)] transition duration-200 ease-out hover:border-white/[0.22] hover:bg-white/[0.09] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(0,122,61,0.65)] active:scale-[0.94] sm:h-12 sm:w-12"
               >
-                {isCollapsed ? t("expand") : t("collapse")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border text-[#dbe4f0] transition mashwar-tradeoff-chip hover:bg-white/[0.06] hover:text-[#f9fafb]"
-                aria-label={t("closeAria")}
-              >
-                ×
+                <MdUnfoldLess
+                  className={`h-6 w-6 sm:h-7 sm:w-7 ${isArabic ? "scale-x-[-1]" : ""}`}
+                  aria-hidden
+                />
               </button>
             </div>
           </header>
 
-          {!isCollapsed ? (
-            <div className="mashwar-tradeoff-body-stagger mashwar-tradeoff-scroll-region flex-1 overflow-y-auto mashwar-scroll px-4 py-4 sm:px-5">
+          <div className="mashwar-tradeoff-body-stagger mashwar-tradeoff-scroll-region flex-1 overflow-y-auto mashwar-scroll px-4 py-4 sm:px-5">
               {narrativeBody ? (
                 <details className="mb-5 rounded-2xl border border-white/[0.07] bg-black/15 px-4 py-3 mashwar-tradeoff-panel">
                   <summary className="cursor-pointer list-none text-[13px] font-semibold text-[#e8ecef] marker:content-none [&::-webkit-details-marker]:hidden">
@@ -1089,26 +1152,9 @@ export default function TradeoffExplainerModal({
                 )}
               </section>
             </div>
-          ) : (
-            <div
-              className={`flex items-center justify-between gap-3 px-4 py-3 text-[13px] text-[#cbd5e1] sm:px-5 ${
-                isArabic ? "flex-row-reverse mashwar-rtl text-right" : ""
-              }`}
-            >
-              <p>{t("collapsedHint", { name: winnerDisplay })}</p>
-              {winnerRoute ? (
-                <button
-                  type="button"
-                  onClick={scrollToWinner}
-                  className="shrink-0 rounded-full border px-3 py-2 text-[11px] font-semibold text-[#f4f6f8] transition mashwar-tradeoff-chip hover:bg-white/[0.06]"
-                >
-                  {t("focusWinner")}
-                </button>
-              ) : null}
-            </div>
-          )}
         </div>
       </section>
-    </div>
+      </div>
+    </>
   );
 }

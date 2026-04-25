@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import type {
   NormalizedRoutes,
   RoutePath,
+  RoutingCheckpoint,
   RoutingRiskLevel,
   RoutingStatusBucket,
 } from "@/lib/types/map";
 import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
+
+/** Below Smart What If modal (`z-[3000]`); above tradeoff (`z-[1150]`) and map chrome. */
+const ROUTE_DETAILS_Z_INDEX = 2800;
 
 interface RouteDetailsModalProps {
   open: boolean;
@@ -20,69 +24,40 @@ interface RouteDetailsModalProps {
   onClose: () => void;
 }
 
-const RISK_STYLES: Record<
-  RoutingRiskLevel,
-  {
-    text: string;
-    bg: string;
-    border: string;
-    meter: string;
-  }
-> = {
-  low: {
-    text: "#86efac",
-    bg: "rgba(34, 197, 94, 0.12)",
-    border: "rgba(34, 197, 94, 0.35)",
-    meter: "#22c55e",
-  },
-  medium: {
-    text: "#fbbf24",
-    bg: "rgba(245, 158, 11, 0.12)",
-    border: "rgba(245, 158, 11, 0.35)",
-    meter: "#f59e0b",
-  },
-  high: {
-    text: "#fca5a5",
-    bg: "rgba(239, 68, 68, 0.12)",
-    border: "rgba(239, 68, 68, 0.35)",
-    meter: "#ef4444",
-  },
-  unknown: {
-    text: "#cbd5e1",
-    bg: "rgba(148, 163, 184, 0.12)",
-    border: "rgba(148, 163, 184, 0.35)",
-    meter: "#94a3b8",
-  },
-};
-
 const BUCKET_STYLES: Record<
   RoutingStatusBucket,
-  {
-    text: string;
-    bg: string;
-    border: string;
-  }
+  { text: string; bg: string; border: string }
 > = {
   green: {
-    text: "#86efac",
-    bg: "rgba(34, 197, 94, 0.12)",
-    border: "rgba(34, 197, 94, 0.35)",
+    text: "var(--risk-low)",
+    bg: "var(--risk-low-bg)",
+    border: "rgba(0, 166, 81, 0.35)",
   },
   yellow: {
-    text: "#fbbf24",
-    bg: "rgba(245, 158, 11, 0.12)",
+    text: "var(--risk-med)",
+    bg: "var(--risk-med-bg)",
     border: "rgba(245, 158, 11, 0.35)",
   },
   red: {
-    text: "#fca5a5",
-    bg: "rgba(239, 68, 68, 0.12)",
-    border: "rgba(239, 68, 68, 0.35)",
+    text: "var(--risk-high)",
+    bg: "var(--risk-high-bg)",
+    border: "rgba(238, 42, 53, 0.35)",
   },
   unknown: {
-    text: "#cbd5e1",
-    bg: "rgba(148, 163, 184, 0.12)",
-    border: "rgba(148, 163, 184, 0.35)",
+    text: "var(--clr-slate)",
+    bg: "rgba(139, 145, 150, 0.12)",
+    border: "rgba(139, 145, 150, 0.28)",
   },
+};
+
+const RISK_STYLES: Record<
+  RoutingRiskLevel,
+  { text: string; bg: string; border: string }
+> = {
+  low: BUCKET_STYLES.green,
+  medium: BUCKET_STYLES.yellow,
+  high: BUCKET_STYLES.red,
+  unknown: BUCKET_STYLES.unknown,
 };
 
 function normalizeRiskLevel(route: RoutePath): RoutingRiskLevel {
@@ -98,14 +73,6 @@ function normalizeRiskLevel(route: RoutePath): RoutingRiskLevel {
     default:
       return "medium";
   }
-}
-
-function getRiskSummary(route: RoutePath): string | null {
-  if (route.riskComponents.length > 0) {
-    return route.riskComponents.slice(0, 2).join(" · ");
-  }
-
-  return route.reasonSummary || null;
 }
 
 function resolveRouteArrivalDateTime(
@@ -133,64 +100,254 @@ function resolveRouteArrivalDateTime(
   return new Date(departDate.getTime() + smartEtaMs).toISOString();
 }
 
-function formatArrivalShortLabel(value: string | null): string {
-  return formatDateTimeInPalestine(value);
-}
-
 function getRouteSmartEta(route: RoutePath, departAt: string | null): string {
-  return formatArrivalShortLabel(resolveRouteArrivalDateTime(route, departAt));
-}
-
-function formatDateTimeLabel(value: string | null): string {
-  return formatDateTimeInPalestine(value);
+  return formatDateTimeInPalestine(resolveRouteArrivalDateTime(route, departAt));
 }
 
 function getProbabilityEntries(probabilities: Record<string, number>) {
   return Object.entries(probabilities)
-    .map(([label, value]) => ({
-      label,
-      value,
-    }))
+    .map(([label, value]) => ({ label, value }))
     .filter((entry) => Number.isFinite(entry.value) && entry.value > 0)
     .sort((left, right) => right.value - left.value);
 }
 
-function getProbabilityColor(label: string): string {
-  const normalized = label.trim().toLowerCase();
-
-  if (normalized.includes("green") || normalized.includes("low")) {
-    return "#22c55e";
+function formatProbabilityLabel(
+  label: string,
+  translateBucket: (bucket: "green" | "yellow" | "red" | "unknown") => string,
+  unknownLabel: string,
+): string {
+  const n = label.trim().toLowerCase();
+  if (n === "green" || n === "low") {
+    return translateBucket("green");
   }
-
-  if (normalized.includes("yellow") || normalized.includes("medium")) {
-    return "#f59e0b";
+  if (n === "yellow" || n === "medium") {
+    return translateBucket("yellow");
   }
-
-  if (normalized.includes("red") || normalized.includes("high")) {
-    return "#ef4444";
+  if (n === "red" || n === "high") {
+    return translateBucket("red");
   }
-
-  return "#94a3b8";
+  if (n === "unknown") {
+    return translateBucket("unknown");
+  }
+  if (n.includes("green")) {
+    return translateBucket("green");
+  }
+  if (n.includes("yellow")) {
+    return translateBucket("yellow");
+  }
+  if (n.includes("red")) {
+    return translateBucket("red");
+  }
+  return `${label} (${unknownLabel})`;
 }
 
-function Pill({
+function probabilityBarColor(label: string): string {
+  const n = label.trim().toLowerCase();
+  if (n.includes("green") || n === "low") {
+    return "var(--risk-low)";
+  }
+  if (n.includes("yellow") || n === "medium") {
+    return "var(--risk-med)";
+  }
+  if (n.includes("red") || n === "high") {
+    return "var(--risk-high)";
+  }
+  return "var(--clr-slate)";
+}
+
+function StatusPill({
+  bucket,
   children,
-  color,
-  backgroundColor,
-  borderColor,
 }: {
+  bucket: RoutingStatusBucket;
   children: ReactNode;
-  color: string;
-  backgroundColor: string;
-  borderColor: string;
 }) {
+  const s = BUCKET_STYLES[bucket];
   return (
     <span
-      className="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold"
-      style={{ color, backgroundColor, borderColor }}
+      className="inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold leading-tight"
+      style={{
+        color: s.text,
+        backgroundColor: s.bg,
+        borderColor: s.border,
+      }}
     >
       {children}
     </span>
+  );
+}
+
+function MutedKicker({ children, dir }: { children: ReactNode; dir: "rtl" | "ltr" }) {
+  return (
+    <p
+      className="mashwar-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-[var(--clr-slate)]"
+      dir={dir}
+    >
+      {children}
+    </p>
+  );
+}
+
+function StatTile({
+  kicker,
+  value,
+  hint,
+  dir,
+}: {
+  kicker: string;
+  value: string;
+  hint?: string | null;
+  dir: "rtl" | "ltr";
+}) {
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--glass-bg-mid)] px-2.5 py-2 sm:px-3 sm:py-2.5">
+      <MutedKicker dir={dir}>{kicker}</MutedKicker>
+      <p className="mashwar-arabic mt-1.5 text-[14px] font-bold tabular-nums leading-tight text-[var(--clr-white)] sm:text-[15px]" dir={dir}>
+        {value}
+      </p>
+      {hint ? (
+        <p className="mashwar-arabic mt-1 text-[10px] leading-snug text-[var(--clr-slate)]" dir={dir}>
+          {hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function InfoRow({
+  label,
+  value,
+  dir,
+}: {
+  label: string;
+  value: string;
+  dir: "rtl" | "ltr";
+}) {
+  return (
+    <div className="flex flex-col gap-1 py-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+      <span className="mashwar-arabic max-w-[min(100%,20rem)] shrink-0 text-[11px] font-semibold leading-snug text-[var(--clr-sand)] sm:pt-0.5" dir={dir}>
+        {label}
+      </span>
+      <span className="mashwar-arabic min-w-0 flex-1 text-[13px] font-medium leading-snug text-[var(--clr-white)]" dir="auto">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+const ROUTE_RISK_FACTOR_KEYS = new Set([
+  "volatility_ratio",
+  "confidence_penalty",
+  "severity_ratio",
+  "checkpoint_burden",
+  "average_forecast_confidence",
+]);
+
+function bucketRankForInference(bucket: RoutingStatusBucket): number {
+  if (bucket === "red") {
+    return 3;
+  }
+  if (bucket === "yellow") {
+    return 2;
+  }
+  if (bucket === "green") {
+    return 1;
+  }
+  return 0;
+}
+
+/** Map raw status text (AR/EN/buckets) to a traffic bucket for comparing entering vs leaving. */
+function rawTrafficTextToBucket(text: string | null | undefined): RoutingStatusBucket {
+  if (!text) {
+    return "unknown";
+  }
+  const s = text.trim();
+  const n = s.toLowerCase();
+
+  if (n.includes("مغلق") || n.includes("closed") || n === "red" || n.includes("heavy delay")) {
+    return "red";
+  }
+  if (
+    n.includes("أزمة") ||
+    n.includes("ازمة") ||
+    n === "yellow" ||
+    n.includes("congestion") ||
+    n.includes("moderate delay")
+  ) {
+    return "yellow";
+  }
+  if (n.includes("سالك") || n.includes("clear") || n === "green" || n === "open" || n.includes("سليم")) {
+    return "green";
+  }
+  if (n === "low") {
+    return "green";
+  }
+  if (n === "medium") {
+    return "yellow";
+  }
+  if (n === "high") {
+    return "red";
+  }
+  return "unknown";
+}
+
+function coerceFiniteNumber(value: unknown): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value.replace(/,/g, "").trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function CheckpointMatchGeometry({
+  checkpoint,
+  na,
+  t,
+  formatDistanceLabel,
+  formatNumberLabel,
+  formatCoordinatePair,
+  formatMatchConfidence,
+}: {
+  checkpoint: RoutingCheckpoint;
+  na: string;
+  t: (key: string, values?: Record<string, string>) => string;
+  formatDistanceLabel: (value: number | null) => string;
+  formatNumberLabel: (value: number | null, mode?: "decimal2" | "int") => string;
+  formatCoordinatePair: (lat: number, lng: number) => string;
+  formatMatchConfidence: (value: string | null) => string;
+}) {
+  return (
+    <details className="mt-2 rounded-[var(--radius-sm)] border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+      <summary className="mashwar-arabic cursor-pointer list-none text-[11px] font-semibold text-[var(--clr-green-soft)] marker:content-none [&::-webkit-details-marker]:hidden">
+        {t("openMatchGeometry")}
+      </summary>
+      <div className="mt-2 grid gap-1.5 text-[11px] text-[var(--clr-slate)] sm:grid-cols-2">
+        <p className="mashwar-arabic">
+          {t("distanceFromRoute", { value: formatDistanceLabel(checkpoint.distanceFromRouteM) })}
+        </p>
+        <p className="mashwar-arabic">
+          {t("matchConfidence", { value: formatMatchConfidence(checkpoint.matchConfidence) })}
+        </p>
+        <p className="mashwar-arabic">{t("projectionT", { value: formatNumberLabel(checkpoint.projectionT) })}</p>
+        <p className="mashwar-arabic">{t("nearestSegment", { value: formatNumberLabel(checkpoint.nearestSegmentIndex, "int") })}</p>
+        <p className="mashwar-arabic">{t("chainage", { value: formatNumberLabel(checkpoint.chainageM) })}</p>
+        <p className="mashwar-arabic">
+          {t("projectedPoint", {
+            value: checkpoint.projectedPointOnRoute
+              ? formatCoordinatePair(checkpoint.projectedPointOnRoute[1], checkpoint.projectedPointOnRoute[0])
+              : na,
+          })}
+        </p>
+      </div>
+    </details>
   );
 }
 
@@ -202,6 +359,7 @@ export default function RouteDetailsModal({
   checkpointMatching,
   onClose,
 }: RouteDetailsModalProps) {
+  const locale = useLocale();
   const t = useTranslations("routeDetails");
   const tCommon = useTranslations("common");
   const tMap = useTranslations("map");
@@ -210,6 +368,48 @@ export default function RouteDetailsModal({
   const tDirection = useTranslations("routing.direction");
   const tSelectedStatus = useTranslations("routing.selectedStatus");
   const tMatchConfidence = useTranslations("routing.matchConfidence");
+  const tTradeoff = useTranslations("tradeoff");
+
+  const primaryDir: "rtl" | "ltr" = locale === "ar" ? "rtl" : "ltr";
+
+  function formatViabilityLabel(v: RoutePath["routeViability"]): string {
+    if (v === "good" || v === "risky" || v === "avoid") {
+      return tTradeoff(`viability.${v}`);
+    }
+    return tTradeoff("viability.unknown");
+  }
+
+  function formatRouteDirection(value: string | null): string {
+    if (!value) {
+      return tDirection("unknown");
+    }
+    const norm = value.trim().toLowerCase();
+    if (norm === "unknown") {
+      return tDirection("unknown");
+    }
+    switch (norm) {
+      case "entering":
+      case "leaving":
+      case "transit":
+        return tDirection(norm);
+      default:
+        return value;
+    }
+  }
+
+  function formatSelectedStatusType(value: string | null): string {
+    if (!value) {
+      return tCommon("notAvailable");
+    }
+    switch (value) {
+      case "entering":
+      case "leaving":
+      case "worst":
+        return tSelectedStatus(value);
+      default:
+        return value;
+    }
+  }
 
   useEffect(() => {
     if (!open) {
@@ -228,10 +428,106 @@ export default function RouteDetailsModal({
     };
   }, [onClose, open]);
 
-  const isVisible = open && route;
-
   if (!route) {
     return null;
+  }
+
+  const isVisible = open && route;
+  const na = tCommon("notAvailable");
+  const numberLocale = locale === "ar" ? "ar-PS" : "en-US";
+
+  function formatMax2(n: number): string {
+    return new Intl.NumberFormat(numberLocale, { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
+  }
+
+  function formatRiskFactorLine(component: string): string {
+    const trimmed = component.trim();
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx === -1) {
+      return trimmed;
+    }
+    const rawKey = trimmed.slice(0, colonIdx).trim();
+    const rawVal = trimmed.slice(colonIdx + 1).trim();
+    const num = Number.parseFloat(rawVal.replace(/,/g, ""));
+    const valueStr = Number.isFinite(num) ? formatMax2(num) : rawVal;
+    const normKey = rawKey.toLowerCase().replace(/\s+/g, "_");
+    if (!ROUTE_RISK_FACTOR_KEYS.has(normKey)) {
+      return t("riskFactor.fallback", { key: rawKey, value: valueStr });
+    }
+    let label: string;
+    switch (normKey) {
+      case "volatility_ratio":
+        label = t("riskFactor.volatility_ratio");
+        break;
+      case "confidence_penalty":
+        label = t("riskFactor.confidence_penalty");
+        break;
+      case "severity_ratio":
+        label = t("riskFactor.severity_ratio");
+        break;
+      case "checkpoint_burden":
+        label = t("riskFactor.checkpoint_burden");
+        break;
+      case "average_forecast_confidence":
+        label = t("riskFactor.average_forecast_confidence");
+        break;
+      default:
+        label = rawKey;
+    }
+    return `${label} — ${valueStr}`;
+  }
+
+  function unifiedCheckpointSideLabel(checkpoint: RoutingCheckpoint): string {
+    const rd = checkpoint.routeDirection;
+    const stRaw = checkpoint.selectedStatusType;
+    const st = typeof stRaw === "string" ? stRaw.trim().toLowerCase() : null;
+
+    if (rd === "entering" || rd === "leaving" || rd === "transit") {
+      return formatRouteDirection(rd);
+    }
+
+    if (st === "entering" || st === "leaving") {
+      return formatRouteDirection(st);
+    }
+
+    const enterB = rawTrafficTextToBucket(checkpoint.currentStatusRaw?.entering_status);
+    const leaveB = rawTrafficTextToBucket(checkpoint.currentStatusRaw?.leaving_status);
+    const rankEnter = bucketRankForInference(enterB);
+    const rankLeave = bucketRankForInference(leaveB);
+
+    if (rankEnter > rankLeave) {
+      return formatRouteDirection("entering");
+    }
+    if (rankLeave > rankEnter) {
+      return formatRouteDirection("leaving");
+    }
+
+    if (enterB !== "unknown" && enterB === leaveB) {
+      return formatRouteDirection("transit");
+    }
+
+    return formatRouteDirection("unknown");
+  }
+
+  function formatForecastSourceDisplay(raw: string | null): string {
+    if (!raw?.trim()) {
+      return na;
+    }
+    const key = raw.trim().toLowerCase().replace(/\s+/g, "_");
+    switch (key) {
+      case "model":
+        return t("forecastSourceValue.model");
+      case "live":
+        return t("forecastSourceValue.live");
+      default:
+        return t("forecastSourceValue.fallback", { value: raw.trim() });
+    }
+  }
+
+  function formatRatioZeroOne(n: number): string {
+    return new Intl.NumberFormat(numberLocale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+      Math.min(1, Math.max(0, n)),
+    );
   }
 
   function formatRouteDistance(distanceM: number): string {
@@ -240,10 +536,13 @@ export default function RouteDetailsModal({
     }
 
     if (distanceM >= 1000) {
-      return `${(distanceM / 1000).toFixed(distanceM >= 10000 ? 0 : 1)} km`;
+      const km = distanceM / 1000;
+      return tCommon("unitKm", {
+        value: formatMax2(km),
+      });
     }
 
-    return `${Math.round(distanceM)} m`;
+    return tCommon("unitM", { value: String(Math.round(distanceM)) });
   }
 
   function formatDurationLabel(durationMs: number | null): string {
@@ -255,10 +554,12 @@ export default function RouteDetailsModal({
     if (totalMinutes >= 60) {
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
-      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+      return minutes > 0
+        ? tCommon("durationHM", { hours: String(hours), minutes: String(minutes) })
+        : tCommon("durationH", { hours: String(hours) });
     }
 
-    return `${totalMinutes}m`;
+    return tCommon("durationMin", { minutes: String(Math.max(1, totalMinutes)) });
   }
 
   function formatCoordinatePair(lat: number, lng: number): string {
@@ -266,7 +567,7 @@ export default function RouteDetailsModal({
       return tCommon("notAvailable");
     }
 
-    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    return `${formatMax2(lat)} · ${formatMax2(lng)}`;
   }
 
   function formatConfidence(value: number | null): string {
@@ -274,7 +575,7 @@ export default function RouteDetailsModal({
       return tCommon("notAvailable");
     }
 
-    return tCommon("percent", { value: Math.round(value * 100) });
+    return tCommon("percent", { value: String(Math.round(value * 100)) });
   }
 
   function formatPercent(value: number | null): string {
@@ -282,37 +583,7 @@ export default function RouteDetailsModal({
       return tCommon("notAvailable");
     }
 
-    return tCommon("percent", { value: Math.round(value * 100) });
-  }
-
-  function formatRouteDirection(value: string | null): string {
-    if (!value) {
-      return tDirection("unknown");
-    }
-
-    switch (value) {
-      case "entering":
-      case "leaving":
-      case "transit":
-        return tDirection(value);
-      default:
-        return value;
-    }
-  }
-
-  function formatSelectedStatusType(value: string | null): string {
-    if (!value) {
-      return tCommon("notAvailable");
-    }
-
-    switch (value) {
-      case "entering":
-      case "leaving":
-      case "worst":
-        return tSelectedStatus(value);
-      default:
-        return value;
-    }
+    return tCommon("percent", { value: String(Math.round(value * 100)) });
   }
 
   function formatMatchConfidence(value: string | null): string {
@@ -330,12 +601,16 @@ export default function RouteDetailsModal({
     }
   }
 
-  function formatNumberLabel(value: number | null, fractionDigits = 0): string {
+  function formatNumberLabel(value: number | null, mode: "decimal2" | "int" = "decimal2"): string {
     if (value === null || !Number.isFinite(value)) {
       return tCommon("notAvailable");
     }
 
-    return value.toFixed(fractionDigits);
+    if (mode === "int") {
+      return String(Math.round(value));
+    }
+
+    return formatMax2(value);
   }
 
   function formatDistanceLabel(value: number | null): string {
@@ -344,10 +619,25 @@ export default function RouteDetailsModal({
     }
 
     if (value >= 1000) {
-      return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)} km`;
+      return tCommon("unitKm", {
+        value: formatMax2(value / 1000),
+      });
     }
 
-    return `${Math.round(value)} m`;
+    return tCommon("unitM", { value: String(Math.round(value)) });
+  }
+
+  function formatDateTimeLabel(value: string | null): string {
+    return formatDateTimeInPalestine(value);
+  }
+
+  function getRouteDelayLabel(r: RoutePath): string {
+    const delayMinutes = r.expectedDelayMinutes ?? r.estimatedDelayMinutes;
+    if (delayMinutes === null || !Number.isFinite(delayMinutes) || delayMinutes <= 0) {
+      return t("delayNoPrediction");
+    }
+
+    return t("delayExpected", { minutes: String(Math.max(1, Math.round(delayMinutes))) });
   }
 
   function getRouteEtaBreakdownLabel(r: RoutePath): string {
@@ -360,46 +650,21 @@ export default function RouteDetailsModal({
     return r.smartEtaDateTime ? t("etaBreakdownSmart") : t("etaBreakdownLegacy");
   }
 
-  function getRouteDelayLabel(r: RoutePath): string {
-    const delayMinutes = r.expectedDelayMinutes ?? r.estimatedDelayMinutes;
-    if (delayMinutes === null || !Number.isFinite(delayMinutes) || delayMinutes <= 0) {
-      return t("delayNoPrediction");
-    }
-
-    return t("delayExpected", { minutes: Math.max(1, Math.round(delayMinutes)) });
-  }
-
   function getRouteScoreLabel(r: RoutePath): string {
     if (r.riskScore !== null && Number.isFinite(r.riskScore)) {
-      return t("riskScoreLabel", { score: r.riskScore.toFixed(1) });
+      return t("riskScoreShort", { score: formatMax2(r.riskScore) });
     }
 
     if (Number.isFinite(r.routeScore)) {
-      return t("routingScoreLabel", { score: r.routeScore.toFixed(1) });
+      return t("routingScoreShort", { score: formatMax2(r.routeScore) });
     }
 
     return t("riskScoreNa");
   }
 
-  function getProbabilitySummary(probabilities: Record<string, number>): string {
-    const entries = getProbabilityEntries(probabilities);
-    if (entries.length === 0) {
-      return t("noProbability");
-    }
-
-    return entries
-      .slice(0, 3)
-      .map((entry) => `${entry.label} ${formatPercent(entry.value)}`)
-      .join(" · ");
-  }
-
   const riskLevel = normalizeRiskLevel(route);
   const riskStyles = RISK_STYLES[riskLevel];
   const worstBucket = route.worstPredictedStatus;
-  const worstStyles = BUCKET_STYLES[worstBucket];
-  const routeSummary = getRiskSummary(route);
-  const routeDelayLabel = getRouteDelayLabel(route);
-  const routeScoreLabel = getRouteScoreLabel(route);
   const routeSmartEta = getRouteSmartEta(route, departAt);
   const isV5Route = routeVersion === "v5";
   const orderedCheckpoints = [...route.checkpoints].sort((left, right) => {
@@ -408,18 +673,20 @@ export default function RouteDetailsModal({
     return leftEta - rightEta;
   });
   const routeConfidence =
-    route.riskConfidence !== null && Number.isFinite(route.riskConfidence)
-      ? route.riskConfidence
-      : null;
+    route.riskConfidence !== null && Number.isFinite(route.riskConfidence) ? route.riskConfidence : null;
   const routeConfidencePct = routeConfidence !== null ? routeConfidence * 100 : null;
-  const na = tCommon("notAvailable");
+
+  const plannedDepartLabel =
+    departAt && !Number.isNaN(new Date(departAt).getTime())
+      ? formatDateTimeInPalestine(departAt)
+      : t("plannedDepartNa");
 
   return (
-    <div className="fixed inset-0 z-50" aria-hidden={!isVisible}>
+    <div className="fixed inset-0" style={{ zIndex: ROUTE_DETAILS_Z_INDEX }} aria-hidden={!isVisible}>
       <button
         type="button"
         aria-label={t("closeBackdropAria")}
-        className={`absolute inset-0 bg-black/65 backdrop-blur-[20px] transition-opacity duration-300 ${
+        className={`absolute inset-0 bg-[var(--clr-black)]/70 backdrop-blur-[var(--glass-blur)] transition-opacity duration-300 ease-out ${
           isVisible ? "opacity-100" : "opacity-0"
         }`}
         onClick={onClose}
@@ -429,557 +696,429 @@ export default function RouteDetailsModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="route-details-title"
-        className={`relative z-10 mx-auto mt-3 flex h-[min(92vh,56rem)] w-[min(100vw-1.5rem,980px)] flex-col overflow-hidden rounded-[16px] border border-white/8 bg-[#0b0f14] shadow-[0_30px_100px_rgba(0,0,0,0.7)] transition-all duration-300 ease-out sm:mt-6 ${
-          isVisible ? "translate-y-0 scale-100 opacity-100" : "translate-y-3 scale-[0.985] opacity-0"
+        className={`relative z-10 mx-auto flex max-h-[min(92vh,880px)] w-[min(100vw-1.25rem,56rem)] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--glass-border-mid)] bg-[var(--glass-bg-raised)] shadow-[var(--map-overlay-shadow)] transition-all duration-300 ease-out sm:mt-6 ${
+          isVisible ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
         }`}
-        style={{ animation: "mashwar-modal-in 220ms ease-out" }}
+        style={{ marginTop: "max(0.75rem, env(safe-area-inset-top))" }}
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_26%),radial-gradient(circle_at_bottom_left,rgba(239,68,68,0.08),transparent_24%)]" />
-
-        <header className="relative border-b border-white/8 px-5 py-4">
-          <div className="flex items-start justify-between gap-4">
+        <header className="relative shrink-0 border-b border-[var(--glass-border)] px-4 pb-3 pt-3 sm:px-5 sm:pb-4 sm:pt-4">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="mashwar-mono text-[10px] uppercase tracking-[0.34em] text-[#6b7280]">
-                {t("title")}
-              </p>
-              <h2 id="route-details-title" className="mt-1 text-[24px] font-bold text-[#f9fafb]">
-                {t("heading", { rank: route.rank })}
+              <MutedKicker dir={primaryDir}>{t("scanKicker")}</MutedKicker>
+              <h2
+                id="route-details-title"
+                className="mashwar-display mt-2 text-[clamp(1.4rem,3.2vw,1.85rem)] font-bold leading-tight text-[var(--clr-white)]"
+                dir={primaryDir}
+              >
+                {t("heading", { rank: String(route.rank) })}
               </h2>
-              <p className="mt-2 max-w-2xl text-[13px] leading-6 text-[#94a3b8]">{t("intro")}</p>
+              <p className="mashwar-mono mt-1.5 break-all text-[10px] leading-snug text-[var(--clr-slate)]" dir="ltr">
+                {t("routeId")}: {route.routeId}
+              </p>
+              {isV5Route ? (
+                <p
+                  className="mashwar-arabic mt-2 inline-flex rounded-full border border-[var(--clr-green)]/35 bg-[var(--clr-green-dim)] px-2.5 py-1 text-[10px] font-semibold text-[var(--clr-green-soft)]"
+                  dir={primaryDir}
+                >
+                  {t("badgeV5")}
+                </p>
+              ) : null}
             </div>
 
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-transparent text-[#cbd5e1] transition hover:bg-white/5 hover:text-[#f9fafb]"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-mid)] text-[var(--clr-sand)] transition hover:border-[var(--clr-border-bright)] hover:text-[var(--clr-white)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--clr-green)]/40"
               aria-label={t("closeAria")}
             >
-              <span className="text-xl leading-none">×</span>
+              <span className="text-xl leading-none" aria-hidden>
+                ×
+              </span>
             </button>
           </div>
         </header>
 
-        <div className="relative flex-1 overflow-y-auto p-4">
-          <section className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                {t("legend")}
-              </span>
-              <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-2.5 py-1 text-[11px] text-sky-100">
-                {t("legendSmartEta")}
-              </span>
-              {isV5Route ? (
-                <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-[11px] text-emerald-100">
-                  {t("badgeV5")}
-                </span>
-              ) : null}
-              <Pill
-                color={RISK_STYLES.low.text}
-                backgroundColor={RISK_STYLES.low.bg}
-                borderColor={RISK_STYLES.low.border}
+        <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-2 sm:px-5 sm:pb-6">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-5">
+            <div className="rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[linear-gradient(145deg,rgba(0,98,51,0.12),transparent_42%),linear-gradient(210deg,rgba(196,31,41,0.08),transparent_38%)] px-4 py-4 sm:px-5 sm:py-5">
+              <MutedKicker dir={primaryDir}>{t("arrivalLabel")}</MutedKicker>
+              <p
+                className="mashwar-display mt-2 text-[clamp(1.85rem,4.5vw,2.35rem)] font-bold tabular-nums tracking-tight text-[var(--clr-white)]"
+                dir="ltr"
               >
-                {t("pillLowRisk")}
-              </Pill>
-              <Pill
-                color={RISK_STYLES.medium.text}
-                backgroundColor={RISK_STYLES.medium.bg}
-                borderColor={RISK_STYLES.medium.border}
-              >
-                {t("pillMediumRisk")}
-              </Pill>
-              <Pill
-                color={RISK_STYLES.high.text}
-                backgroundColor={RISK_STYLES.high.bg}
-                borderColor={RISK_STYLES.high.border}
-              >
-                {t("pillHighRisk")}
-              </Pill>
-            </div>
-          </section>
-
-          <div className="grid gap-3 lg:grid-cols-4">
-            <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
-              <p className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                {t("smartEta")}
-              </p>
-              <p className="mt-2 text-[24px] font-semibold text-[#f9fafb]">
                 {routeSmartEta}
               </p>
-              <p className="mt-2 text-[12px] text-[#94a3b8]">{routeDelayLabel}</p>
-              <p className="mt-1 text-[12px] text-[#94a3b8]">{getRouteEtaBreakdownLabel(route)}</p>
-            </div>
-
-            <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
-              <p className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                {t("journeyRisk")}
-              </p>
-              <div className="mt-2 flex items-center gap-2">
-                <Pill
-                  color={riskStyles.text}
-                  backgroundColor={riskStyles.bg}
-                  borderColor={riskStyles.border}
-                >
-                  {tRisk(riskLevel)}
-                </Pill>
-                <span className="text-[12px] text-[#cbd5e1]">{routeScoreLabel}</span>
-              </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#1f2937]">
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width:
-                      routeConfidencePct !== null
-                        ? `${Math.min(100, Math.max(8, routeConfidencePct))}%`
-                        : "18%",
-                    backgroundColor: riskStyles.meter,
-                  }}
-                />
-              </div>
-              <p className="mt-2 text-[12px] text-[#94a3b8]">
-                {t("confidence", { value: formatConfidence(route.riskConfidence) })}
-              </p>
-              {routeSummary ? (
-                <p className="mt-1 text-[12px] leading-5 text-[#dbe4f0]">{routeSummary}</p>
-              ) : null}
-            </div>
-
-            <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
-              <p className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                {t("distance")}
-              </p>
-              <p className="mt-2 text-[24px] font-semibold text-[#f9fafb]">
-                {formatRouteDistance(route.distanceM)}
-              </p>
-              <p className="mt-2 text-[12px] text-[#94a3b8]">
-                {Number.isFinite(route.routeScore)
-                  ? t("routeScore", { score: route.routeScore.toFixed(1) })
-                  : t("routeScoreNa")}
-              </p>
-              {route.historicalVolatility !== null ? (
-                <p className="mt-1 text-[12px] text-[#94a3b8]">
-                  {t("volatility", { value: route.historicalVolatility.toFixed(1) })}
+              <div className="mt-4 border-t border-[var(--glass-border)] pt-4">
+                <MutedKicker dir={primaryDir}>{t("delayLabel")}</MutedKicker>
+                <p className="mashwar-arabic mt-1 text-[15px] font-semibold text-[var(--clr-sand)]" dir={primaryDir}>
+                  {getRouteDelayLabel(route)}
                 </p>
-              ) : null}
+                <MutedKicker dir={primaryDir}>{t("etaHint")}</MutedKicker>
+                <p className="mashwar-arabic mt-1 text-[12px] leading-relaxed text-[var(--clr-slate)]" dir={primaryDir}>
+                  {getRouteEtaBreakdownLabel(route)}
+                </p>
+              </div>
             </div>
 
-            <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
-              <p className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                {t("checkpoints")}
-              </p>
-              <p className="mt-2 text-[24px] font-semibold text-[#f9fafb]">
-                {route.checkpointCount}
-              </p>
-              <p className="mt-2 text-[12px] text-[#94a3b8]">
-                {t("checkpointsSub", { count: route.checkpoints.length })}
-              </p>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+              <StatTile
+                kicker={t("statAdjustedDuration")}
+                value={formatDurationLabel(route.smartEtaMs ?? route.durationMs)}
+                hint={t("effectiveEtaHelp")}
+                dir={primaryDir}
+              />
+              <StatTile
+                kicker={t("statBaseDuration")}
+                value={formatDurationLabel(route.durationMs)}
+                hint={t("baseEtaHelp")}
+                dir={primaryDir}
+              />
+              <StatTile kicker={t("statDistance")} value={formatRouteDistance(route.distanceM)} dir={primaryDir} />
+              <StatTile kicker={t("statCheckpoints")} value={String(route.checkpointCount)} dir={primaryDir} />
+              <StatTile kicker={t("statViability")} value={formatViabilityLabel(route.routeViability)} dir={primaryDir} />
+              <StatTile
+                kicker={t("statRouteScore")}
+                value={formatMax2(route.routeScore)}
+                hint={getRouteScoreLabel(route)}
+                dir={primaryDir}
+              />
+              {route.historicalVolatility !== null ? (
+                <StatTile kicker={t("statVolatility")} value={formatMax2(route.historicalVolatility)} dir={primaryDir} />
+              ) : (
+                <StatTile kicker={t("statVolatility")} value={na} dir={primaryDir} />
+              )}
+              <StatTile
+                kicker={t("statDelayMs")}
+                value={
+                  route.expectedDelayMs !== null &&
+                  Number.isFinite(route.expectedDelayMs) &&
+                  route.expectedDelayMs > 0
+                    ? formatDurationLabel(route.expectedDelayMs)
+                    : na
+                }
+                dir={primaryDir}
+              />
+              <StatTile kicker={t("plannedDepart")} value={plannedDepartLabel} dir={primaryDir} />
+              <StatTile kicker={t("originalOrderLabel")} value={String(route.originalIndex + 1)} dir={primaryDir} />
+              <StatTile kicker={t("statDurationMinutes")} value={String(route.durationMinutes)} dir={primaryDir} />
+              {(() => {
+                const smartMin = coerceFiniteNumber(route.smartEtaMinutes);
+                return smartMin !== null ? (
+                  <StatTile kicker={t("statSmartEtaMinutes")} value={formatMax2(smartMin)} dir={primaryDir} />
+                ) : null;
+              })()}
             </div>
           </div>
 
-          {checkpointMatching ? (
-            <details className="mt-4 rounded-[12px] border border-[#2d3139] bg-white/[0.03] px-4 py-3">
-              <summary className="cursor-pointer list-none text-[12px] font-medium text-[#dbe4f0]">
-                {t("matchingMeta")}
-              </summary>
-              <div className="mt-3 grid gap-2 text-[12px] text-[#94a3b8] sm:grid-cols-2 lg:grid-cols-4">
-                <p>{t("matchingField.mode", { value: checkpointMatching.mode ?? na })}</p>
-                <p>
-                  {t("matchingField.directionMode", {
-                    value: checkpointMatching.directionMode ?? na,
-                  })}
-                </p>
-                <p>{t("matchingField.citySource", { value: checkpointMatching.citySource ?? na })}</p>
-                <p>
-                  {t("matchingField.cityInference", {
-                    value: checkpointMatching.cityInference ?? na,
-                  })}
-                </p>
-                <p>
-                  {t("matchingField.outerThreshold", {
-                    value: formatNumberLabel(checkpointMatching.outerThresholdM),
-                  })}
-                </p>
-                <p>
-                  {t("matchingField.strongMatch", {
-                    value: formatNumberLabel(checkpointMatching.strongMatchDistanceM),
-                  })}
-                </p>
-                <p>
-                  {t("matchingField.mediumMatch", {
-                    value: formatNumberLabel(checkpointMatching.mediumMatchDistanceM),
-                  })}
-                </p>
-                <p>
-                  {t("matchingField.weakMatch", {
-                    value: formatNumberLabel(checkpointMatching.weakMatchDistanceM),
-                  })}
-                </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <div
+              className="inline-flex min-w-0 max-w-full flex-col gap-1 rounded-[var(--radius-md)] border px-3 py-2"
+              style={{
+                borderColor: BUCKET_STYLES[worstBucket].border,
+                backgroundColor: BUCKET_STYLES[worstBucket].bg,
+              }}
+            >
+              <MutedKicker dir={primaryDir}>{t("chipWorst")}</MutedKicker>
+              <span className="mashwar-arabic text-[14px] font-bold" style={{ color: BUCKET_STYLES[worstBucket].text }}>
+                {tBucket(worstBucket)}
+              </span>
+            </div>
+            <div
+              className="inline-flex min-w-0 max-w-full flex-col gap-1 rounded-[var(--radius-md)] border px-3 py-2"
+              style={{
+                borderColor: riskStyles.border,
+                backgroundColor: riskStyles.bg,
+              }}
+            >
+              <MutedKicker dir={primaryDir}>{t("chipRisk")}</MutedKicker>
+              <span className="mashwar-arabic text-[14px] font-bold" style={{ color: riskStyles.text }}>
+                {tRisk(riskLevel)}
+              </span>
+            </div>
+          </div>
+
+          {routeConfidencePct !== null ? (
+            <div className="mt-3">
+              <MutedKicker dir={primaryDir}>
+                {t("confidenceShort", { value: formatConfidence(routeConfidence) })}
+              </MutedKicker>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--clr-night)]">
+                <div
+                  className="h-full rounded-full transition-[width] duration-500 ease-out"
+                  style={{
+                    width: `${Math.min(100, Math.max(6, routeConfidencePct))}%`,
+                    backgroundColor: riskStyles.text,
+                  }}
+                />
               </div>
-            </details>
+            </div>
           ) : null}
 
-          <section className="mt-4 rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Pill color={riskStyles.text} backgroundColor={riskStyles.bg} borderColor={riskStyles.border}>
-                {t("riskWithLevel", { label: tRisk(riskLevel) })}
-              </Pill>
-              <Pill
-                color={worstStyles.text}
-                backgroundColor={worstStyles.bg}
-                borderColor={worstStyles.border}
-              >
-                {t("worstPill", { label: tBucket(worstBucket) })}
-              </Pill>
-              <Pill color="#cbd5e1" backgroundColor="rgba(148, 163, 184, 0.12)" borderColor="rgba(148, 163, 184, 0.24)">
-                {t("rankPill", { rank: route.rank })}
-              </Pill>
-            </div>
-
-            <p className="mt-3 text-[13px] leading-6 text-[#dbe4f0]">
-              {route.reasonSummary || t("noSummary")}
-            </p>
-
-            {route.riskComponents.length > 0 ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {route.riskComponents.slice(0, 3).map((component) => (
+          {route.riskComponents.length > 0 ? (
+            <div className="mt-3">
+              <MutedKicker dir={primaryDir}>{t("riskDrivers")}</MutedKicker>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {route.riskComponents.map((component) => (
                   <span
                     key={component}
-                    className="rounded-full border border-white/8 bg-white/[0.05] px-2.5 py-1 text-[11px] text-[#cbd5e1]"
+                    className="mashwar-arabic max-w-full rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-mid)] px-2.5 py-1 text-[11px] leading-snug text-[var(--clr-sand)]"
+                    dir="auto"
                   >
-                    {component}
+                    {formatRiskFactorLine(component)}
                   </span>
                 ))}
               </div>
-            ) : null}
-          </section>
-
-          <section className="mt-4 rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="mashwar-mono text-[10px] uppercase tracking-[0.24em] text-[#6b7280]">
-                  {t("timelineTitle")}
-                </p>
-                <p className="mt-1 text-[13px] text-[#94a3b8]">{t("timelineSub")}</p>
-              </div>
             </div>
+          ) : null}
 
+          {route.reasonSummary ? (
+            <p className="mashwar-arabic mt-4 rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--glass-bg-mid)] px-3 py-2.5 text-[13px] leading-relaxed text-[var(--clr-sand)]">
+              {route.reasonSummary}
+            </p>
+          ) : (
+            <p className="mashwar-arabic mt-4 text-[12px] text-[var(--clr-slate)]" dir={primaryDir}>
+              {t("noSummary")}
+            </p>
+          )}
+
+          <div className="mt-6">
+            <MutedKicker dir={primaryDir}>{t("checkpointsHeading")}</MutedKicker>
             {orderedCheckpoints.length > 0 ? (
-              <div className="mt-4 space-y-3">
-                {(() => {
-                  let carriedDelayMs = 0;
+              <ul className="mt-3 space-y-3">
+                {orderedCheckpoints.map((checkpoint, index) => {
+                  const baseEtaMs = checkpoint.baseEtaMs ?? checkpoint.etaMs;
+                  const effectiveEtaMs = checkpoint.effectiveEtaMs ?? checkpoint.etaMs;
+                  const checkpointDelayMs =
+                    checkpoint.expectedDelayMs ?? Math.max(0, effectiveEtaMs - baseEtaMs);
+                  const hasDelay = checkpointDelayMs > 0;
+                  const carriedMs = checkpoint.cumulativeDelayMsBeforeCheckpoint;
+                  const probabilityEntries = getProbabilityEntries(checkpoint.forecastProbabilities);
+                  const totalProbability = probabilityEntries.reduce((sum, entry) => sum + entry.value, 0);
 
-                  return orderedCheckpoints.map((checkpoint, index) => {
-                    const currentStyles = BUCKET_STYLES[checkpoint.currentStatus];
-                    const etaStyles = BUCKET_STYLES[checkpoint.predictedStatusAtEta];
-                    const baseEtaMs = checkpoint.baseEtaMs ?? checkpoint.etaMs;
-                    const effectiveEtaMs = checkpoint.effectiveEtaMs ?? checkpoint.etaMs;
-                    const checkpointDelayMs =
-                      checkpoint.expectedDelayMs ??
-                      Math.max(0, effectiveEtaMs - baseEtaMs);
-                    const carriedForwardMs =
-                      checkpoint.cumulativeDelayMsBeforeCheckpoint ?? carriedDelayMs;
-                    const hasDelay = checkpointDelayMs > 0 || carriedForwardMs > 0;
-
-                    carriedDelayMs = Math.max(
-                      carriedForwardMs,
-                      carriedForwardMs + Math.max(0, checkpointDelayMs),
-                    );
-
-                    return (
-                      <article
-                        key={checkpoint.checkpointId}
-                        className={`rounded-[12px] border p-4 ${
-                          hasDelay
-                            ? "border-amber-500/30 bg-amber-500/5"
-                            : "border-[#2d3139] bg-black/20"
-                        }`}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-[15px] font-semibold text-[#f9fafb]">
-                              {index + 1}. {checkpoint.name}
-                            </p>
-                            <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              {checkpoint.city ?? na}
-                              {checkpoint.checkpointCityGroup
-                                ? t("rawGroup", { group: checkpoint.checkpointCityGroup })
-                                : ""}
-                            </p>
-                            <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              {formatCoordinatePair(checkpoint.lat, checkpoint.lng)}
-                            </p>
-                          </div>
-
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <Pill
-                              color="#cbd5e1"
-                              backgroundColor="rgba(148, 163, 184, 0.12)"
-                              borderColor="rgba(148, 163, 184, 0.24)"
-                            >
-                              {formatRouteDirection(checkpoint.routeDirection)}
-                            </Pill>
-                            <Pill
-                              color="#cbd5e1"
-                              backgroundColor="rgba(148, 163, 184, 0.12)"
-                              borderColor="rgba(148, 163, 184, 0.24)"
-                            >
-                              {formatSelectedStatusType(checkpoint.selectedStatusType)}
-                            </Pill>
-                            <Pill
-                              color="#cbd5e1"
-                              backgroundColor="rgba(148, 163, 184, 0.12)"
-                              borderColor="rgba(148, 163, 184, 0.24)"
-                            >
-                              {t("matchChip", { value: formatMatchConfidence(checkpoint.matchConfidence) })}
-                            </Pill>
-                            <span className="rounded-full border border-[#2d3139] px-2.5 py-1 text-[11px] text-[#cbd5e1]">
-                              {t("reach", { time: formatDateTimeLabel(checkpoint.crossingDateTime) })}
-                            </span>
-                            <span className="rounded-full border border-[#2d3139] px-2.5 py-1 text-[11px] text-[#cbd5e1]">
-                              {t("fromDeparture", { duration: formatDurationLabel(checkpoint.etaMs) })}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                          <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
-                            <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              {t("baseEta")}
-                            </p>
-                            <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
-                              {formatDurationLabel(baseEtaMs)}
-                            </p>
-                            <p className="mt-2 text-[12px] text-[#94a3b8]">{t("baseEtaHelp")}</p>
-                          </div>
-
-                          <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
-                            <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              {t("effectiveEta")}
-                            </p>
-                            <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
-                              {formatDurationLabel(effectiveEtaMs)}
-                            </p>
-                            <p className="mt-2 text-[12px] text-[#94a3b8]">{t("effectiveEtaHelp")}</p>
-                          </div>
-
-                          <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
-                            <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              {t("expectedDelay")}
-                            </p>
-                            <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
-                              {formatDurationLabel(checkpointDelayMs)}
-                            </p>
-                            <p className="mt-2 text-[12px] text-[#94a3b8]">
-                              {hasDelay
-                                ? t("carriedForward", { value: formatDurationLabel(carriedForwardMs) })
-                                : t("noPropagatedDelay")}
-                            </p>
-                          </div>
-
-                          <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
-                            <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              {t("prediction")}
-                            </p>
-                            <div className="mt-2">
-                              <Pill
-                                color={etaStyles.text}
-                                backgroundColor={etaStyles.bg}
-                                borderColor={etaStyles.border}
-                              >
-                                {tBucket(checkpoint.predictedStatusAtEta)}
-                              </Pill>
-                            </div>
-                            <p className="mt-2 text-[12px] text-[#94a3b8]">
-                              {t("directionAware", {
-                                value: formatRouteDirection(checkpoint.routeDirection),
-                              })}
-                            </p>
-                            <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              {t("selectedStatusLine", {
-                                value: formatSelectedStatusType(checkpoint.selectedStatusType),
-                              })}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 grid gap-3 md:grid-cols-2">
-                          <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
-                            <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              {t("statusNow")}
-                            </p>
-                            <div className="mt-2">
-                              <Pill
-                                color={currentStyles.text}
-                                backgroundColor={currentStyles.bg}
-                                borderColor={currentStyles.border}
-                              >
-                                {tBucket(checkpoint.currentStatus)}
-                              </Pill>
-                            </div>
-                            <p className="mt-3 text-[12px] text-[#94a3b8]">
-                              {t("directionLine", {
-                                value: formatRouteDirection(checkpoint.routeDirection),
-                              })}
-                            </p>
-                            <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              {t("selectedSideLine", {
-                                value: formatSelectedStatusType(checkpoint.selectedStatusType),
-                              })}
-                            </p>
-                            <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              {t("enteringRaw", {
-                                value: checkpoint.currentStatusRaw?.entering_status ?? na,
-                              })}
-                            </p>
-                            <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              {t("leavingRaw", {
-                                value: checkpoint.currentStatusRaw?.leaving_status ?? na,
-                              })}
-                            </p>
-                          </div>
-
-                          <div className="rounded-[10px] border border-[#2d3139] bg-white/[0.03] p-3">
-                            <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-                              {t("predictedAtEta")}
-                            </p>
-                            <div className="mt-2">
-                              <Pill
-                                color={etaStyles.text}
-                                backgroundColor={etaStyles.bg}
-                                borderColor={etaStyles.border}
-                              >
-                                {tBucket(checkpoint.predictedStatusAtEta)}
-                              </Pill>
-                            </div>
-                            <p className="mt-3 text-[12px] text-[#94a3b8]">
-                              {t("directionLine", {
-                                value: formatRouteDirection(checkpoint.routeDirection),
-                              })}
-                            </p>
-                            <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              {t("selectedSideLine", {
-                                value: formatSelectedStatusType(checkpoint.selectedStatusType),
-                              })}
-                            </p>
-                            <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              {t("forecastSource", { value: checkpoint.forecastSource ?? na })}
-                            </p>
-                            <p className="mt-1 text-[12px] text-[#94a3b8]">
-                              {t("confidenceLine", {
-                                value: formatConfidence(checkpoint.forecastConfidence),
-                              })}
-                            </p>
-                          </div>
-                        </div>
-
-                        {checkpoint.forecastReason ? (
-                          <p className="mt-3 rounded-[10px] border border-[#2d3139] bg-white/[0.03] px-3 py-2 text-[12px] leading-6 text-[#dbe4f0]">
-                            {checkpoint.forecastReason}
+                  return (
+                    <li
+                      key={checkpoint.checkpointId}
+                      className={`rounded-[var(--radius-md)] border px-3 py-3 sm:px-4 sm:py-3.5 ${
+                        hasDelay ? "border-[var(--risk-med)]/40 bg-[var(--risk-med-bg)]" : "border-[var(--glass-border)] bg-[var(--glass-bg-mid)]"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="mashwar-arabic text-[10px] font-semibold text-[var(--clr-slate)]" dir={primaryDir}>
+                            {t("cpIndex", { index: String(index + 1) })}
                           </p>
-                        ) : null}
+                          <p className="mashwar-arabic text-[16px] font-bold leading-snug text-[var(--clr-white)]" dir={primaryDir}>
+                            {checkpoint.name}
+                          </p>
+                          <p className="mashwar-arabic text-[11px] text-[var(--clr-slate)]" dir={primaryDir}>
+                            {checkpoint.city ?? na}
+                            {checkpoint.checkpointCityGroup ? t("rawGroup", { group: checkpoint.checkpointCityGroup }) : ""}
+                          </p>
+                          <p className="mashwar-mono mt-1 break-all text-[9px] text-[var(--clr-slate)]" dir="ltr">
+                            {checkpoint.checkpointId}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-0.5 text-end">
+                          <MutedKicker dir={primaryDir}>{t("cpCrossingApprox")}</MutedKicker>
+                          <p className="mashwar-arabic text-[15px] font-semibold tabular-nums text-[var(--clr-white)]" dir="ltr">
+                            {formatDateTimeLabel(checkpoint.crossingDateTime)}
+                          </p>
+                          <p className="mashwar-arabic text-[11px] text-[var(--clr-slate)]" dir={primaryDir}>
+                            {t("cpEtaDeparture")}: {formatDurationLabel(checkpoint.etaMs)}
+                          </p>
+                        </div>
+                      </div>
 
-                        {Object.keys(checkpoint.forecastProbabilities).length > 0 ? (
-                          <details className="mt-3 rounded-[10px] border border-[#2d3139] bg-white/[0.03] px-3 py-2">
-                            <summary className="cursor-pointer list-none text-[12px] font-medium text-[#dbe4f0]">
-                              {t("probabilityBreakdown")}
-                            </summary>
-                            {(() => {
-                              const probabilityEntries = getProbabilityEntries(
-                                checkpoint.forecastProbabilities,
-                              );
-                              const totalProbability = probabilityEntries.reduce(
-                                (sum, entry) => sum + entry.value,
-                                0,
-                              );
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <div className="flex flex-col gap-1">
+                          <MutedKicker dir={primaryDir}>{t("cpNow")}</MutedKicker>
+                          <StatusPill bucket={checkpoint.currentStatus}>{tBucket(checkpoint.currentStatus)}</StatusPill>
+                        </div>
+                        <span className="text-[var(--clr-slate)]" aria-hidden>
+                          →
+                        </span>
+                        <div className="flex flex-col gap-1">
+                          <MutedKicker dir={primaryDir}>{t("cpAtArrival")}</MutedKicker>
+                          <StatusPill bucket={checkpoint.predictedStatusAtEta}>
+                            {tBucket(checkpoint.predictedStatusAtEta)}
+                          </StatusPill>
+                        </div>
+                      </div>
 
-                              return (
-                                <>
-                                  <p className="mt-2 text-[12px] text-[#94a3b8]">
-                                    {getProbabilitySummary(checkpoint.forecastProbabilities)}
-                                  </p>
-                                  <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-[#111827]">
-                                    {probabilityEntries.map((entry) => (
-                                      <div
-                                        key={entry.label}
-                                        className="h-full"
-                                        style={{
-                                          width: `${
-                                            totalProbability > 0
-                                              ? Math.max(
-                                                  6,
-                                                  (entry.value / totalProbability) * 100,
-                                                )
-                                              : 0
-                                          }%`,
-                                          backgroundColor: getProbabilityColor(entry.label),
-                                        }}
-                                      />
-                                    ))}
-                                  </div>
-                                  <div className="mt-3 flex flex-wrap gap-2">
-                                    {probabilityEntries.map((entry) => (
-                                      <span
-                                        key={entry.label}
-                                        className="rounded-full border border-white/8 bg-white/[0.05] px-2.5 py-1 text-[11px] text-[#cbd5e1]"
-                                      >
-                                        {entry.label} {formatPercent(entry.value)}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </>
-                              );
-                            })()}
-                          </details>
-                        ) : null}
+                      <p className="mashwar-arabic mt-2 text-[12px] text-[var(--clr-sand)]" dir={primaryDir}>
+                        {hasDelay
+                          ? t("cpDelay", { duration: formatDurationLabel(checkpointDelayMs) })
+                          : t("cpNoDelay")}
+                      </p>
 
-                        <details className="mt-3 rounded-[10px] border border-[#2d3139] bg-white/[0.03] px-3 py-2">
-                          <summary className="cursor-pointer list-none text-[12px] font-medium text-[#dbe4f0]">
-                            {t("matchDetails")}
-                          </summary>
-                          <div className="mt-3 grid gap-2 text-[12px] text-[#94a3b8] sm:grid-cols-2">
-                            <p>
-                              {t("distanceFromRoute", {
-                                value: formatDistanceLabel(checkpoint.distanceFromRouteM),
-                              })}
-                            </p>
-                            <p>
-                              {t("matchConfidence", {
-                                value: formatMatchConfidence(checkpoint.matchConfidence),
-                              })}
-                            </p>
-                            <p>
-                              {t("projectionT", { value: formatNumberLabel(checkpoint.projectionT, 3) })}
-                            </p>
-                            <p>
-                              {t("nearestSegment", {
-                                value: formatNumberLabel(checkpoint.nearestSegmentIndex),
-                              })}
-                            </p>
-                            <p>
-                              {t("chainage", { value: formatNumberLabel(checkpoint.chainageM) })}
-                            </p>
-                            <p>
-                              {t("projectedPoint", {
-                                value: checkpoint.projectedPointOnRoute
-                                  ? formatCoordinatePair(
-                                      checkpoint.projectedPointOnRoute[1],
-                                      checkpoint.projectedPointOnRoute[0],
-                                    )
-                                  : na,
-                              })}
-                            </p>
+                      <div className="mt-3">
+                        <MutedKicker dir={primaryDir}>{t("cpSectionTiming")}</MutedKicker>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                          <StatTile kicker={t("baseEta")} value={formatDurationLabel(baseEtaMs)} hint={t("baseEtaHelp")} dir={primaryDir} />
+                          <StatTile
+                            kicker={t("effectiveEta")}
+                            value={formatDurationLabel(effectiveEtaMs)}
+                            hint={t("effectiveEtaHelp")}
+                            dir={primaryDir}
+                          />
+                          <StatTile kicker={t("expectedDelay")} value={formatDurationLabel(checkpointDelayMs)} dir={primaryDir} />
+                        </div>
+                      </div>
+
+                      <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-1 sm:px-4">
+                        <MutedKicker dir={primaryDir}>{t("cpSectionDetails")}</MutedKicker>
+                        <div className="divide-y divide-[var(--glass-border)]/70">
+                          <InfoRow label={t("cpUnifiedSideLabel")} value={unifiedCheckpointSideLabel(checkpoint)} dir={primaryDir} />
+                          <InfoRow
+                            label={t("cpMatchQualityLabel")}
+                            value={formatMatchConfidence(checkpoint.matchConfidence)}
+                            dir={primaryDir}
+                          />
+                          <InfoRow
+                            label={t("cpCarriedDelay")}
+                            value={
+                              carriedMs !== null && Number.isFinite(carriedMs) && carriedMs > 0
+                                ? formatDurationLabel(carriedMs)
+                                : t("noPropagatedDelay")
+                            }
+                            dir={primaryDir}
+                          />
+                          <InfoRow
+                            label={t("cpForecastSourceLabel")}
+                            value={formatForecastSourceDisplay(checkpoint.forecastSource)}
+                            dir={primaryDir}
+                          />
+                          <InfoRow
+                            label={t("cpForecastConfidenceLabel")}
+                            value={formatConfidence(checkpoint.forecastConfidence)}
+                            dir={primaryDir}
+                          />
+                          <InfoRow
+                            label={t("cpForecastModel")}
+                            value={
+                              checkpoint.forecastModelVersion !== null &&
+                              Number.isFinite(checkpoint.forecastModelVersion)
+                                ? String(Math.round(checkpoint.forecastModelVersion))
+                                : na
+                            }
+                            dir={primaryDir}
+                          />
+                          <InfoRow label={t("cpCoords")} value={formatCoordinatePair(checkpoint.lat, checkpoint.lng)} dir={primaryDir} />
+                          {checkpoint.severityRatio !== null && Number.isFinite(checkpoint.severityRatio) ? (
+                            <InfoRow label={t("severityRatioLabel")} value={formatRatioZeroOne(checkpoint.severityRatio)} dir={primaryDir} />
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-1 sm:px-4">
+                        <MutedKicker dir={primaryDir}>{t("cpSectionRawStatus")}</MutedKicker>
+                        <div className="divide-y divide-[var(--glass-border)]/70">
+                          <InfoRow
+                            label={t("cpRawEnteringLabel")}
+                            value={checkpoint.currentStatusRaw?.entering_status ?? na}
+                            dir={primaryDir}
+                          />
+                          <InfoRow
+                            label={t("cpRawLeavingLabel")}
+                            value={checkpoint.currentStatusRaw?.leaving_status ?? na}
+                            dir={primaryDir}
+                          />
+                        </div>
+                      </div>
+
+                      {checkpoint.forecastReason ? (
+                        <p className="mashwar-arabic mt-2 rounded-[var(--radius-sm)] border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-2 text-[12px] leading-relaxed text-[var(--clr-sand)]">
+                          <span className="font-semibold text-[var(--clr-white)]">{t("forecastReasonLabel")}: </span>
+                          {checkpoint.forecastReason}
+                        </p>
+                      ) : null}
+
+                      {probabilityEntries.length > 0 ? (
+                        <div className="mt-2 rounded-[var(--radius-sm)] border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-2">
+                          <MutedKicker dir={primaryDir}>{t("probabilityBreakdown")}</MutedKicker>
+                          <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-[var(--clr-night)]">
+                            {probabilityEntries.map((entry) => (
+                              <div
+                                key={entry.label}
+                                className="h-full"
+                                style={{
+                                  width: `${totalProbability > 0 ? Math.max(5, (entry.value / totalProbability) * 100) : 0}%`,
+                                  backgroundColor: probabilityBarColor(entry.label),
+                                }}
+                              />
+                            ))}
                           </div>
-                        </details>
-                      </article>
-                    );
-                  });
-                })()}
-              </div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {probabilityEntries.map((entry) => (
+                              <span
+                                key={entry.label}
+                                className="mashwar-arabic rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg-mid)] px-2 py-0.5 text-[10px] text-[var(--clr-sand)]"
+                              >
+                                {formatProbabilityLabel(entry.label, tBucket, t("probabilityLabelUnknown"))}{" "}
+                                {formatPercent(entry.value)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <CheckpointMatchGeometry
+                        checkpoint={checkpoint}
+                        na={na}
+                        t={t}
+                        formatDistanceLabel={formatDistanceLabel}
+                        formatNumberLabel={formatNumberLabel}
+                        formatCoordinatePair={formatCoordinatePair}
+                        formatMatchConfidence={formatMatchConfidence}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
             ) : (
-              <p className="mt-4 rounded-[10px] border border-dashed border-white/8 px-3 py-4 text-[12px] text-[#94a3b8]">
-                {t("noForecastDetails")}
-              </p>
+              <p className="mashwar-arabic mt-2 text-[12px] text-[var(--clr-slate)]">{t("noForecastDetails")}</p>
             )}
-          </section>
+          </div>
+
+          <details className="mt-4 rounded-[var(--radius-md)] border border-dashed border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2">
+            <summary className="mashwar-arabic cursor-pointer list-none font-semibold text-[var(--clr-sand)] [&::-webkit-details-marker]:hidden">
+              {t("technicalSection")}
+              <span className="mt-0.5 block text-[10px] font-normal text-[var(--clr-slate)]" dir={primaryDir}>
+                {t("technicalSectionSub")}
+              </span>
+            </summary>
+            <div className="mt-3 space-y-3">
+              {checkpointMatching ? (
+                <div className="rounded-[var(--radius-sm)] border border-[var(--glass-border)] bg-[var(--glass-bg-mid)] px-3 py-2">
+                  <p className="mashwar-mono text-[9px] uppercase tracking-[0.16em] text-[var(--clr-slate)]">{t("matchingMeta")}</p>
+                  <div className="mt-2 grid gap-1.5 text-[11px] text-[var(--clr-slate)]">
+                    <p className="mashwar-arabic">{t("matchingField.mode", { value: checkpointMatching.mode ?? na })}</p>
+                    <p className="mashwar-arabic">
+                      {t("matchingField.directionMode", { value: checkpointMatching.directionMode ?? na })}
+                    </p>
+                    <p className="mashwar-arabic">{t("matchingField.citySource", { value: checkpointMatching.citySource ?? na })}</p>
+                    <p className="mashwar-arabic">
+                      {t("matchingField.cityInference", { value: checkpointMatching.cityInference ?? na })}
+                    </p>
+                    <p className="mashwar-arabic">
+                      {t("matchingField.outerThreshold", { value: formatNumberLabel(checkpointMatching.outerThresholdM) })}
+                    </p>
+                    <p className="mashwar-arabic">
+                      {t("matchingField.strongMatch", { value: formatNumberLabel(checkpointMatching.strongMatchDistanceM) })}
+                    </p>
+                    <p className="mashwar-arabic">
+                      {t("matchingField.mediumMatch", { value: formatNumberLabel(checkpointMatching.mediumMatchDistanceM) })}
+                    </p>
+                    <p className="mashwar-arabic">
+                      {t("matchingField.weakMatch", { value: formatNumberLabel(checkpointMatching.weakMatchDistanceM) })}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="mashwar-arabic text-[11px] text-[var(--clr-slate)]">{tCommon("notAvailable")}</p>
+              )}
+            </div>
+          </details>
         </div>
       </section>
     </div>

@@ -1381,18 +1381,20 @@ export default function MapView({
 
     const selectedRouteId =
       routes.selectedRouteId ?? routePaths[0]?.routeId ?? null;
-    const routeIndexById = new Map(
-      routePaths.map((route, index) => [route.routeId, index] as const),
-    );
+    // Palette index must follow list order, not a Map keyed by routeId — duplicate
+    // route_id values from the API would collapse to one slot and paint both lines the same color.
+    const pathsWithPaletteIndex = routePaths.map((route, routeIndex) => ({
+      route,
+      routeIndex,
+    }));
     const orderedRoutes = [
-      ...routePaths.filter((route) => route.routeId !== selectedRouteId),
-      ...routePaths.filter((route) => route.routeId === selectedRouteId),
-    ]
-      .slice(0, ROUTE_LAYER_IDS.length)
-      .map((route) => ({
-        route,
-        routeIndex: routeIndexById.get(route.routeId) ?? 0,
-      }));
+      ...pathsWithPaletteIndex.filter(
+        ({ route }) => route.routeId !== selectedRouteId,
+      ),
+      ...pathsWithPaletteIndex.filter(
+        ({ route }) => route.routeId === selectedRouteId,
+      ),
+    ].slice(0, ROUTE_LAYER_IDS.length);
 
     orderedRoutes.forEach(({ route, routeIndex }, index) => {
       const sourceId = ROUTE_LAYER_IDS[index];
