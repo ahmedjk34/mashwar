@@ -140,6 +140,7 @@
       "gpsFromAria": "استخدم موقعي كنقطة انطلاق",
       "gpsToTitle": "استخدم موقعي كوجهة",
       "gpsToAria": "استخدم موقعي كوجهة",
+      "gpsLocationShort": "موقعي",
       "clearFromAria": "امسح نقطة الانطلاق",
       "clearToAria": "امسح الوجهة",
       "smartRouterTitle": "موجز المسار الذكي",
@@ -423,6 +424,11 @@
     "cpSectionRawStatus": "حالة السير الخام من المصدر",
     "cpMatchQualityLabel": "قديش المسار مطابق لهالحاجز",
     "cpForecastSourceLabel": "من وين جاي التوقّع",
+    "forecastSourceValue": {
+      "model": "نموذج ذكي داخلي",
+      "live": "خدمة لحظية",
+      "fallback": "{value}"
+    },
     "cpForecastConfidenceLabel": "قديش التوقّع مضبوط",
     "enteringRaw": "داخل (خام): {value}",
     "leavingRaw": "طالع (خام): {value}",

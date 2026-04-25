@@ -1150,13 +1150,13 @@ export default function MashwarHome() {
           <RouteLoadingFlagStripe dense className="opacity-95" />
           <div
             dir="ltr"
-            className="flex w-full max-w-full items-center justify-between gap-2 overflow-x-hidden px-2 py-1.5"
+            className="flex w-full max-w-full items-stretch gap-2 overflow-x-hidden px-2.5 py-2 sm:gap-3 sm:px-3.5"
           >
             <button
               type="button"
               onClick={handleRouteButtonClick}
               disabled={isRouteLoading}
-              className={`mashwar-arabic shrink-0 rounded-full px-4 py-2 text-sm font-semibold text-[var(--clr-white)] shadow-[0_2px_14px_rgba(0,0,0,0.35)] transition active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 ${
+              className={`mashwar-arabic shrink-0 self-center rounded-full px-4 py-2.5 text-sm font-semibold text-[var(--clr-white)] shadow-[0_2px_14px_rgba(0,0,0,0.35)] transition active:scale-[0.98] disabled:cursor-wait disabled:opacity-60 ${
                 routePaths.length > 0
                   ? "bg-[var(--clr-red-deep)] hover:bg-[var(--clr-red)] hover:shadow-[0_4px_18px_rgba(238,42,53,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--clr-red)]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,14,16,0.95)]"
                   : "bg-[var(--clr-green)] hover:brightness-110 hover:shadow-[0_4px_20px_rgba(0,98,51,0.42)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--clr-green-bright)]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,14,16,0.95)]"
@@ -1166,189 +1166,205 @@ export default function MashwarHome() {
             </button>
 
             <div
-              dir="rtl"
-              className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-1.5"
+              dir={locale === "ar" ? "rtl" : "ltr"}
+              className="flex min-h-[52px] min-w-0 flex-1 items-stretch justify-between gap-3 sm:gap-4 md:gap-5"
             >
               <div
-                className={`flex min-w-0 shrink items-center gap-0.5 rounded-full border border-transparent bg-[rgba(245,245,240,0.04)] px-1 py-0.5 transition-all duration-300 ease-out ${
+                dir={locale === "ar" ? "rtl" : "ltr"}
+                className={`flex min-w-0 flex-1 items-stretch gap-2 sm:gap-3 ${
                   endpointPlacementMode === "to" ? "opacity-40" : ""
-                } ${swapAnimating ? "translate-y-3.5" : ""} ${
-                  endpointPlacementMode === "from"
-                    ? "border-[var(--clr-green)]/35 ring-2 ring-[var(--clr-green)]/90 ring-offset-2 ring-offset-[rgba(12,14,16,0.92)] shadow-[0_0_24px_rgba(0,166,81,0.28)]"
-                    : ""
-                }`}
+                } ${swapAnimating ? "translate-y-3.5" : ""}`}
               >
                 <button
                   type="button"
-                  onClick={() => handleActivateEndpointPlacement("from")}
-                  className="flex min-w-0 max-w-[min(30vw,160px)] flex-1 flex-col rounded-full px-2 py-1.5 text-end transition hover:bg-white/8"
+                  onClick={handleGpsAsFrom}
+                  disabled={gpsLoading.from}
+                  title={
+                    gpsErrorField === "from" ? tErrors("geoUnavailable") : tRoute("gpsFromTitle")
+                  }
+                  aria-label={tRoute("gpsFromAria")}
+                  className={`relative flex min-h-[52px] min-w-[3.25rem] shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-2xl border px-1.5 py-1.5 shadow-inner transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--clr-green-bright)]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,14,16,0.92)] active:scale-[0.97] disabled:cursor-wait sm:min-h-[56px] sm:min-w-[3.75rem] sm:px-2 ${
+                    gpsErrorField === "from" ? "mashwar-gps-shake" : ""
+                  } ${
+                    fromGpsSet
+                      ? "border-[var(--clr-green)]/85 bg-[rgba(0,98,51,0.26)] text-[var(--clr-green-soft)] shadow-[0_0_0_1px_rgba(0,166,81,0.45)]"
+                      : "border-white/20 bg-white/[0.06] text-white/75 hover:border-[var(--clr-green)]/55 hover:bg-[rgba(0,98,51,0.16)] hover:text-[var(--clr-green-soft)]"
+                  }`}
                 >
-                  <span className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-[var(--clr-green-soft)]/65">
-                    {tRoute("from")}
-                  </span>
-                  <div className="flex min-w-0 items-center justify-end gap-1">
-                    {fromResolving ? (
-                      <span className="flex min-w-0 max-w-[min(30vw,160px)] flex-col items-end gap-1 py-0.5">
-                        <RouteLoadingFlagStripe dense className="w-14 max-w-full opacity-90" />
-                        <RouteLoadingMicroDots
-                          dotClassName="h-1.5 w-1.5 rounded-full"
-                          gapClass="gap-0.5"
-                          justify="end"
-                        />
-                      </span>
-                    ) : (
-                      <span
-                        dir="rtl"
-                        className="mashwar-arabic min-w-0 flex-1 truncate text-end text-[13px] font-medium text-white"
-                      >
-                        {routeFromBaseLabel}
-                      </span>
-                    )}
-                  </div>
-                </button>
-                {routeFrom && !fromResolving ? (
-                  <button
-                    type="button"
-                    onClick={handleClearFrom}
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:bg-white/12 hover:text-white"
-                    aria-label={tRoute("clearFromAria")}
-                  >
-                    <IoClose className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                ) : null}
-              </div>
-
-              <button
-                type="button"
-                onClick={handleGpsAsFrom}
-                disabled={gpsLoading.from}
-                title={
-                  gpsErrorField === "from" ? tErrors("geoUnavailable") : tRoute("gpsFromTitle")
-                }
-                aria-label={tRoute("gpsFromAria")}
-                className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border shadow-inner transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--clr-green-bright)]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,14,16,0.92)] active:scale-[0.96] disabled:cursor-wait ${
-                  gpsErrorField === "from" ? "mashwar-gps-shake" : ""
-                } ${
-                  fromGpsSet
-                    ? "border-[var(--clr-green)]/80 bg-[rgba(0,98,51,0.22)] text-[var(--clr-green-soft)] shadow-[0_0_0_1px_rgba(0,166,81,0.4)]"
-                    : "border-white/16 bg-white/[0.04] text-white/60 hover:border-[var(--clr-green)]/50 hover:bg-[rgba(0,98,51,0.12)] hover:text-[var(--clr-green-soft)]"
-                }`}
-              >
-                {fromGpsSet ? (
-                  <span
-                    className="pointer-events-none absolute inset-0 rounded-full bg-[var(--clr-green)]/25 animate-ping"
-                    style={{ animationDuration: "1.8s" }}
+                  {fromGpsSet ? (
+                    <span
+                      className="pointer-events-none absolute inset-0 rounded-2xl bg-[var(--clr-green)]/22 animate-ping"
+                      style={{ animationDuration: "1.8s" }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  {gpsLoading.from ? (
+                    <span className="absolute inset-0 flex items-center justify-center" aria-hidden>
+                      <RouteLoadingMicroDots
+                        dotClassName="h-2 w-2 rounded-full"
+                        gapClass="gap-0.5"
+                      />
+                    </span>
+                  ) : null}
+                  <MdMyLocation
+                    className={`relative h-6 w-6 shrink-0 transition duration-200 sm:h-7 sm:w-7 ${gpsLoading.from ? "opacity-25" : ""} ${fromGpsSet ? "scale-105 fill-[var(--clr-green-soft)]" : ""}`}
                     aria-hidden
                   />
-                ) : null}
-                {gpsLoading.from ? (
-                  <span className="absolute inset-0 flex items-center justify-center" aria-hidden>
-                    <RouteLoadingMicroDots
-                      dotClassName="h-1.5 w-1.5 rounded-full"
-                      gapClass="gap-0.5"
-                    />
+                  <span className="mashwar-arabic relative max-w-[4.25rem] text-center text-[9px] font-semibold leading-tight text-current opacity-90 sm:text-[10px]">
+                    {tRoute("gpsLocationShort")}
                   </span>
-                ) : null}
-                <MdMyLocation
-                  className={`relative h-5 w-5 transition duration-200 ${gpsLoading.from ? "opacity-20" : ""} ${fromGpsSet ? "scale-105 fill-[var(--clr-green-soft)]" : ""}`}
-                  aria-hidden
-                />
-              </button>
+                </button>
+
+                <div
+                  className={`flex min-w-0 flex-1 items-center gap-0.5 rounded-2xl border border-transparent bg-[rgba(245,245,240,0.06)] px-1 py-1 transition-all duration-300 ease-out sm:px-1.5 ${
+                    endpointPlacementMode === "from"
+                      ? "border-[var(--clr-green)]/40 ring-2 ring-[var(--clr-green)]/90 ring-offset-2 ring-offset-[rgba(12,14,16,0.92)] shadow-[0_0_28px_rgba(0,166,81,0.3)]"
+                      : ""
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleActivateEndpointPlacement("from")}
+                    className="flex min-h-[48px] min-w-0 flex-1 flex-col justify-center rounded-xl px-2.5 py-2 text-end transition hover:bg-white/10 sm:min-h-[52px] sm:px-3"
+                  >
+                    <span className="mashwar-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--clr-green-soft)] sm:text-[11px]">
+                      {tRoute("from")}
+                    </span>
+                    <div className="flex min-w-0 items-center justify-end gap-1">
+                      {fromResolving ? (
+                        <span className="flex min-w-0 w-full flex-col items-end gap-1 py-0.5">
+                          <RouteLoadingFlagStripe dense className="w-20 max-w-full opacity-90" />
+                          <RouteLoadingMicroDots
+                            dotClassName="h-1.5 w-1.5 rounded-full"
+                            gapClass="gap-0.5"
+                            justify="end"
+                          />
+                        </span>
+                      ) : (
+                        <span
+                          dir={locale === "ar" ? "rtl" : "ltr"}
+                          className="mashwar-arabic min-w-0 flex-1 truncate text-end text-[14px] font-semibold leading-snug text-white sm:text-[15px]"
+                        >
+                          {routeFromBaseLabel}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                  {routeFrom && !fromResolving ? (
+                    <button
+                      type="button"
+                      onClick={handleClearFrom}
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-full text-white/55 transition hover:bg-white/14 hover:text-white"
+                      aria-label={tRoute("clearFromAria")}
+                    >
+                      <IoClose className="h-4 w-4" aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
 
               <button
                 type="button"
                 onClick={handleSwapEndpoints}
                 disabled={swapAnimating}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/18 bg-[rgba(245,245,240,0.05)] text-[var(--clr-sand)] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] transition hover:border-[var(--clr-green)]/45 hover:bg-[rgba(0,98,51,0.12)] hover:text-[var(--clr-green-soft)] active:scale-[0.96] disabled:cursor-wait disabled:opacity-50"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-full border border-white/20 bg-[rgba(245,245,240,0.07)] text-[var(--clr-sand)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:border-[var(--clr-green)]/45 hover:bg-[rgba(0,98,51,0.14)] hover:text-[var(--clr-green-soft)] active:scale-[0.96] disabled:cursor-wait disabled:opacity-50 sm:h-12 sm:w-12"
                 title={tRoute("swapEndpointsTitle")}
                 aria-label={tRoute("swapEndpointsAria")}
               >
-                <MdSwapHoriz className="h-6 w-6" aria-hidden />
+                <MdSwapHoriz className="h-7 w-7" aria-hidden />
               </button>
 
               <div
-                className={`flex min-w-0 shrink items-center gap-0.5 rounded-full border border-transparent bg-[rgba(245,245,240,0.04)] px-1 py-0.5 transition-all duration-300 ease-out ${
+                dir={locale === "ar" ? "rtl" : "ltr"}
+                className={`flex min-w-0 flex-1 items-stretch gap-2 sm:gap-3 ${
                   endpointPlacementMode === "from" ? "opacity-40" : ""
-                } ${swapAnimating ? "-translate-y-3.5" : ""} ${
-                  endpointPlacementMode === "to"
-                    ? "border-[var(--clr-red)]/40 ring-2 ring-[var(--clr-red)]/85 ring-offset-2 ring-offset-[rgba(12,14,16,0.92)] shadow-[0_0_24px_rgba(238,42,53,0.25)]"
-                    : ""
-                }`}
+                } ${swapAnimating ? "-translate-y-3.5" : ""}`}
               >
-                <button
-                  type="button"
-                  onClick={() => handleActivateEndpointPlacement("to")}
-                  className="flex min-w-0 max-w-[min(30vw,160px)] flex-1 flex-col rounded-full px-2 py-1.5 text-end transition hover:bg-white/8"
+                <div
+                  className={`flex min-w-0 flex-1 items-center gap-0.5 rounded-2xl border border-transparent bg-[rgba(245,245,240,0.06)] px-1 py-1 transition-all duration-300 ease-out sm:px-1.5 ${
+                    endpointPlacementMode === "to"
+                      ? "border-[var(--clr-red)]/45 ring-2 ring-[var(--clr-red)]/88 ring-offset-2 ring-offset-[rgba(12,14,16,0.92)] shadow-[0_0_28px_rgba(238,42,53,0.28)]"
+                      : ""
+                  }`}
                 >
-                  <span className="mashwar-mono text-[9px] uppercase tracking-[0.2em] text-[#fca5a5]/75">
-                    {tRoute("to")}
-                  </span>
-                  <div className="flex min-w-0 items-center justify-end gap-1">
-                    {toResolving ? (
-                      <span className="flex min-w-0 max-w-[min(30vw,160px)] flex-col items-end gap-1 py-0.5">
-                        <RouteLoadingFlagStripe dense className="w-14 max-w-full opacity-90" />
-                        <RouteLoadingMicroDots
-                          dotClassName="h-1.5 w-1.5 rounded-full"
-                          gapClass="gap-0.5"
-                          justify="end"
-                        />
-                      </span>
-                    ) : (
-                      <span
-                        dir="rtl"
-                        className="mashwar-arabic min-w-0 flex-1 truncate text-end text-[13px] font-medium text-white"
-                      >
-                        {routeToBaseLabel}
-                      </span>
-                    )}
-                  </div>
-                </button>
-                {routeTo && !toResolving ? (
                   <button
                     type="button"
-                    onClick={handleClearTo}
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:bg-white/12 hover:text-white"
-                    aria-label={tRoute("clearToAria")}
+                    onClick={() => handleActivateEndpointPlacement("to")}
+                    className="flex min-h-[48px] min-w-0 flex-1 flex-col justify-center rounded-xl px-2.5 py-2 text-end transition hover:bg-white/10 sm:min-h-[52px] sm:px-3"
                   >
-                    <IoClose className="h-3.5 w-3.5" aria-hidden />
+                    <span className="mashwar-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#fca5a5] sm:text-[11px]">
+                      {tRoute("to")}
+                    </span>
+                    <div className="flex min-w-0 items-center justify-end gap-1">
+                      {toResolving ? (
+                        <span className="flex min-w-0 w-full flex-col items-end gap-1 py-0.5">
+                          <RouteLoadingFlagStripe dense className="w-20 max-w-full opacity-90" />
+                          <RouteLoadingMicroDots
+                            dotClassName="h-1.5 w-1.5 rounded-full"
+                            gapClass="gap-0.5"
+                            justify="end"
+                          />
+                        </span>
+                      ) : (
+                        <span
+                          dir={locale === "ar" ? "rtl" : "ltr"}
+                          className="mashwar-arabic min-w-0 flex-1 truncate text-end text-[14px] font-semibold leading-snug text-white sm:text-[15px]"
+                        >
+                          {routeToBaseLabel}
+                        </span>
+                      )}
+                    </div>
                   </button>
-                ) : null}
-              </div>
+                  {routeTo && !toResolving ? (
+                    <button
+                      type="button"
+                      onClick={handleClearTo}
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center self-center rounded-full text-white/55 transition hover:bg-white/14 hover:text-white"
+                      aria-label={tRoute("clearToAria")}
+                    >
+                      <IoClose className="h-4 w-4" aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
 
-              <button
-                type="button"
-                onClick={handleGpsAsTo}
-                disabled={gpsLoading.to}
-                title={gpsErrorField === "to" ? tErrors("geoUnavailable") : tRoute("gpsToTitle")}
-                aria-label={tRoute("gpsToAria")}
-                className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border shadow-inner transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--clr-red)]/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,14,16,0.92)] active:scale-[0.96] disabled:cursor-wait ${
-                  gpsErrorField === "to" ? "mashwar-gps-shake" : ""
-                } ${
-                  toGpsSet
-                    ? "border-[var(--clr-red)]/80 bg-[rgba(238,42,53,0.18)] text-[#fecaca] shadow-[0_0_0_1px_rgba(238,42,53,0.42)]"
-                    : "border-white/16 bg-white/[0.04] text-white/60 hover:border-[var(--clr-red)]/50 hover:bg-[rgba(238,42,53,0.12)] hover:text-[#fecaca]"
-                }`}
-              >
-                {toGpsSet ? (
-                  <span
-                    className="pointer-events-none absolute inset-0 rounded-full bg-[var(--clr-red)]/22 animate-ping"
-                    style={{ animationDuration: "1.8s" }}
+                <button
+                  type="button"
+                  onClick={handleGpsAsTo}
+                  disabled={gpsLoading.to}
+                  title={gpsErrorField === "to" ? tErrors("geoUnavailable") : tRoute("gpsToTitle")}
+                  aria-label={tRoute("gpsToAria")}
+                  className={`relative flex min-h-[52px] min-w-[3.25rem] shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-2xl border px-1.5 py-1.5 shadow-inner transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--clr-red)]/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(12,14,16,0.92)] active:scale-[0.97] disabled:cursor-wait sm:min-h-[56px] sm:min-w-[3.75rem] sm:px-2 ${
+                    gpsErrorField === "to" ? "mashwar-gps-shake" : ""
+                  } ${
+                    toGpsSet
+                      ? "border-[var(--clr-red)]/85 bg-[rgba(238,42,53,0.22)] text-[#fecaca] shadow-[0_0_0_1px_rgba(238,42,53,0.48)]"
+                      : "border-white/20 bg-white/[0.06] text-white/75 hover:border-[var(--clr-red)]/55 hover:bg-[rgba(238,42,53,0.16)] hover:text-[#fecaca]"
+                  }`}
+                >
+                  {toGpsSet ? (
+                    <span
+                      className="pointer-events-none absolute inset-0 rounded-2xl bg-[var(--clr-red)]/24 animate-ping"
+                      style={{ animationDuration: "1.8s" }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  {gpsLoading.to ? (
+                    <span className="absolute inset-0 flex items-center justify-center" aria-hidden>
+                      <RouteLoadingMicroDots
+                        dotClassName="h-2 w-2 rounded-full"
+                        gapClass="gap-0.5"
+                      />
+                    </span>
+                  ) : null}
+                  <MdMyLocation
+                    className={`relative h-6 w-6 shrink-0 transition duration-200 sm:h-7 sm:w-7 ${gpsLoading.to ? "opacity-25" : ""} ${toGpsSet ? "scale-105 fill-[#fecaca]" : ""}`}
                     aria-hidden
                   />
-                ) : null}
-                {gpsLoading.to ? (
-                  <span className="absolute inset-0 flex items-center justify-center" aria-hidden>
-                    <RouteLoadingMicroDots
-                      dotClassName="h-1.5 w-1.5 rounded-full"
-                      gapClass="gap-0.5"
-                    />
+                  <span className="mashwar-arabic relative max-w-[4.25rem] text-center text-[9px] font-semibold leading-tight text-current opacity-90 sm:text-[10px]">
+                    {tRoute("gpsLocationShort")}
                   </span>
-                ) : null}
-                <MdMyLocation
-                  className={`relative h-5 w-5 transition duration-200 ${gpsLoading.to ? "opacity-20" : ""} ${toGpsSet ? "scale-105 fill-[#fecaca]" : ""}`}
-                  aria-hidden
-                />
-              </button>
+                </button>
+              </div>
             </div>
           </div>
 

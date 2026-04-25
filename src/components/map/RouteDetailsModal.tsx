@@ -482,7 +482,8 @@ export default function RouteDetailsModal({
     const stRaw = checkpoint.selectedStatusType;
     const st = typeof stRaw === "string" ? stRaw.trim().toLowerCase() : null;
 
-    if (rd === "entering" || rd === "leaving" || rd === "transit") {
+    // This row asks "داخل ولا طالع" — never مارّ (transit); ambiguous API "transit" is resolved below.
+    if (rd === "entering" || rd === "leaving") {
       return formatRouteDirection(rd);
     }
 
@@ -502,8 +503,13 @@ export default function RouteDetailsModal({
       return formatRouteDirection("leaving");
     }
 
+    // Same bucket both sides (e.g. both سالك): still pick داخل or طالع — default approach side.
     if (enterB !== "unknown" && enterB === leaveB) {
-      return formatRouteDirection("transit");
+      return formatRouteDirection("entering");
+    }
+
+    if (rd === "transit") {
+      return formatRouteDirection("entering");
     }
 
     return formatRouteDirection("unknown");

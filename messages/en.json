@@ -140,6 +140,7 @@
       "gpsFromAria": "Use my location as start",
       "gpsToTitle": "Use my location as destination",
       "gpsToAria": "Use my location as destination",
+      "gpsLocationShort": "My location",
       "clearFromAria": "Clear start point",
       "clearToAria": "Clear destination",
       "smartRouterTitle": "Smart route brief",
