@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import RouteLoadingCard from "@/components/map/RouteLoadingCard";
 import { forecastHorizonSubkey, safeCheckpointFlowLabel } from "@/i18n/message-key-map";
@@ -17,6 +17,8 @@ import type {
   NaturalLanguageExecution,
   NaturalLanguageCheckpointExecution,
   NaturalLanguageRouteExecution,
+  RouteSimulationScenarioRole,
+  RouteSimulationWindow,
 } from "@/lib/types/route-intent";
 import { formatDateTimeInPalestine } from "@/lib/utils/palestine-time";
 
@@ -241,6 +243,17 @@ function formatTravelWindowHour(
   return `${`${Math.trunc(value)}`.padStart(2, "0")}:00`;
 }
 
+function sortSimulationsForDisplay(
+  windows: RouteSimulationWindow[],
+): RouteSimulationWindow[] {
+  const order: Record<RouteSimulationScenarioRole, number> = {
+    base: 0,
+    earlier: 1,
+    later: 2,
+  };
+  return [...windows].sort((a, b) => order[a.scenarioRole] - order[b.scenarioRole]);
+}
+
 function buildTravelWindowEntries(
   travelWindow: NormalizedCheckpointTravelWindow | null,
   tHeadline: (key: "best" | "worst") => string,
@@ -285,18 +298,42 @@ function StatusBadge({ status }: { status: MapCheckpointStatus }) {
   return <Pill label={label} text={visual.text} bg={visual.bg} border={visual.border} />;
 }
 
+function simulationScenarioTitle(
+  t: (key: string, values?: Record<string, string | number>) => string,
+  role: RouteSimulationScenarioRole,
+  offsetMinutesAbs: number,
+): string {
+  if (role === "base") {
+    return t("scenarioBase");
+  }
+  if (role === "earlier") {
+    return t("scenarioEarlier", { minutes: Math.max(1, offsetMinutesAbs) });
+  }
+  return t("scenarioLater", { minutes: Math.max(1, offsetMinutesAbs) });
+}
+
 function RouteWindowCard({
-  title,
+  scenarioRole,
+  scenarioTitle,
   departAt,
   route,
+  emphasizeAsPlan = false,
 }: {
-  title: string;
+  scenarioRole: RouteSimulationScenarioRole;
+  scenarioTitle: string;
   departAt: string;
   route: NaturalLanguageRouteExecution["resolution"]["route"]["mainRoute"];
+  /** When true, highlight this row as the user’s requested departure (what-if only). */
+  emphasizeAsPlan?: boolean;
 }) {
+  const locale = useLocale();
   const tWin = useTranslations("nlRoute.windowCard");
   const tRisk = useTranslations("routing.risk");
   const tCommon = useTranslations("common");
+  const isArabic = locale === "ar";
+  const statLabelClass = isArabic
+    ? "text-[11px] font-semibold leading-snug text-[#94a3b8]"
+    : "mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]";
 
   if (!route) {
     return null;
@@ -305,44 +342,67 @@ function RouteWindowCard({
   const riskStyle = NL_RISK_STYLES[route.riskLevel ?? "unknown"];
   const riskKey = route.riskLevel ?? "unknown";
   const riskLabel = tRisk(riskKey as "low");
+  const isBase = scenarioRole === "base";
+  const showPlanBadge = emphasizeAsPlan && isBase;
 
   return (
-    <article className="rounded-[18px] border border-white/8 bg-white/[0.03] p-4">
+    <article
+      className={`rounded-[18px] border bg-white/[0.03] p-4 ${
+        showPlanBadge
+          ? "border-emerald-400/35 ring-1 ring-emerald-400/20"
+          : "border-white/8"
+      }`}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
-            {title}
-          </p>
-          <h4 className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
-            {formatDateTimeLabel(departAt)}
-          </h4>
-          <p className="mt-2 text-[13px] leading-6 text-[#94a3b8]">
-            {route.reasonSummary || tWin("noSummary")}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p
+              className={
+                isArabic
+                  ? "text-[13px] font-semibold leading-snug text-[#e5e7eb]"
+                  : "text-[11px] font-semibold uppercase tracking-[0.2em] text-[#6b7280]"
+              }
+            >
+              {scenarioTitle}
+            </p>
+            {showPlanBadge ? (
+              <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-200/95">
+                {tWin("badgeYourPick")}
+              </span>
+            ) : null}
+          </div>
+          <p className={`mt-1 text-[12px] text-[#94a3b8] ${isArabic ? "mashwar-arabic" : ""}`}>
+            {tWin("departAtLabel")}{" "}
+            <span className="font-semibold text-[#e5e7eb]" dir="ltr">
+              {formatDateTimeLabel(departAt)}
+            </span>
           </p>
         </div>
 
-        <Pill
-          label={riskLabel}
-          text={riskStyle.text}
-          bg={riskStyle.bg}
-          border={riskStyle.border}
-        />
+        <span
+          className={`inline-flex shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold ${
+            isArabic ? "normal-case tracking-normal" : "uppercase tracking-[0.18em]"
+          }`}
+          style={{
+            color: riskStyle.text,
+            backgroundColor: riskStyle.bg,
+            borderColor: riskStyle.border,
+          }}
+        >
+          {riskLabel}
+        </span>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
-          <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-            {tWin("smartEta")}
-          </p>
-          <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.04] p-3">
+          <p className={statLabelClass}>{tWin("smartEta")}</p>
+          <p className="mt-1.5 text-[17px] font-semibold leading-tight text-[#f9fafb]" dir="ltr">
             {formatDateTimeLabel(route.smartEtaDateTime)}
           </p>
         </div>
-        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
-          <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-            {tWin("expectedDelay")}
-          </p>
-          <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
+        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.04] p-3">
+          <p className={statLabelClass}>{tWin("expectedDelay")}</p>
+          <p className="mt-1.5 text-[17px] font-semibold leading-tight text-[#f9fafb]">
             {route.expectedDelayMinutes !== null
               ? tWin("delayMinutes", {
                   minutes: Math.max(1, Math.round(route.expectedDelayMinutes)),
@@ -350,25 +410,34 @@ function RouteWindowCard({
               : tCommon("notAvailable")}
           </p>
         </div>
-        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
-          <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-            {tWin("risk")}
-          </p>
-          <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
-            {formatRiskScore(route.riskScore, tCommon)}
+        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.04] p-3">
+          <p className={statLabelClass}>{tWin("checkpoints")}</p>
+          <p className="mt-1.5 text-[17px] font-semibold tabular-nums text-[#f9fafb]">
+            {route.checkpointCount}
           </p>
         </div>
-        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.03] p-3">
-          <p className="mashwar-mono text-[10px] uppercase tracking-[0.2em] text-[#6b7280]">
-            {tWin("checkpoints")}
-          </p>
-          <p className="mt-2 text-[18px] font-semibold text-[#f9fafb]">
-            {route.checkpointCount}
+        <div className="rounded-[12px] border border-[#2d3139] bg-white/[0.04] p-3">
+          <p className={statLabelClass}>{tWin("risk")}</p>
+          <p className="mt-1.5 text-[17px] font-semibold tabular-nums text-[#f9fafb]">
+            {formatRiskScore(route.riskScore, tCommon)}
           </p>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      {route.reasonSummary ? (
+        <p
+          className={`mt-3 text-[13px] leading-6 text-[#94a3b8] ${isArabic ? "mashwar-arabic" : ""}`}
+          dir="auto"
+        >
+          {route.reasonSummary}
+        </p>
+      ) : (
+        <p className={`mt-3 text-[13px] text-[#6b7280] ${isArabic ? "mashwar-arabic" : ""}`}>
+          {tWin("noSummary")}
+        </p>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.06] pt-3">
         {route.riskConfidence !== null ? (
           <Pill
             label={tWin("confidencePill", {
@@ -408,6 +477,7 @@ export default function MashwarNaturalLanguageRouteModal({
   currentLocation,
   onApplyRoute,
 }: NaturalLanguageRouteModalProps) {
+  const locale = useLocale();
   const t = useTranslations("nlRoute");
   const tCommon = useTranslations("common");
   const tErrors = useTranslations("errors");
@@ -718,7 +788,12 @@ export default function MashwarNaturalLanguageRouteModal({
             </section>
           </aside>
 
-          <section className="mashwar-panel flex min-h-[min(52vh,20rem)] flex-1 flex-col overflow-hidden md:h-full md:min-h-[min(60vh,26rem)]">
+          <section
+            className={`mashwar-panel flex min-h-[min(52vh,20rem)] flex-1 flex-col overflow-hidden md:h-full md:min-h-[min(60vh,26rem)] ${
+              locale === "ar" ? "mashwar-arabic" : ""
+            }`}
+            dir={locale === "ar" ? "rtl" : "ltr"}
+          >
             <div
               className={`mashwar-scroll flex min-h-0 flex-1 flex-col overflow-y-auto ${isParsing ? "p-0" : "p-4"}`}
             >
@@ -824,32 +899,50 @@ export default function MashwarNaturalLanguageRouteModal({
                   </section>
 
                   {result.resolution.simulations.length > 0 ? (
-                    <section className="space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
+                    <section className="space-y-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p
+                            className={`text-[10px] font-semibold uppercase tracking-[0.28em] text-[#6b7280] ${
+                              locale === "ar" ? "normal-case tracking-[0.12em]" : "mashwar-mono"
+                            }`}
+                          >
                             {t("whatIf")}
                           </p>
-                          <h4 className="mt-1 text-[18px] font-semibold text-[#f9fafb]">{t("departureWindows")}</h4>
+                          <h4 className="mt-1 text-[19px] font-semibold leading-snug text-[#f9fafb]">
+                            {t("whatIfCompareTitle")}
+                          </h4>
+                          <p className="mt-1.5 max-w-prose text-[13px] leading-6 text-[#94a3b8]">
+                            {t("whatIfCompareHint")}
+                          </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => onApplyRoute?.(result.resolution)}
-                          className="inline-flex h-10 items-center justify-center rounded-[8px] border border-[#2d3139] bg-transparent px-4 text-[12px] font-semibold text-[#e5e7eb] transition hover:bg-white/5 hover:text-[#f9fafb]"
+                          className="inline-flex h-10 shrink-0 items-center justify-center rounded-[8px] border border-[#2d3139] bg-white/[0.04] px-4 text-[12px] font-semibold text-[#e5e7eb] transition hover:bg-white/10 hover:text-[#f9fafb] sm:self-center"
                         >
                           {t("applyOnMap")}
                         </button>
                       </div>
 
                       <div className="space-y-3">
-                        {result.resolution.simulations.map((window) => (
-                          <RouteWindowCard
-                            key={`${window.label}-${window.departAt}`}
-                            title={window.label}
-                            departAt={window.departAt}
-                            route={window.routes.mainRoute}
-                          />
-                        ))}
+                        {sortSimulationsForDisplay(result.resolution.simulations).map((window) => {
+                          const offsetAbs = Math.max(1, Math.abs(window.offsetMinutes));
+                          return (
+                            <RouteWindowCard
+                              key={`${window.scenarioRole}-${window.departAt}`}
+                              scenarioRole={window.scenarioRole}
+                              scenarioTitle={simulationScenarioTitle(
+                                t,
+                                window.scenarioRole,
+                                window.scenarioRole === "base" ? 0 : offsetAbs,
+                              )}
+                              departAt={window.departAt}
+                              route={window.routes.mainRoute}
+                              emphasizeAsPlan
+                            />
+                          );
+                        })}
                       </div>
                     </section>
                   ) : (
@@ -870,7 +963,8 @@ export default function MashwarNaturalLanguageRouteModal({
                         </button>
                       </div>
                       <RouteWindowCard
-                        title={t("liveRoute")}
+                        scenarioRole="base"
+                        scenarioTitle={t("liveRoute")}
                         departAt={result.resolution.departAt ?? new Date().toISOString()}
                         route={result.resolution.route.mainRoute}
                       />

@@ -34,8 +34,11 @@ export interface ParsedNaturalLanguageIntent {
   needsClarification: boolean;
 }
 
+export type RouteSimulationScenarioRole = "earlier" | "base" | "later";
+
 export interface RouteSimulationWindow {
-  label: string;
+  /** Which departure-time branch this row represents (UI translates; never English-only). */
+  scenarioRole: RouteSimulationScenarioRole;
   departAt: string;
   offsetMinutes: number;
   routes: NormalizedRoutes;

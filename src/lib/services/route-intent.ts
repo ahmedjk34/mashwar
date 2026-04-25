@@ -301,16 +301,14 @@ function buildSimulationWindows(departAt: string | null, prompt: string): string
   return [earlier, base, later];
 }
 
-function getSimulationLabel(index: number, offsetMinutes: number): string {
+function getSimulationScenarioRole(index: number): "earlier" | "base" | "later" {
   if (index === 0) {
-    return `Leave ${offsetMinutes} min earlier`;
+    return "earlier";
   }
-
   if (index === 1) {
-    return "Base departure";
+    return "base";
   }
-
-  return `Leave ${offsetMinutes} min later`;
+  return "later";
 }
 
 function levenshteinDistance(left: string, right: string): number {
@@ -522,7 +520,7 @@ async function resolveRouteExecution(
           destination_city: parse.entities.destinationCity ?? undefined,
           profile: "car",
         }).then((routes) => ({
-          label: getSimulationLabel(index, offsetMinutes),
+          scenarioRole: getSimulationScenarioRole(index),
           departAt: simulationDepartAt,
           offsetMinutes: index === 1 ? 0 : offsetMinutes * (index === 0 ? -1 : 1),
           routes,
@@ -539,7 +537,7 @@ async function resolveRouteExecution(
         departAt,
         route: simulationRoutes[1]?.routes ?? simulationRoutes[0].routes,
         simulations: simulationRoutes.map((entry) => ({
-          label: entry.label,
+          scenarioRole: entry.scenarioRole,
           departAt: entry.departAt,
           offsetMinutes: entry.offsetMinutes,
           routeCount: entry.routes.routes.length,
@@ -570,7 +568,7 @@ async function resolveRouteExecution(
         departAt,
         route: simulationRoutes[1]?.routes ?? simulationRoutes[0].routes,
         simulations: simulationRoutes.map((entry) => ({
-          label: entry.label,
+          scenarioRole: entry.scenarioRole,
           departAt: entry.departAt,
           offsetMinutes: entry.offsetMinutes,
           routes: entry.routes,

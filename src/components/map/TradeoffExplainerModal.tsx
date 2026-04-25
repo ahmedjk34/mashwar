@@ -436,7 +436,8 @@ export default function TradeoffExplainerModal({
         ].join(" ");
 
   const shellClass = [
-    "mashwar-tradeoff-shell pointer-events-auto w-[min(100vw-1.5rem,460px)] h-full flex flex-col overflow-hidden rounded-[26px] border shadow-[0_30px_100px_rgba(0,0,0,0.72)] backdrop-blur-2xl",
+    "mashwar-tradeoff-shell w-[min(100vw-1.5rem,460px)] h-full flex flex-col overflow-hidden rounded-[26px] border shadow-[0_30px_100px_rgba(0,0,0,0.72)] backdrop-blur-2xl",
+    isMinimized ? "pointer-events-none" : "pointer-events-auto",
     shellMotionClass,
   ].join(" ");
 
@@ -454,7 +455,9 @@ export default function TradeoffExplainerModal({
           aria-label={`${t("dockTitle")}. ${t("dockHint")}`}
           title={t("dockHint")}
           dir={isArabic ? "rtl" : "ltr"}
-          className="mashwar-tradeoff-dock-card mashwar-arabic group pointer-events-auto flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-start transition duration-200 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(228,49,43,0.45)] active:scale-[0.98] sm:gap-3.5 sm:px-3.5 sm:py-3"
+          className={`mashwar-tradeoff-dock-card mashwar-arabic group flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-start transition duration-200 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[rgba(228,49,43,0.45)] active:scale-[0.98] sm:gap-3.5 sm:px-3.5 sm:py-3 ${
+            isMinimized ? "pointer-events-auto" : "pointer-events-none"
+          }`}
         >
           <span className="mashwar-tradeoff-watermelon" aria-hidden />
           <span className="min-w-0 flex-1">
@@ -475,7 +478,9 @@ export default function TradeoffExplainerModal({
         <button
           type="button"
           onClick={() => setIsOpen(false)}
-          className="mashwar-tradeoff-dock-dismiss mashwar-arabic pointer-events-auto self-center rounded-lg px-2 py-1 text-[11px] font-medium text-[#7d8694] transition hover:text-[#cbd5e1]"
+          className={`mashwar-tradeoff-dock-dismiss mashwar-arabic self-center rounded-lg px-2 py-1 text-[11px] font-medium text-[#7d8694] transition hover:text-[#cbd5e1] ${
+            isMinimized ? "pointer-events-auto" : "pointer-events-none"
+          }`}
         >
           {t("dockHide")}
         </button>
