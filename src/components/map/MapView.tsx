@@ -47,6 +47,7 @@ import type {
   RoutePath,
   RoutePoint,
   RoutingRiskLevel,
+  RoutingRouteViability,
   UserLocation,
 } from "@/lib/types/map";
 
@@ -107,7 +108,13 @@ interface RouteLabelItem {
   delayLabel: string | null;
   riskLabel: string;
   riskTone: "good" | "warning" | "danger";
-  scoreLabel: string;
+  /** Primary numeric risk / route score line (e.g. “Risk 47.0”). */
+  scoreDetailLabel: string;
+  /** Localized full “model confidence …” line for section 3. */
+  confidenceLineLabel: string;
+  viabilityLabel: string;
+  /** Worst forecast status label only (paired with `metaForecastTitle` in the card). */
+  pressureStatusText: string | null;
   checkpointLabel: string;
   summaryLabel: string | null;
   isSelected: boolean;
@@ -123,7 +130,12 @@ function getRouteLayerStyle(routeIndex: number, isSelected: boolean) {
     width: isSelected ? ROUTE_STYLE.MAIN_WIDTH : ROUTE_STYLE.ALT_WIDTH,
     opacity: isSelected ? ROUTE_STYLE.MAIN_OPACITY : ROUTE_STYLE.ALT_OPACITY,
     outlineColor: ROUTE_STYLE.OUTLINE_COLOR,
-    outlineWidth: ROUTE_STYLE.OUTLINE_WIDTH,
+    outlineWidth: isSelected
+      ? ROUTE_STYLE.OUTLINE_WIDTH_SELECTED
+      : ROUTE_STYLE.OUTLINE_WIDTH_ALT,
+    outlineBlur: isSelected
+      ? ROUTE_STYLE.OUTLINE_BLUR_SELECTED
+      : ROUTE_STYLE.OUTLINE_BLUR_ALT,
   };
 }
 
@@ -362,6 +374,19 @@ export default function MapView({
   const tPopup = useTranslations("map.popup");
   const tCard = useTranslations("map.card");
   const tMarker = useTranslations("map.marker");
+  const tViability = useTranslations("tradeoff.viability");
+  const tBucket = useTranslations("routing.bucket");
+  const dateIntlLocale = locale.startsWith("ar") ? "ar" : "en-US";
+
+  const formatViabilityLabel = useCallback(
+    (v: RoutingRouteViability) => {
+      if (v === "good" || v === "risky" || v === "avoid") {
+        return tViability(v);
+      }
+      return tViability("unknown");
+    },
+    [tViability],
+  );
 
   const humanizeRiskComponentLine = useCallback(
     (raw: string) => {
@@ -403,7 +428,7 @@ export default function MapView({
     (route: RoutePath): string | null => {
       const summary = route.reasonSummary?.trim();
       if (summary) {
-        return truncateLabel(summary, 54);
+        return truncateLabel(summary, 92);
       }
       if (route.riskComponents.length === 0) {
         return null;
@@ -412,7 +437,7 @@ export default function MapView({
         .slice(0, 2)
         .map(humanizeRiskComponentLine)
         .join(" · ");
-      return truncateLabel(lines, 54);
+      return truncateLabel(lines, 92);
     },
     [humanizeRiskComponentLine],
   );
@@ -464,19 +489,11 @@ export default function MapView({
       return tMap("arrivalNa");
     }
 
-    return formatDateTimeInPalestine(value);
-  }
-
-  function getRouteNoteLabel(route: RoutePath): string | null {
-    if (route.expectedDelayMinutes !== null && route.expectedDelayMinutes > 0) {
-      return tMap("noteBaseEtaDelay");
-    }
-
-    if (route.riskComponents.length > 0) {
-      return route.riskComponents[0];
-    }
-
-    return null;
+    return formatDateTimeInPalestine(
+      value,
+      { dateStyle: "medium", timeStyle: "short" },
+      dateIntlLocale,
+    );
   }
 
   function getRouteScoreLabel(route: RoutePath): string {
@@ -510,10 +527,12 @@ export default function MapView({
     if (totalMinutes >= 60) {
       const hours = Math.floor(totalMinutes / 60);
       const minutes = totalMinutes % 60;
-      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+      return minutes > 0
+        ? tCommon("durationHM", { hours: String(hours), minutes: String(minutes) })
+        : tCommon("durationH", { hours: String(hours) });
     }
 
-    return `${totalMinutes} min`;
+    return tCommon("durationMin", { minutes: String(totalMinutes) });
   }
 
   function formatRouteDistance(distanceM: number): string {
@@ -522,18 +541,12 @@ export default function MapView({
     }
 
     if (distanceM >= 1000) {
-      return `${(distanceM / 1000).toFixed(distanceM >= 10000 ? 0 : 1)} km`;
+      return tCommon("unitKm", {
+        value: (distanceM / 1000).toFixed(distanceM >= 10000 ? 0 : 1),
+      });
     }
 
-    return `${Math.round(distanceM)} m`;
-  }
-
-  function formatConfidence(value: number | null): string {
-    if (value === null || !Number.isFinite(value)) {
-      return tCommon("notAvailable");
-    }
-
-    return tCommon("percent", { value: Math.round(value * 100) });
+    return tCommon("unitM", { value: String(Math.round(distanceM)) });
   }
 
   function resolveRouteArrivalDateTime(route: RoutePath): string | null {
@@ -562,23 +575,69 @@ export default function MapView({
   function getRouteHoverMarkup(route: RoutePath): string {
     const risk = getRouteRiskLabel(route);
     const smartEtaLabel = formatRouteArrivalLabel(resolveRouteArrivalDateTime(route));
+    const durationSmart = formatDurationLabel(route.smartEtaMs ?? route.durationMs);
     const expectedDelay =
       formatDelayLabel(route.expectedDelayMinutes ?? route.estimatedDelayMinutes) ??
       tCommon("notAvailable");
-    const note = getRouteNoteLabel(route);
-    const riskLine = tPopup("riskWithScore", {
-      label: risk.label,
-      score: getRouteRiskScoreParen(route),
-    });
+    const summarySource =
+      route.reasonSummary?.trim() ||
+      route.riskComponents.map(humanizeRiskComponentLine).join(" · ") ||
+      "";
+    const summaryRaw = summarySource ? truncateLabel(summarySource, 120) : null;
+    const summary = summaryRaw ? escapeHtml(summaryRaw) : "";
+    const viability = escapeHtml(formatViabilityLabel(route.routeViability));
+    const routeMeta = escapeHtml(
+      tCard("checkpointsDistance", {
+        count: route.checkpointCount,
+        distance: formatRouteDistance(route.distanceM),
+      }),
+    );
+    const pressure =
+      route.worstPredictedStatus !== "unknown"
+        ? escapeHtml(
+            tCard("forecastAlongRoute", {
+              status: tBucket(route.worstPredictedStatus),
+            }),
+          )
+        : "";
+    const riskLine = escapeHtml(
+      tPopup("riskWithScore", {
+        label: risk.label,
+        score: getRouteRiskScoreParen(route),
+      }),
+    );
+    const confidenceLine =
+      route.riskConfidence !== null && Number.isFinite(route.riskConfidence)
+        ? escapeHtml(
+            tCard("modelConfidenceLine", {
+              value: String(Math.round(route.riskConfidence * 100)),
+            }),
+          )
+        : escapeHtml(tCard("modelConfidenceNa"));
+    const hoverDir = locale.startsWith("ar") ? "rtl" : "ltr";
 
     return `
-      <div style="min-width: 160px; color: #f8fafc;">
-        <div style="font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: #94a3b8;">${escapeHtml(tPopup("routeNumber", { rank: route.rank }))}</div>
-        <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px; font-size: 12px;">
-          <div><span style="color: #94a3b8;">${escapeHtml(tPopup("smartEta"))}</span> <span style="font-weight: 600;">${escapeHtml(smartEtaLabel)}</span></div>
-          <div><span style="color: #94a3b8;">${escapeHtml(tPopup("expectedDelay"))}</span> <span style="font-weight: 600;">${escapeHtml(expectedDelay)}</span></div>
-          <div><span style="color: #94a3b8;">${escapeHtml(tPopup("journeyRisk"))}</span> <span style="font-weight: 600;">${escapeHtml(riskLine)}</span></div>
-          ${note ? `<div style="color: #cbd5e1;">${escapeHtml(note)}</div>` : ""}
+      <div class="mashwar-route-hover-root" dir="${hoverDir}">
+        <div class="mashwar-route-hover-sec mashwar-route-hover-sec--route">
+          <div class="mashwar-route-hover-k">${escapeHtml(tCard("sectionIdentity"))}</div>
+          <div class="mashwar-route-hover-row mashwar-route-hover-row--head">
+            <span class="mashwar-route-hover-route-num">${escapeHtml(tPopup("routeNumber", { rank: route.rank }))}</span>
+            <span class="mashwar-route-hover-pill">${viability}</span>
+          </div>
+          <div class="mashwar-route-hover-meta">${routeMeta}</div>
+          ${pressure ? `<div class="mashwar-route-hover-meta">${pressure}</div>` : ""}
+        </div>
+        <div class="mashwar-route-hover-sec mashwar-route-hover-sec--time">
+          <div class="mashwar-route-hover-k">${escapeHtml(tCard("sectionTime"))}</div>
+          <div class="mashwar-route-hover-eta">${escapeHtml(durationSmart)}</div>
+          <div class="mashwar-route-hover-sub">${escapeHtml(tCard("smartDurationCaption"))} · ${escapeHtml(smartEtaLabel)}</div>
+          <div class="mashwar-route-hover-delay"><span class="mashwar-route-hover-dim">${escapeHtml(tPopup("expectedDelay"))}</span> <strong>${escapeHtml(expectedDelay)}</strong></div>
+        </div>
+        <div class="mashwar-route-hover-sec mashwar-route-hover-sec--risk">
+          <div class="mashwar-route-hover-k">${escapeHtml(tCard("sectionRisk"))}</div>
+          <div class="mashwar-route-hover-riskline">${riskLine}</div>
+          <div class="mashwar-route-hover-confidence">${confidenceLine}</div>
+          ${summary ? `<p class="mashwar-route-hover-summary" dir="auto">${summary}</p>` : ""}
         </div>
       </div>
     `;
@@ -628,9 +687,9 @@ export default function MapView({
         const viewportFactor = clamp((Math.min(width, height) - 300) / 920, 0, 1);
         const zoomNorm = clamp((zoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM), 0, 1);
         const mapScale = clamp(
-          0.5 + zoomNorm * 0.4 + viewportFactor * 0.12,
-          0.48,
-          1,
+          0.56 + zoomNorm * 0.42 + viewportFactor * 0.14,
+          0.54,
+          1.06,
         );
         const offsetDistance = 10 + mapScale * 10;
         const opacity = clamp(0.76 + zoomNorm * 0.2, 0.76, 0.97);
@@ -647,11 +706,11 @@ export default function MapView({
             );
             const routeScale = isSelectedRoute ? mapScale : mapScale * 0.9;
             const labelBaseWidth = isSelectedRoute
-              ? Math.round(224 + mapScale * 22)
-              : Math.round(154 + mapScale * 14);
+              ? Math.round(280 + mapScale * 32)
+              : Math.round(168 + mapScale * 18);
             const labelBaseHeight = isSelectedRoute
-              ? Math.round(92 + mapScale * 12)
-              : Math.round(40 + mapScale * 6);
+              ? Math.round(168 + mapScale * 26)
+              : Math.round(46 + mapScale * 8);
             const summaryLabel = isSelectedRoute ? buildRouteCardSummary(route) : null;
             const checkpointLabel = isSelectedRoute
               ? tCard("checkpointsDistance", {
@@ -690,7 +749,18 @@ export default function MapView({
                   ),
                   riskLabel: risk.label,
                   riskTone: risk.tone,
-                  scoreLabel: `${getRouteScoreLabel(route)} · ${formatConfidence(route.riskConfidence)}`,
+                  scoreDetailLabel: getRouteScoreLabel(route),
+                  confidenceLineLabel:
+                    route.riskConfidence !== null && Number.isFinite(route.riskConfidence)
+                      ? tCard("modelConfidenceLine", {
+                          value: String(Math.round(route.riskConfidence * 100)),
+                        })
+                      : tCard("modelConfidenceNa"),
+                  viabilityLabel: formatViabilityLabel(route.routeViability),
+                  pressureStatusText:
+                    route.worstPredictedStatus !== "unknown"
+                      ? tBucket(route.worstPredictedStatus)
+                      : null,
                   checkpointLabel,
                   summaryLabel,
                   isSelected: isSelectedRoute,
@@ -786,7 +856,18 @@ export default function MapView({
                 ),
                 riskLabel: risk.label,
                 riskTone: risk.tone,
-                scoreLabel: `${getRouteScoreLabel(route)} · ${formatConfidence(route.riskConfidence)}`,
+                scoreDetailLabel: getRouteScoreLabel(route),
+                confidenceLineLabel:
+                  route.riskConfidence !== null && Number.isFinite(route.riskConfidence)
+                    ? tCard("modelConfidenceLine", {
+                        value: String(Math.round(route.riskConfidence * 100)),
+                      })
+                    : tCard("modelConfidenceNa"),
+                viabilityLabel: formatViabilityLabel(route.routeViability),
+                pressureStatusText:
+                  route.worstPredictedStatus !== "unknown"
+                    ? tBucket(route.worstPredictedStatus)
+                    : null,
                 checkpointLabel,
                 summaryLabel,
                 isSelected: isSelectedRoute,
@@ -820,6 +901,8 @@ export default function MapView({
     tMap,
     tCard,
     tCommon,
+    tBucket,
+    formatViabilityLabel,
     buildRouteCardSummary,
   ]);
 
@@ -1421,7 +1504,8 @@ export default function MapView({
         paint: {
           "line-color": style.outlineColor,
           "line-width": style.outlineWidth,
-          "line-opacity": 0.95,
+          "line-opacity": 0.92,
+          "line-blur": style.outlineBlur,
         },
       });
 
@@ -1575,6 +1659,11 @@ export default function MapView({
     tCommon,
     tMap,
     tPopup,
+    tCard,
+    formatViabilityLabel,
+    tBucket,
+    humanizeRiskComponentLine,
+    locale,
   ]);
 
   return (
@@ -1603,7 +1692,7 @@ export default function MapView({
                 }}
               >
                 <div
-                  className="relative overflow-hidden rounded-xl border border-slate-200 text-slate-950 antialiased transition-opacity duration-150 ease-out"
+                  className="relative overflow-hidden rounded-2xl border border-slate-200 text-slate-950 antialiased transition-opacity duration-150 ease-out"
                   style={{
                     width: item.baseWidth,
                     minHeight: item.baseHeight,
@@ -1615,110 +1704,146 @@ export default function MapView({
                   }}
                 >
                   {item.isSelected ? (
-                    <div className="relative px-3 py-2.5">
+                    <div
+                      className="relative divide-y divide-slate-200/95"
+                      dir={locale.startsWith("ar") ? "rtl" : "ltr"}
+                    >
                       <div
-                        className="absolute inset-y-0 left-0 w-1 rounded-l-xl"
+                        className="absolute inset-y-0 start-0 w-1.5 rounded-s-2xl"
                         style={{ backgroundColor: item.accentColor }}
                       />
                       <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(148,163,184,0.35),transparent)]" />
 
-                      <div className="flex items-start justify-between gap-2 pl-1">
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <span
-                            className="h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-white/80"
-                            style={{ backgroundColor: item.accentColor }}
-                          />
-                          <p
-                            className="shrink-0 text-[9px] font-bold uppercase tracking-[0.14em]"
-                            style={{ color: routeMetaColor }}
-                          >
-                            {tCard("routeNumber", { rank: item.rank })}
-                          </p>
+                      <div className="relative px-4 pb-4 pt-4 ps-[18px]">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          {tCard("sectionIdentity")}
+                        </p>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2.5">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <span
+                              className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/90"
+                              style={{ backgroundColor: item.accentColor }}
+                            />
+                            <p className="min-w-0 text-[18px] font-semibold leading-tight tracking-tight text-slate-950">
+                              {tCard("routeNumber", { rank: item.rank })}
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-lg border border-slate-200/90 bg-slate-50 px-3.5 py-1.5 text-[12px] font-semibold leading-none text-slate-800">
+                            {item.viabilityLabel}
+                          </span>
                         </div>
-                        <span
-                          className="shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.1em] leading-none"
-                          style={{
-                            color: toneStyles.text,
-                            backgroundColor: toneStyles.background,
-                            borderColor: toneStyles.border,
-                          }}
-                        >
-                          {item.riskLabel}
-                        </span>
+
+                        <p className="mt-4 text-[11.5px] font-semibold leading-snug text-slate-600">
+                          {tCard("metaCheckpointsTitle")}
+                        </p>
+                        <p className="mt-1 text-[15px] font-semibold leading-snug text-slate-800">
+                          {item.checkpointLabel}
+                        </p>
+
+                        {item.pressureStatusText ? (
+                          <div className="mt-4">
+                            <p className="text-[11.5px] font-semibold leading-snug text-slate-600">
+                              {tCard("metaForecastTitle")}
+                            </p>
+                            <p className="mt-1 text-[14px] font-semibold leading-snug text-slate-800">
+                              {item.pressureStatusText}
+                            </p>
+                          </div>
+                        ) : null}
                       </div>
 
-                      <div className="mt-1.5 flex min-w-0 items-end justify-between gap-2 pl-1">
-                        <p className="text-[26px] font-semibold leading-none tracking-tight text-slate-950">
-                          {item.durationLabel}
+                      <div className="relative space-y-3 px-4 py-4 ps-[18px]">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          {tCard("sectionTime")}
                         </p>
-                        <p className="max-w-[55%] truncate pb-0.5 text-right text-[10px] font-medium leading-tight text-slate-600">
-                          {tCard("eta", { time: item.arrivalLabel })}
-                        </p>
-                      </div>
-
-                      <div className="mt-2 grid grid-cols-3 gap-1.5 pl-1">
-                        <div className="rounded-lg border border-slate-200 bg-white px-2 py-1.5">
-                          <p className="text-[8px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                            {tCard("delay")}
+                        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                          <p className="text-[34px] font-semibold leading-none tracking-tight text-slate-950">
+                            {item.durationLabel}
                           </p>
-                          <p
-                            className="mt-1 truncate text-[11px] font-semibold leading-tight text-slate-900"
+                          <div className="flex min-w-0 max-w-full flex-col gap-1 sm:max-w-[min(260px,52%)] sm:items-end sm:text-end">
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                              {tCard("smartDurationCaption")}
+                            </span>
+                            <span
+                              className="text-[13.5px] font-medium leading-snug text-slate-600 tabular-nums"
+                              dir="auto"
+                            >
+                              {item.arrivalLabel}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200/90 bg-slate-50/95 px-3.5 py-3">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                            {tCard("delay")}
+                          </span>
+                          <span
+                            className="text-[15px] font-semibold tabular-nums tracking-tight text-slate-900"
                             style={{ color: item.delayLabel ? item.accentColor : "#475569" }}
                           >
                             {item.delayLabel ?? tCard("clear")}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-slate-200 bg-white px-2 py-1.5">
-                          <p className="text-[8px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                            {tCard("routeData")}
-                          </p>
-                          <p className="mt-1 line-clamp-2 text-[11px] font-semibold leading-snug text-slate-800">
-                            {item.checkpointLabel}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-slate-200 bg-white px-2 py-1.5">
-                          <p className="text-[8px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                            {tCard("signal")}
-                          </p>
-                          <p className="mt-1 line-clamp-2 text-[11px] font-semibold leading-snug text-slate-800">
-                            {item.scoreLabel}
-                          </p>
+                          </span>
                         </div>
                       </div>
 
-                      {item.summaryLabel ? (
-                        <p className="mt-2 line-clamp-2 pl-1 text-[10px] font-medium leading-snug text-slate-600">
-                          {item.summaryLabel}
+                      <div className="relative space-y-2.5 px-4 pb-4 pt-4 ps-[18px]">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          {tCard("sectionRisk")}
                         </p>
-                      ) : null}
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <span className="text-[19px] font-semibold tabular-nums tracking-tight text-slate-900">
+                            {item.scoreDetailLabel}
+                          </span>
+                          <span
+                            className="shrink-0 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] leading-none"
+                            style={{
+                              color: toneStyles.text,
+                              backgroundColor: toneStyles.background,
+                              borderColor: toneStyles.border,
+                            }}
+                          >
+                            {item.riskLabel}
+                          </span>
+                        </div>
+                        <p className="text-[13px] font-medium leading-snug text-slate-600">
+                          {item.confidenceLineLabel}
+                        </p>
+                        {item.summaryLabel ? (
+                          <p
+                            className="line-clamp-3 text-[12.5px] font-medium leading-relaxed text-slate-700"
+                            dir="auto"
+                          >
+                            {item.summaryLabel}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                   ) : (
-                    <div className="relative flex items-center gap-2 px-2.5 py-2 pl-3">
+                    <div className="relative flex items-center gap-2.5 px-3 py-2.5 ps-[14px]">
                       <div
-                        className="absolute inset-y-0 left-0 w-1 rounded-l-xl"
+                        className="absolute inset-y-0 start-0 w-1 rounded-s-xl"
                         style={{ backgroundColor: item.accentColor }}
                       />
                       <span
-                        className="h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-white/80"
+                        className="h-2 w-2 shrink-0 rounded-full ring-2 ring-white/90"
                         style={{ backgroundColor: item.accentColor }}
                       />
                       <div className="min-w-0 flex-1">
                         <p
-                          className="truncate text-[8px] font-bold uppercase tracking-[0.12em]"
+                          className="truncate text-[9px] font-bold uppercase tracking-[0.14em]"
                           style={{ color: routeMetaColor }}
                         >
                           {tCard("routeNumber", { rank: item.rank })}
                         </p>
-                        <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
-                          <span className="shrink-0 text-[17px] font-semibold leading-none tracking-tight text-slate-950">
+                        <div className="mt-1 flex min-w-0 items-baseline gap-2">
+                          <span className="shrink-0 text-[19px] font-semibold leading-none tracking-tight text-slate-950">
                             {item.durationLabel}
                           </span>
-                          <span className="min-w-0 truncate text-[9px] font-medium uppercase tracking-[0.08em] text-slate-600">
+                          <span className="min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">
                             {item.riskLabel}
                           </span>
                         </div>
                       </div>
-                      <p className="shrink-0 max-w-[42%] truncate text-right text-[10px] font-semibold tabular-nums text-slate-800">
+                      <p className="shrink-0 max-w-[44%] truncate text-end text-[11px] font-semibold tabular-nums text-slate-800">
                         {item.checkpointLabel}
                       </p>
                     </div>

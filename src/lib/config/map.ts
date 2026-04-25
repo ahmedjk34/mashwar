@@ -63,12 +63,17 @@ export const HEATMAP_CORRIDOR_MAIN_LAYER_ID =
   "mashwar-uncertainty-corridors-main";
 
 export const ROUTE_STYLE = {
-  MAIN_WIDTH: 6.5,
+  /** Core line (drawn above the soft halo). */
+  MAIN_WIDTH: 6,
   MAIN_OPACITY: 1,
-  ALT_WIDTH: 5.5,
-  ALT_OPACITY: 1,
-  OUTLINE_COLOR: "#0f172a",
-  OUTLINE_WIDTH: 10,
+  ALT_WIDTH: 4.75,
+  ALT_OPACITY: 0.92,
+  /** Soft halo instead of a heavy solid “stroke” so routes read cleaner on the basemap. */
+  OUTLINE_COLOR: "rgba(15, 23, 42, 0.32)",
+  OUTLINE_WIDTH_SELECTED: 11,
+  OUTLINE_WIDTH_ALT: 8.5,
+  OUTLINE_BLUR_SELECTED: 1.1,
+  OUTLINE_BLUR_ALT: 0.85,
   PALETTE: ["#006233", "#f59e0b", "#ee2a35"] as const,
 } as const;
 

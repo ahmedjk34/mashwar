@@ -84,7 +84,6 @@
       "kickerMono": "حاجز",
       "closeAria": "سكّر اللوحة",
       "currentSrOnly": "الوضع هلّق",
-      "mismatchAlert": "انتباه: دخول وخروج مش نفس الشي. شوف البطاقتين تحت؛ أسوأ وضع هو {worst}.",
       "routeFromCta": "بلّش من هون",
       "routeFromSub": "مسار من هون",
       "routeToCta": "الوجهة",
@@ -93,7 +92,8 @@
       "forecastMono": "توقّع",
       "live": "لحظي",
       "lastDataUpdate": "آخر تحديث للبيانات:",
-      "travelWindowSummary": "نافذة السفر",
+      "travelWindowCollapsibleTitle": "أوقات التعدّي",
+      "travelWindowIntro": "ملخّص أحسن وأسوأ وقت للعبور حسب التوقّع — الدخول والخروج ممكن يختلفوا.",
       "pillReference": "مرجع",
       "pillScope": "النطاق",
       "day": "اليوم",
@@ -101,6 +101,8 @@
       "targetSlot": "الموعد المستهدف",
       "entering": "داخل",
       "leaving": "طالع",
+      "travelWindowSideEntering": "توقّع اتجاه الدخول",
+      "travelWindowSideLeaving": "توقّع اتجاه الخروج",
       "confidencePrefix": "الثقة",
       "bestWindow": "أحسن وقت تعدّي",
       "worstWindow": "أسوأ وقت تعدّي",
@@ -108,7 +110,20 @@
       "forecastLoading": "عم بنحمّل التوقّعات…",
       "forecastWaiting": "منستنى خطّ التوقّع.",
       "forecastEstimating": "عم نقدّر شو بصير على الحاجز…",
-      "forecastEmpty": "لسه ما في صفوف توقّع لهالحاجز."
+      "forecastEmpty": "لسه ما في صفوف توقّع لهالحاجز.",
+      "travelWindowScopes": {
+        "both": "دخول وخروج معًا",
+        "entering": "اتجاه الدخول",
+        "leaving": "اتجاه الخروج",
+        "entering_only": "دخول بس",
+        "leaving_only": "خروج بس",
+        "24h": "آخر ٢٤ ساعة",
+        "daily": "يومي",
+        "weekly": "أسبوعي",
+        "hourly": "ساعة بساعة",
+        "peak": "أوقات الذروة",
+        "off_peak": "خارج الذروة"
+      }
     }
   },
   "forecast": {
@@ -116,7 +131,7 @@
       "plus30m": "خلال نص ساعة",
       "plus1h": "خلال ساعة",
       "plus2h": "خلال ساعتين",
-      "nextDay8am": "بكرا تقريبًا الساعة 8 الصبح",
+      "nextDay8am": "بكرة ع ال8 الصبح",
       "unknown": "{code}"
     },
     "coverage": {
@@ -279,6 +294,15 @@
     "durationNa": "مش متوفر",
     "distanceZero": "0 كم",
     "card": {
+      "sectionIdentity": "المسار",
+      "sectionTime": "الوقت",
+      "sectionRisk": "المخاطرة",
+      "metaCheckpointsTitle": "عدد الحواجز والمسافة",
+      "metaForecastTitle": "أسوأ حالة متوقعة على المسار",
+      "modelConfidenceLine": "ثقة النموذج {value}٪",
+      "modelConfidenceNa": "ثقة النموذج غير متوفرة",
+      "forecastAlongRoute": "أسوأ توقع على المسار: {status}",
+      "smartDurationCaption": "الوصول",
       "routeNumber": "مسار #{rank}",
       "eta": "الوصول {time}",
       "delay": "التأخير",

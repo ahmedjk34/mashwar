@@ -1,6 +1,7 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import type { CSSProperties } from "react";
+import { useLocale, useTranslations } from "next-intl";
 
 import { checkpointBadgeSubkey, checkpointFlowSubkey } from "@/i18n/message-key-map";
 import type { MapCheckpointStatus } from "@/lib/types/map";
@@ -35,6 +36,7 @@ export function DirectionStatusTile({
   direction: "entering" | "leaving";
   status: MapCheckpointStatus;
 }) {
+  const locale = useLocale();
   const tDir = useTranslations("checkpoint.direction");
   const tDirMono = useTranslations("checkpoint.directionMono");
   const tFlow = useTranslations("checkpoint.flow");
@@ -47,24 +49,22 @@ export function DirectionStatusTile({
   const badgeKey = checkpointBadgeSubkey(status);
   const flowLabel = tFlow(flowKey);
   const badgeLabel = tBadge(badgeKey);
+  const ariaLabel =
+    locale === "ar"
+      ? `${titlePrimary} — ${flowLabel} (${badgeLabel})`
+      : `${titleMono} — ${flowLabel} (${badgeLabel})`;
 
   return (
     <div
+      role="group"
+      aria-label={ariaLabel}
       className="relative overflow-hidden rounded-[var(--radius-lg)] border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
       style={{ borderInlineStartWidth: 3, borderInlineStartColor: visual.border }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 text-end" dir="rtl">
-          <p className="mashwar-arabic text-[13px] font-semibold leading-tight text-[var(--clr-white)]">
-            {titlePrimary}
-          </p>
-          <p
-            className="mashwar-mono mt-0.5 text-[9px] uppercase tracking-[0.16em] text-[var(--clr-slate)]"
-            dir="ltr"
-          >
-            {titleMono}
-          </p>
-        </div>
+      <span className="sr-only">
+        {titlePrimary} ({titleMono})
+      </span>
+      <div className="flex items-start justify-end gap-2">
         <span
           className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/10"
           style={{ backgroundColor: visual.dot }}
@@ -72,7 +72,7 @@ export function DirectionStatusTile({
         />
       </div>
       <p
-        className="mashwar-arabic mt-3 text-end text-[20px] font-bold leading-snug tracking-tight"
+        className="mashwar-arabic mt-2 text-end text-[20px] font-bold leading-snug tracking-tight"
         style={{ color: visual.text }}
         dir="rtl"
       >
@@ -89,6 +89,7 @@ export function DirectionStatusTile({
 }
 
 export function FusedDirectionsStatusTile({ status }: { status: MapCheckpointStatus }) {
+  const locale = useLocale();
   const tDir = useTranslations("checkpoint.direction");
   const tDirMono = useTranslations("checkpoint.directionMono");
   const tFlow = useTranslations("checkpoint.flow");
@@ -99,24 +100,24 @@ export function FusedDirectionsStatusTile({ status }: { status: MapCheckpointSta
   const badgeKey = checkpointBadgeSubkey(status);
   const flowLabel = tFlow(flowKey);
   const badgeLabel = tBadge(badgeKey);
+  const bothPrimary = tDir("both");
+  const bothMono = tDirMono("both");
+  const ariaLabel =
+    locale === "ar"
+      ? `${bothPrimary} — ${flowLabel} (${badgeLabel})`
+      : `${bothMono} — ${flowLabel} (${badgeLabel})`;
 
   return (
     <div
+      role="group"
+      aria-label={ariaLabel}
       className="relative overflow-hidden rounded-[var(--radius-lg)] border border-[var(--glass-border)] bg-gradient-to-b from-[var(--glass-bg-raised)] to-[var(--glass-bg-mid)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
       style={{ borderTopWidth: 3, borderTopColor: visual.border }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2" dir="rtl">
-        <div className="text-end">
-          <p className="mashwar-arabic text-[11px] font-semibold text-[var(--clr-sand)]">
-            {tDir("both")}
-          </p>
-          <p
-            className="mashwar-mono mt-0.5 text-[9px] uppercase tracking-[0.18em] text-[var(--clr-slate)]"
-            dir="ltr"
-          >
-            {tDirMono("both")}
-          </p>
-        </div>
+      <span className="sr-only">
+        {bothPrimary} ({bothMono})
+      </span>
+      <div className="flex flex-wrap items-center justify-end gap-2" dir="rtl">
         <span
           className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/10"
           style={{ backgroundColor: visual.dot }}
@@ -124,7 +125,7 @@ export function FusedDirectionsStatusTile({ status }: { status: MapCheckpointSta
         />
       </div>
       <p
-        className="mashwar-arabic mt-4 text-center text-[clamp(1.35rem,4.5vw,1.75rem)] font-bold leading-tight"
+        className="mashwar-arabic mt-3 text-center text-[clamp(1.35rem,4.5vw,1.75rem)] font-bold leading-tight"
         style={{ color: visual.text }}
         dir="rtl"
       >
@@ -147,6 +148,7 @@ export function ForecastDirectionCell({
   direction: "entering" | "leaving";
   item: import("@/lib/types/map").NormalizedCheckpointForecast["predictions"]["entering"][number] | null;
 }) {
+  const locale = useLocale();
   const tDir = useTranslations("checkpoint.direction");
   const tDirMono = useTranslations("checkpoint.directionMono");
   const tFlow = useTranslations("checkpoint.flow");
@@ -159,31 +161,48 @@ export function ForecastDirectionCell({
   const tone = item ? getConfidenceTone(item.prediction.confidence, tCommon) : null;
   const flowKey = checkpointFlowSubkey(status);
   const flowLabel = item ? tFlow(flowKey) : tCommon("dash");
-  const conf = item
-    ? `${tPanel("confidencePrefix")} ${tCommon("percent", { value: Math.round((item.prediction.confidence ?? 0) * 100) })}`
+  const titlePrimary = direction === "entering" ? tDir("entering") : tDir("leaving");
+  const titleMono = direction === "entering" ? tDirMono("entering") : tDirMono("leaving");
+  const confPct = item
+    ? tCommon("percent", { value: Math.round((item.prediction.confidence ?? 0) * 100) })
     : tCommon("dash");
+  const ariaLabel =
+    locale === "ar"
+      ? `${titlePrimary} — ${flowLabel} (${tPanel("confidencePrefix")} ${confPct})`
+      : `${titleMono} — ${flowLabel} (${tPanel("confidencePrefix")} ${confPct})`;
+
+  const active = Boolean(item);
+  const cellStyle: CSSProperties | undefined = active
+    ? {
+        borderTopColor: visual.border,
+        borderTopWidth: 3,
+        background: `linear-gradient(165deg, color-mix(in srgb, ${visual.border} 24%, transparent) 0%, transparent 42%), linear-gradient(180deg, ${visual.softBg} 0%, rgba(17, 24, 39, 0.72) 100%)`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px color-mix(in srgb, ${visual.border} 22%, transparent), 0 12px 28px color-mix(in srgb, ${visual.border} 14%, transparent)`,
+      }
+    : {
+        borderTopWidth: 1,
+        borderTopColor: "var(--glass-border)",
+      };
 
   return (
     <div
-      className={`rounded-[var(--radius-md)] border border-[var(--glass-border)] bg-[var(--glass-bg)]/80 p-2.5 ${item ? "" : "opacity-55"}`}
-      style={{ borderInlineStartWidth: 2, borderInlineStartColor: visual.border }}
+      role="group"
+      aria-label={active ? ariaLabel : `${titlePrimary} — ${tCommon("dash")}`}
+      className={`relative overflow-hidden rounded-[var(--radius-md)] border border-[var(--glass-border)] p-3 ${active ? "ring-1 ring-white/[0.06]" : "opacity-55"}`}
+      style={cellStyle}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 text-end" dir="rtl">
-          <p className="mashwar-arabic text-[12px] font-semibold text-[var(--clr-sand)]">
-            {direction === "entering" ? tDir("entering") : tDir("leaving")}
-          </p>
-          <p
-            className="mashwar-mono text-[9px] uppercase tracking-[0.14em] text-[var(--clr-slate)]"
-            dir="ltr"
-          >
-            {direction === "entering" ? tDirMono("entering") : tDirMono("leaving")}
-          </p>
-        </div>
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: visual.dot }} aria-hidden />
+      <span className="sr-only">
+        {titlePrimary} ({titleMono})
+      </span>
+      <div className="flex items-start justify-end gap-2">
+        <span
+          className="mt-0.5 h-3 w-3 shrink-0 rounded-full ring-2 ring-white/15"
+          style={{ backgroundColor: visual.dot, boxShadow: active ? `0 0 14px color-mix(in srgb, ${visual.border} 55%, transparent)` : undefined }}
+          aria-hidden
+        />
       </div>
       <p
-        className="mashwar-arabic mt-2 text-end text-[15px] font-bold leading-snug"
+        className="mashwar-arabic mt-2 text-end text-[clamp(1.05rem,3.2vw,1.25rem)] font-bold leading-snug tracking-tight"
         style={{ color: item ? visual.text : "var(--clr-slate)" }}
         dir="rtl"
       >
@@ -191,14 +210,17 @@ export function ForecastDirectionCell({
       </p>
       {item ? (
         <p
-          className="mashwar-mono mt-1 text-end text-[10px]"
+          className="mashwar-arabic mt-2.5 text-end text-[10px] font-semibold leading-snug"
           style={{ color: tone?.color ?? "var(--clr-slate)" }}
           dir="rtl"
         >
-          {conf}
+          {tPanel("confidencePrefix")}{" "}
+          <span className="mashwar-mono tabular-nums font-bold tracking-tight" dir="ltr">
+            {confPct}
+          </span>
         </p>
       ) : (
-        <p className="mashwar-mono mt-1 text-end text-[10px] text-[var(--clr-slate)]">{tCommon("dash")}</p>
+        <p className="mashwar-mono mt-2 text-end text-[10px] text-[var(--clr-slate)]">{tCommon("dash")}</p>
       )}
     </div>
   );

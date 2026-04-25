@@ -100,8 +100,19 @@ function resolveRouteArrivalDateTime(
   return new Date(departDate.getTime() + smartEtaMs).toISOString();
 }
 
-function getRouteSmartEta(route: RoutePath, departAt: string | null): string {
-  return formatDateTimeInPalestine(resolveRouteArrivalDateTime(route, departAt));
+function getRouteSmartEta(
+  route: RoutePath,
+  departAt: string | null,
+  intlLocale = "en-US",
+): string {
+  return formatDateTimeInPalestine(
+    resolveRouteArrivalDateTime(route, departAt),
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    },
+    intlLocale,
+  );
 }
 
 function getProbabilityEntries(probabilities: Record<string, number>) {
@@ -371,6 +382,7 @@ export default function RouteDetailsModal({
   const tTradeoff = useTranslations("tradeoff");
 
   const primaryDir: "rtl" | "ltr" = locale === "ar" ? "rtl" : "ltr";
+  const dateIntlLocale = locale.startsWith("ar") ? "ar" : "en-US";
 
   function formatViabilityLabel(v: RoutePath["routeViability"]): string {
     if (v === "good" || v === "risky" || v === "avoid") {
@@ -634,7 +646,11 @@ export default function RouteDetailsModal({
   }
 
   function formatDateTimeLabel(value: string | null): string {
-    return formatDateTimeInPalestine(value);
+    return formatDateTimeInPalestine(
+      value,
+      { dateStyle: "medium", timeStyle: "short" },
+      dateIntlLocale,
+    );
   }
 
   function getRouteDelayLabel(r: RoutePath): string {
@@ -671,7 +687,7 @@ export default function RouteDetailsModal({
   const riskLevel = normalizeRiskLevel(route);
   const riskStyles = RISK_STYLES[riskLevel];
   const worstBucket = route.worstPredictedStatus;
-  const routeSmartEta = getRouteSmartEta(route, departAt);
+  const routeSmartEta = getRouteSmartEta(route, departAt, dateIntlLocale);
   const isV5Route = routeVersion === "v5";
   const orderedCheckpoints = [...route.checkpoints].sort((left, right) => {
     const leftEta = left.effectiveEtaMs ?? left.etaMs;
@@ -684,7 +700,11 @@ export default function RouteDetailsModal({
 
   const plannedDepartLabel =
     departAt && !Number.isNaN(new Date(departAt).getTime())
-      ? formatDateTimeInPalestine(departAt)
+      ? formatDateTimeInPalestine(
+          departAt,
+          { dateStyle: "medium", timeStyle: "short" },
+          dateIntlLocale,
+        )
       : t("plannedDepartNa");
 
   return (

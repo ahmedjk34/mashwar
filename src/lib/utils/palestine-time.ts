@@ -119,6 +119,8 @@ export function formatDateTimeInPalestine(
     dateStyle: "medium",
     timeStyle: "short",
   },
+  /** BCP-47 tag for calendar output (defaults preserve previous English formatting). */
+  intlLocale = "en-US",
 ): string {
   if (!value) {
     return "n/a";
@@ -129,7 +131,7 @@ export function formatDateTimeInPalestine(
     return value;
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(intlLocale, {
     ...options,
     timeZone: PALESTINE_TIME_ZONE,
   }).format(parsed);
