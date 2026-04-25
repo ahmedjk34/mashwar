@@ -23,6 +23,7 @@ import { translateServiceError } from "@/lib/i18n/translate-service-error";
 import { buildCorridorSegments } from "@/lib/heatmap/corridorSegments";
 import { normalizeCheckpointId } from "@/lib/heatmap/normalizeCheckpoint";
 import { getRouteDisplayEtaMinutes, hasValidCoordinates, getRenderableRoutes } from "@/lib/config/map";
+import { getCityCenters, getCityDisplayLabel, normalizePlaceLabel } from "@/lib/data/cities";
 import { getCheckpoints } from "@/lib/services/checkpoints";
 import { getCheckpointForecast } from "@/lib/services/forecast";
 import { fetchHeatmapCache, streamHeatmapNetwork } from "@/lib/services/heatmap";
@@ -48,7 +49,7 @@ import type {
 import { useLocale, useTranslations } from "next-intl";
 import { FaFire } from "react-icons/fa";
 import { IoChevronDown, IoClose, IoSearch } from "react-icons/io5";
-import { MdMyLocation, MdSwapHoriz } from "react-icons/md";
+import { MdAutoAwesome, MdMyLocation, MdSwapHoriz } from "react-icons/md";
 
 const EMPTY_ROUTES: NormalizedRoutes = {
   generatedAt: null,
@@ -188,6 +189,15 @@ function replaceCheckpointInCollection(
 }
 
 type EndpointOrigin = "gps" | "map" | "checkpoint" | null;
+type PlaceSuggestion = {
+  id: string;
+  label: string;
+  kind: "city" | "checkpoint";
+  lat: number;
+  lng: number;
+  zoom: number;
+  checkpoint: MapCheckpoint | null;
+};
 
 type SelectionT = (key: string, values?: Record<string, string | number>) => string;
 
@@ -297,6 +307,14 @@ export default function MashwarHome() {
   const [isHeatmapLoading, setIsHeatmapLoading] = useState(false);
   const [isHeatmapBuilding, setIsHeatmapBuilding] = useState(false);
   const [heatmapError, setHeatmapError] = useState<string | null>(null);
+  const [isPlaceSearchOpen, setIsPlaceSearchOpen] = useState(false);
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [mapFocusTarget, setMapFocusTarget] = useState<{
+    lat: number;
+    lng: number;
+    zoom?: number;
+    key: number;
+  } | null>(null);
   const [routeFrom, setRouteFrom] = useState<
     | { kind: "current-location" }
     | { kind: "checkpoint"; checkpointId: string }
@@ -316,6 +334,8 @@ export default function MashwarHome() {
   const eventSourceRef = useRef<EventSource | null>(null);
   const fromGeocodeNonce = useRef(0);
   const toGeocodeNonce = useRef(0);
+  const placeSearchContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapFocusNonce = useRef(0);
 
   const locale = useLocale();
   const tCommon = useTranslations("common");
@@ -380,6 +400,58 @@ export default function MashwarHome() {
   }, [corridorsRaw, checkpointsById]);
 
   const routePaths = useMemo(() => getRenderableRoutes(routes), [routes]);
+  const citySuggestions = useMemo<PlaceSuggestion[]>(() => {
+    return getCityCenters().map((city) => ({
+      id: `city:${city.key}`,
+      label: getCityDisplayLabel(city),
+      kind: "city",
+      lat: city.latitude,
+      lng: city.longitude,
+      zoom: 10.9,
+      checkpoint: null,
+    }));
+  }, []);
+  const checkpointSuggestions = useMemo<PlaceSuggestion[]>(() => {
+    return checkpoints
+      .filter((checkpoint) =>
+        hasValidCoordinates(checkpoint.latitude, checkpoint.longitude),
+      )
+      .map((checkpoint) => ({
+        id: `checkpoint:${checkpoint.id}`,
+        label: checkpoint.city
+          ? `${checkpoint.name} · ${checkpoint.city}`
+          : checkpoint.name,
+        kind: "checkpoint" as const,
+        lat: checkpoint.latitude as number,
+        lng: checkpoint.longitude as number,
+        zoom: 13.6,
+        checkpoint,
+      }));
+  }, [checkpoints]);
+  const placeSuggestions = useMemo(() => {
+    const normalizedQuery = normalizePlaceLabel(placeQuery);
+    const allSuggestions = [...citySuggestions, ...checkpointSuggestions];
+    if (!normalizedQuery) {
+      return allSuggestions.slice(0, 8);
+    }
+
+    return allSuggestions
+      .filter((suggestion) => {
+        const normalizedLabel = normalizePlaceLabel(suggestion.label);
+        if (normalizedLabel.includes(normalizedQuery)) {
+          return true;
+        }
+
+        if (suggestion.kind === "checkpoint" && suggestion.checkpoint?.city) {
+          return normalizePlaceLabel(suggestion.checkpoint.city).includes(
+            normalizedQuery,
+          );
+        }
+
+        return false;
+      })
+      .slice(0, 8);
+  }, [checkpointSuggestions, citySuggestions, placeQuery]);
   const routeForCompactSummary = useMemo(() => {
     if (routePaths.length === 0) {
       return null;
@@ -413,6 +485,27 @@ export default function MashwarHome() {
     }
     prevRoutePathCount.current = n;
   }, [routePaths.length]);
+
+  useEffect(() => {
+    if (!isPlaceSearchOpen) {
+      return;
+    }
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!placeSearchContainerRef.current) {
+        return;
+      }
+
+      if (!placeSearchContainerRef.current.contains(event.target as Node)) {
+        setIsPlaceSearchOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      window.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [isPlaceSearchOpen]);
 
   const handleTradeoffExplainerOpenChange = useCallback((dialogOpen: boolean) => {
     if (dialogOpen) {
@@ -840,6 +933,25 @@ export default function MashwarHome() {
     [],
   );
 
+  const handlePlaceSuggestionSelect = useCallback(
+    (suggestion: PlaceSuggestion) => {
+      setPlaceQuery(suggestion.label);
+      setIsPlaceSearchOpen(false);
+      mapFocusNonce.current += 1;
+      setMapFocusTarget({
+        lat: suggestion.lat,
+        lng: suggestion.lng,
+        zoom: suggestion.zoom,
+        key: mapFocusNonce.current,
+      });
+
+      if (suggestion.kind === "checkpoint" && suggestion.checkpoint) {
+        handleCheckpointSelect(suggestion.checkpoint);
+      }
+    },
+    [handleCheckpointSelect],
+  );
+
   const handleUseSelectedCheckpointAsOrigin = useCallback(() => {
     if (!selectedCheckpoint) {
       setRouteError("Select a checkpoint first to use it as the route origin.");
@@ -1064,6 +1176,7 @@ export default function MashwarHome() {
           routes={routes}
           departAt={routes.departAt}
           userLocation={userLocation}
+          focusTarget={mapFocusTarget}
           routeEndpoints={{
             from: routeFromPoint,
             to: routeToPoint,
@@ -1380,6 +1493,78 @@ export default function MashwarHome() {
 
       <div className="fixed right-4 top-5 z-[1100] flex flex-col items-end sm:right-5">
         <div className="flex w-[9.5rem] flex-col gap-2 sm:w-[10.5rem]">
+          <div ref={placeSearchContainerRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setIsPlaceSearchOpen((open) => !open)}
+              title={tFloat("placeSearchTitle")}
+              aria-label={tFloat("placeSearchAria")}
+              aria-expanded={isPlaceSearchOpen}
+              className={`group inline-flex w-full items-center gap-2 rounded-full border px-2 py-1.5 text-white shadow-[0_8px_22px_rgba(0,0,0,0.28)] transition duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#60a5fa]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--clr-white)] active:scale-[0.98] ${
+                locale === "ar" ? "justify-start" : "justify-end"
+              } ${
+                isPlaceSearchOpen
+                  ? "border-[#3b82f6]/85 bg-[#2563eb]"
+                  : "border-[#2563eb]/80 bg-[#1d4ed8] hover:border-[#60a5fa] hover:bg-[#1e40af]"
+              }`}
+              dir={locale === "ar" ? "rtl" : "ltr"}
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black/20 text-white ring-1 ring-white/20 transition duration-200 group-hover:bg-black/28">
+                <IoSearch className="h-4 w-4" aria-hidden />
+              </span>
+              <span
+                className={`mashwar-arabic min-w-0 shrink text-[10px] font-semibold leading-snug sm:text-[11px] ${
+                  locale === "ar" ? "text-right" : "text-left"
+                }`}
+              >
+                {tFloat("placeSearchCta")}
+              </span>
+            </button>
+
+            {isPlaceSearchOpen ? (
+              <div
+                className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-white/20 bg-[rgba(12,14,16,0.95)] p-2 shadow-[0_18px_40px_rgba(0,0,0,0.45)]"
+                dir={locale === "ar" ? "rtl" : "ltr"}
+              >
+                <input
+                  value={placeQuery}
+                  onChange={(event) => setPlaceQuery(event.target.value)}
+                  placeholder={tFloat("placeSearchPlaceholder")}
+                  className="mashwar-arabic w-full rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-[13px] text-white outline-none transition focus:border-[#60a5fa]/70 focus:ring-2 focus:ring-[#60a5fa]/45"
+                />
+                <div className="mt-2 max-h-56 overflow-y-auto">
+                  {placeSuggestions.length > 0 ? (
+                    placeSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion.id}
+                        type="button"
+                        onClick={() => handlePlaceSuggestionSelect(suggestion)}
+                        className="mashwar-arabic flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-start text-[12px] text-white/90 transition hover:bg-white/10"
+                      >
+                        <span className="truncate">{suggestion.label}</span>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            suggestion.kind === "city"
+                              ? "bg-[#1d4ed8]/35 text-[#bfdbfe]"
+                              : "bg-[var(--clr-green)]/25 text-[var(--clr-green-soft)]"
+                          }`}
+                        >
+                          {suggestion.kind === "city"
+                            ? tFloat("placeSearchCityTag")
+                            : tFloat("placeSearchCheckpointTag")}
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="mashwar-arabic px-3 py-2 text-[12px] text-white/60">
+                      {tFloat("placeSearchEmpty")}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
           <button
             type="button"
             onClick={handleSmartRouterCardClick}
@@ -1402,7 +1587,7 @@ export default function MashwarHome() {
                   : "bg-white/10 text-[#e8e8e4] ring-1 ring-white/16 group-hover:bg-white/14 group-hover:text-white"
               }`}
             >
-              <IoSearch className="h-4 w-4" aria-hidden />
+              <MdAutoAwesome className="h-4 w-4" aria-hidden />
             </span>
             <span
               className={`mashwar-arabic min-w-0 shrink text-[10px] font-semibold leading-snug sm:text-[11px] ${

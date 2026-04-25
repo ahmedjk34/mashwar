@@ -139,7 +139,7 @@ function formatRiskScore(
     return tCommon("notAvailable");
   }
 
-  return value.toFixed(1);
+  return tCommon("percent", { value: value.toFixed(1) });
 }
 
 function formatDurationLabel(
@@ -491,12 +491,9 @@ export default function MashwarNaturalLanguageRouteModal({
   const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState<NaturalLanguageExecution | null>(null);
   const [isParsing, setIsParsing] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"text" | "voice">("text");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const closeTimerRef = useRef<number | null>(null);
-  const voiceTimerRef = useRef<number | null>(null);
   const requestNonceRef = useRef(0);
 
   async function runPrompt(promptValue: string): Promise<void> {
@@ -541,7 +538,6 @@ export default function MashwarNaturalLanguageRouteModal({
       });
 
       setPrompt(t("placeholder"));
-      setMode("text");
       setResult(null);
       setError(null);
       setIsParsing(false);
@@ -558,7 +554,6 @@ export default function MashwarNaturalLanguageRouteModal({
     closeTimerRef.current = window.setTimeout(() => {
       setIsMounted(false);
       setIsParsing(false);
-      setIsListening(false);
       setError(null);
       setResult(null);
     }, 240);
@@ -594,9 +589,6 @@ export default function MashwarNaturalLanguageRouteModal({
       if (closeTimerRef.current) {
         window.clearTimeout(closeTimerRef.current);
       }
-      if (voiceTimerRef.current) {
-        window.clearTimeout(voiceTimerRef.current);
-      }
     };
   }, []);
 
@@ -608,27 +600,6 @@ export default function MashwarNaturalLanguageRouteModal({
     }
 
     void runPrompt(nextPrompt);
-  }
-
-  function handleUseVoice(): void {
-    if (isListening) {
-      return;
-    }
-
-    setMode("voice");
-    setIsListening(true);
-
-    if (voiceTimerRef.current) {
-      window.clearTimeout(voiceTimerRef.current);
-    }
-
-    voiceTimerRef.current = window.setTimeout(() => {
-      const sample = t("placeholder");
-      setPrompt(sample);
-      setIsListening(false);
-      setMode("text");
-      void runPrompt(sample);
-    }, 1200);
   }
 
   if (!isMounted) {
@@ -700,28 +671,6 @@ export default function MashwarNaturalLanguageRouteModal({
                 <p className="mashwar-mono text-[10px] uppercase tracking-[0.28em] text-[#6b7280]">
                   {t("prompt")}
                 </p>
-                <div className="inline-flex rounded-full border border-[#2d3139] bg-transparent p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setMode("text")}
-                    className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
-                      mode === "text"
-                        ? "bg-[#3b82f6] text-white"
-                        : "text-[#94a3b8] hover:text-[#f9fafb]"
-                    }`}
-                  >
-                    {t("modeText")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleUseVoice}
-                    disabled={isListening || isParsing}
-                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold text-[#94a3b8] transition hover:text-[#f9fafb] disabled:cursor-wait disabled:opacity-55"
-                  >
-                    <IconMic />
-                    {t("modeVoice")}
-                  </button>
-                </div>
               </div>
 
               <textarea
@@ -739,20 +688,10 @@ export default function MashwarNaturalLanguageRouteModal({
                 <button
                   type="button"
                   onClick={() => handleGenerateReport()}
-                  disabled={isParsing || isListening}
+                  disabled={isParsing}
                   className="h-11 rounded-[8px] bg-[#3b82f6] px-4 text-sm font-semibold text-white transition hover:bg-[#4f8df7] disabled:cursor-wait disabled:opacity-55"
                 >
                   {isParsing ? t("generating") : t("generate")}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleUseVoice}
-                  disabled={isListening || isParsing}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-[8px] border border-[#2d3139] bg-transparent px-4 text-sm text-[#e5e7eb] transition hover:bg-white/5 disabled:cursor-wait disabled:opacity-55"
-                >
-                  <IconMic />
-                  {t("modeVoice")}
                 </button>
               </div>
 
@@ -1356,37 +1295,5 @@ export default function MashwarNaturalLanguageRouteModal({
         </div>
       </section>
     </div>
-  );
-}
-
-function IconMic() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-      className="h-4 w-4"
-    >
-      <path
-        d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v6a3.5 3.5 0 0 0 3.5 3.5Z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M7.5 11.5a4.5 4.5 0 0 0 9 0"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path
-        d="M12 15.5V20"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path d="M9 20h6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
   );
 }

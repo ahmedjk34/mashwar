@@ -461,6 +461,7 @@ export interface RoutingTradeoffExplainerDto {
   english_text?: string | null;
   arabic_text?: string | null;
   full_text?: string | null;
+  structured_explanation?: Record<string, unknown> | null;
 }
 
 export interface RoutingV2ResponseDataDto {
@@ -674,5 +675,6 @@ export interface NormalizedRoutes {
     englishText: string | null;
     arabicText: string | null;
     fullText: string | null;
+    structuredExplanation: Record<string, unknown> | null;
   } | null;
 }

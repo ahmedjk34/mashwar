@@ -717,6 +717,55 @@ function normalizeTradeoffExplainer(
     return null;
   }
 
+  const sectionKeys = [
+    "global_decision_summary",
+    "delta_analysis",
+    "geographic_analysis",
+    "per_route_breakdown",
+    "checkpoint_intelligence",
+    "risk_vs_speed_interpretation",
+    "confidence_volatility_analysis",
+    "final_decision",
+  ] as const;
+
+  const valueRecord = value as Record<string, unknown>;
+  const collectedSections: Record<string, unknown> = {};
+  for (const sectionKey of sectionKeys) {
+    if (sectionKey in valueRecord) {
+      collectedSections[sectionKey] = valueRecord[sectionKey];
+    }
+  }
+
+  let structuredExplanation: Record<string, unknown> | null =
+    Object.keys(collectedSections).length > 0 ? collectedSections : null;
+
+  if (!structuredExplanation && value.structured_explanation && typeof value.structured_explanation === "object") {
+    structuredExplanation = value.structured_explanation;
+  }
+
+  if (!structuredExplanation) {
+    const fullText = toStringOrNull(value.full_text);
+    if (fullText && fullText.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(fullText) as unknown;
+        if (parsed && typeof parsed === "object") {
+          const parsedRecord = parsed as Record<string, unknown>;
+          const parsedSections: Record<string, unknown> = {};
+          for (const sectionKey of sectionKeys) {
+            if (sectionKey in parsedRecord) {
+              parsedSections[sectionKey] = parsedRecord[sectionKey];
+            }
+          }
+          if (Object.keys(parsedSections).length > 0) {
+            structuredExplanation = parsedSections;
+          }
+        }
+      } catch {
+        structuredExplanation = null;
+      }
+    }
+  }
+
   return {
     mode: toStringOrNull(value.mode),
     language: toStringOrNull(value.language),
@@ -756,6 +805,7 @@ function normalizeTradeoffExplainer(
     englishText: toStringOrNull(value.english_text),
     arabicText: toStringOrNull(value.arabic_text),
     fullText: toStringOrNull(value.full_text),
+    structuredExplanation,
   };
 }
 
@@ -872,6 +922,59 @@ export async function getRoute(
             )
           : null),
     }));
+    const routeIdOccurrences = new Map<string, number>();
+    const canonicalRouteIdByRank = new Map<number, string>();
+    const canonicalRoutesWithDelay = routesWithDelay.map((route, index) => {
+      const currentCount = routeIdOccurrences.get(route.routeId) ?? 0;
+      routeIdOccurrences.set(route.routeId, currentCount + 1);
+      const needsDisambiguation = currentCount > 0;
+      const canonicalRouteId = needsDisambiguation
+        ? `${route.routeId}__rank_${route.rank}__idx_${index + 1}`
+        : route.routeId;
+      canonicalRouteIdByRank.set(route.rank, canonicalRouteId);
+
+      return {
+        ...route,
+        routeId: canonicalRouteId,
+      };
+    });
+    const canonicalTradeoffExplainer = tradeoffExplainer
+      ? {
+          ...tradeoffExplainer,
+          winnerRouteId: tradeoffExplainer.winnerRank
+            ? (canonicalRouteIdByRank.get(tradeoffExplainer.winnerRank) ??
+              tradeoffExplainer.winnerRouteId)
+            : tradeoffExplainer.winnerRouteId,
+          fastestRouteId: tradeoffExplainer.routes.find((route) => route.isFastest)
+            ? canonicalRouteIdByRank.get(
+                tradeoffExplainer.routes.find((route) => route.isFastest)?.rank ?? -1,
+              ) ?? tradeoffExplainer.fastestRouteId
+            : tradeoffExplainer.fastestRouteId,
+          safestRouteId: tradeoffExplainer.routes.find((route) => route.isSafest)
+            ? canonicalRouteIdByRank.get(
+                tradeoffExplainer.routes.find((route) => route.isSafest)?.rank ?? -1,
+              ) ?? tradeoffExplainer.safestRouteId
+            : tradeoffExplainer.safestRouteId,
+          lowestDelayRouteId: tradeoffExplainer.routes.find(
+            (route) => route.isLowestDelay,
+          )
+            ? canonicalRouteIdByRank.get(
+                tradeoffExplainer.routes.find((route) => route.isLowestDelay)?.rank ?? -1,
+              ) ?? tradeoffExplainer.lowestDelayRouteId
+            : tradeoffExplainer.lowestDelayRouteId,
+          highestRiskRouteId: tradeoffExplainer.routes.find(
+            (route) => route.isHighestRisk,
+          )
+            ? canonicalRouteIdByRank.get(
+                tradeoffExplainer.routes.find((route) => route.isHighestRisk)?.rank ?? -1,
+              ) ?? tradeoffExplainer.highestRiskRouteId
+            : tradeoffExplainer.highestRiskRouteId,
+          routes: tradeoffExplainer.routes.map((route) => ({
+            ...route,
+            routeId: canonicalRouteIdByRank.get(route.rank) ?? route.routeId,
+          })),
+        }
+      : null;
 
     logRoutingDebug("routing normalized response", {
       endpoint,
@@ -898,8 +1001,8 @@ export async function getRoute(
         checkpointMatching: normalizeCheckpointMatching(
           data.checkpoint_matching,
         ),
-        routeCount: routesWithDelay.length,
-        routes: routesWithDelay.map((route) => ({
+        routeCount: canonicalRoutesWithDelay.length,
+        routes: canonicalRoutesWithDelay.map((route) => ({
           routeId: route.routeId,
           rank: route.rank,
           checkpointCount: route.checkpointCount,
@@ -966,11 +1069,11 @@ export async function getRoute(
         data.graphhopper_info && typeof data.graphhopper_info === "object"
           ? data.graphhopper_info
           : null,
-      routes: routesWithDelay,
-      selectedRouteId: routesWithDelay[0]?.routeId ?? null,
-      mainRoute: routesWithDelay[0] ?? null,
-      alternativeRoutes: routesWithDelay.slice(1, 3),
-      tradeoffExplainer,
+      routes: canonicalRoutesWithDelay,
+      selectedRouteId: canonicalRoutesWithDelay[0]?.routeId ?? null,
+      mainRoute: canonicalRoutesWithDelay[0] ?? null,
+      alternativeRoutes: canonicalRoutesWithDelay.slice(1, 3),
+      tradeoffExplainer: canonicalTradeoffExplainer,
     };
   } catch (error) {
     if (error instanceof Error) {

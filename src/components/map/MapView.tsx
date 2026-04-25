@@ -56,6 +56,12 @@ interface MapViewProps {
   routes: NormalizedRoutes;
   departAt?: string | null;
   userLocation?: UserLocation | null;
+  focusTarget?: {
+    lat: number;
+    lng: number;
+    zoom?: number;
+    key: number;
+  } | null;
   routeEndpoints?: {
     from: RoutePoint | null;
     to: RoutePoint | null;
@@ -348,6 +354,7 @@ export default function MapView({
   routes,
   departAt,
   userLocation,
+  focusTarget,
   routeEndpoints,
   heatmapEnabled = false,
   heatmapSegments = { type: "FeatureCollection", features: [] },
@@ -397,6 +404,11 @@ export default function MapView({
       minimumFractionDigits: 1,
       maximumFractionDigits: 1,
     }).format(value);
+  }
+
+  function formatRiskScorePercent(value: number): string {
+    const symbol = locale.startsWith("ar") ? "٪" : "%";
+    return `${formatLocaleFixed1(value)}${symbol}`;
   }
 
   const formatViabilityLabel = useCallback(
@@ -547,20 +559,20 @@ export default function MapView({
 
   function getRouteRiskScoreParen(route: RoutePath): string {
     if (route.riskScore !== null && Number.isFinite(route.riskScore)) {
-      return formatLocaleFixed1(route.riskScore);
+      return formatRiskScorePercent(route.riskScore);
     }
     if (Number.isFinite(route.routeScore)) {
-      return formatLocaleFixed1(route.routeScore);
+      return formatRiskScorePercent(route.routeScore);
     }
     return tCommon("notAvailable");
   }
 
   function getRouteRiskScoreDisplay(route: RoutePath): string {
     if (route.riskScore !== null && Number.isFinite(route.riskScore)) {
-      return formatLocaleFixed1(route.riskScore);
+      return formatRiskScorePercent(route.riskScore);
     }
     if (Number.isFinite(route.routeScore)) {
-      return formatLocaleFixed1(route.routeScore);
+      return formatRiskScorePercent(route.routeScore);
     }
     return tCommon("dash");
   }
@@ -1382,6 +1394,18 @@ export default function MapView({
       duration: 900,
     });
   }, [mapLoaded, userLocation]);
+
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded || !focusTarget) {
+      return;
+    }
+
+    mapRef.current.easeTo({
+      center: [focusTarget.lng, focusTarget.lat],
+      zoom: focusTarget.zoom ?? 14,
+      duration: 750,
+    });
+  }, [focusTarget, mapLoaded]);
 
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) {

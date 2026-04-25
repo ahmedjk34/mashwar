@@ -125,7 +125,12 @@ function parseOffsetMinutes(prompt: string): number {
     }
   }
 
-  if (normalized.includes("1 hour") || normalized.includes("an hour") || normalized.includes("ساعة")) {
+  if (normalized.includes("1 hour") || normalized.includes("an hour")) {
+    return 60;
+  }
+
+  // Arabic ~1h offset — must NOT match "الساعة" (o'clock), which is almost always clock time.
+  if (/(?<![ال])ساع[ةه]/.test(normalized)) {
     return 60;
   }
 
@@ -170,16 +175,102 @@ function resolvePromptTime(
   );
 }
 
-function resolveRouteEndpoints(
+async function resolveRouteEndpoints(
   prompt: string,
   parse: ParsedNaturalLanguageIntent,
   currentLocation: UserLocation | null,
-): {
+): Promise<{
   origin: RoutePoint;
   destination: RoutePoint;
   originLabel: string;
   destinationLabel: string;
-} | null {
+  originCityName: string | null;
+  destinationCityName: string | null;
+} | null> {
+  type ResolvedEndpoint = {
+    point: RoutePoint;
+    label: string;
+    cityName: string | null;
+  };
+
+  const toCheckpointEndpoint = (checkpoint: MapCheckpoint): ResolvedEndpoint | null => {
+    if (
+      checkpoint.latitude === null ||
+      checkpoint.longitude === null ||
+      !Number.isFinite(checkpoint.latitude) ||
+      !Number.isFinite(checkpoint.longitude)
+    ) {
+      return null;
+    }
+
+    return {
+      point: {
+        lat: checkpoint.latitude,
+        lng: checkpoint.longitude,
+      },
+      label: checkpoint.city
+        ? `${checkpoint.name} · ${checkpoint.city}`
+        : checkpoint.name,
+      cityName: checkpoint.city ?? null,
+    };
+  };
+
+  const toCityEndpoint = (city: NonNullable<ReturnType<typeof resolveCityPoint>>["city"]): ResolvedEndpoint => {
+    return {
+      point: {
+        lat: city.latitude,
+        lng: city.longitude,
+      },
+      label: getCityDisplayLabel(city),
+      cityName: city.key,
+    };
+  };
+
+  const resolveCheckpointByHint = (
+    checkpoints: MapCheckpoint[],
+    hint: string | null,
+    options?: { allowCityLikeHint?: boolean },
+  ): MapCheckpoint | null => {
+    if (!hint) {
+      return null;
+    }
+    const allowCityLikeHint = options?.allowCityLikeHint ?? false;
+    const cityLike = Boolean(resolveCityPoint(hint) || findCityMatchesInText(hint).length > 0);
+    if (cityLike && !allowCityLikeHint) {
+      return null;
+    }
+
+    const fauxParse: ParsedNaturalLanguageIntent = {
+      ...parse,
+      entities: {
+        ...parse.entities,
+        checkpointId: hint,
+        checkpointName: hint,
+        sourceHint: hint,
+      },
+    };
+    return findBestCheckpointMatch(checkpoints, hint, fauxParse);
+  };
+  const toCurrentLocationEndpoint = (
+    location: UserLocation,
+  ): ResolvedEndpoint => ({
+    point: { lat: location.lat, lng: location.lng },
+    label: `Current location · ${formatCurrentLocationLabel(location)}`,
+    cityName: null,
+  });
+
+  const makeResult = (
+    origin: ResolvedEndpoint,
+    destination: ResolvedEndpoint,
+  ) => ({
+    origin: origin.point,
+    destination: destination.point,
+    originLabel: origin.label,
+    destinationLabel: destination.label,
+    originCityName: origin.cityName,
+    destinationCityName: destination.cityName,
+  });
+
   const promptCities = findCityMatchesInText(prompt);
   const parsedOrigin = resolveCityPoint(parse.entities.originCity);
   const parsedDestination = resolveCityPoint(parse.entities.destinationCity);
@@ -202,6 +293,12 @@ function resolveRouteEndpoints(
     normalizedPrompt.includes(" starting ") ||
     normalizedPrompt.includes(" من ") ||
     normalizedPrompt.startsWith("من ");
+  const originSectionMatch = normalizedPrompt.match(
+    /(?:^|\s)(?:from|من)\s+(.+?)(?=\s+(?:to|toward|towards|الى|إلى)\s+|$)/i,
+  );
+  const destinationSectionMatch = normalizedPrompt.match(
+    /(?:^|\s)(?:to|toward|towards|الى|إلى)\s+(.+)$/i,
+  );
 
   const originCity =
     parsedOrigin?.city ?? (promptCities.length > 1 ? promptCities[0]?.city : null);
@@ -209,82 +306,107 @@ function resolveRouteEndpoints(
     parsedDestination?.city ??
     (promptCities.length > 1 ? promptCities[1]?.city : null) ??
     null;
+  const checkpoints = await getCachedCheckpoints();
+  const originCheckpoint = resolveCheckpointByHint(
+    checkpoints,
+    originSectionMatch?.[1]?.trim() ??
+      (hasOriginCue ? parse.entities.sourceHint : null),
+    { allowCityLikeHint: false },
+  );
+  const destinationCheckpoint = resolveCheckpointByHint(
+    checkpoints,
+    destinationSectionMatch?.[1]?.trim() ??
+      parse.entities.checkpointName ??
+      parse.entities.checkpointId,
+    { allowCityLikeHint: false },
+  );
+  const promptLevelCheckpoint = resolveCheckpointByHint(checkpoints, prompt, {
+    allowCityLikeHint: true,
+  });
+  const hasSingleCity = promptCities.length === 1;
+  const originCheckpointEndpoint = originCheckpoint
+    ? toCheckpointEndpoint(originCheckpoint)
+    : null;
+  const destinationCheckpointEndpoint = destinationCheckpoint
+    ? toCheckpointEndpoint(destinationCheckpoint)
+    : null;
+  const originCityEndpoint = originCity ? toCityEndpoint(originCity) : null;
+  const destinationCityEndpoint = destinationCity ? toCityEndpoint(destinationCity) : null;
 
-  if (originCity && destinationCity) {
-    return {
-      origin: {
-        lat: originCity.latitude,
-        lng: originCity.longitude,
-      },
-      destination: {
-        lat: destinationCity.latitude,
-        lng: destinationCity.longitude,
-      },
-      originLabel: getCityDisplayLabel(originCity),
-      destinationLabel: getCityDisplayLabel(destinationCity),
-    };
+  // Endpoint priority: checkpoint coordinates first; if missing, fall back to city.
+  if (originCheckpointEndpoint && destinationCheckpointEndpoint) {
+    return makeResult(originCheckpointEndpoint, destinationCheckpointEndpoint);
+  }
+
+  if (originCheckpointEndpoint && destinationCityEndpoint) {
+    return makeResult(originCheckpointEndpoint, destinationCityEndpoint);
+  }
+
+  if (originCityEndpoint && destinationCheckpointEndpoint) {
+    return makeResult(originCityEndpoint, destinationCheckpointEndpoint);
+  }
+
+  if (originCityEndpoint && destinationCityEndpoint) {
+    return makeResult(originCityEndpoint, destinationCityEndpoint);
   }
 
   if (promptCities.length === 1 && currentLocation) {
     const onlyCity = promptCities[0].city;
+    const cityEndpoint = toCityEndpoint(onlyCity);
+    const currentEndpoint = toCurrentLocationEndpoint(currentLocation);
 
     if (hasOriginCue && !hasDestinationCue) {
-      return {
-        origin: {
-          lat: onlyCity.latitude,
-          lng: onlyCity.longitude,
-        },
-        destination: {
-          lat: currentLocation.lat,
-          lng: currentLocation.lng,
-        },
-        originLabel: getCityDisplayLabel(onlyCity),
-        destinationLabel: `Current location · ${formatCurrentLocationLabel(currentLocation)}`,
-      };
+      return makeResult(cityEndpoint, currentEndpoint);
     }
 
-    return {
-      origin: {
-        lat: currentLocation.lat,
-        lng: currentLocation.lng,
-      },
-      destination: {
-        lat: onlyCity.latitude,
-        lng: onlyCity.longitude,
-      },
-      originLabel: `Current location · ${formatCurrentLocationLabel(currentLocation)}`,
-      destinationLabel: getCityDisplayLabel(onlyCity),
-    };
+    if (promptLevelCheckpoint) {
+      const checkpointEndpoint = toCheckpointEndpoint(promptLevelCheckpoint);
+      if (checkpointEndpoint) {
+        return hasDestinationCue
+          ? makeResult(checkpointEndpoint, cityEndpoint)
+          : makeResult(cityEndpoint, checkpointEndpoint);
+      }
+    }
+
+    return makeResult(currentEndpoint, cityEndpoint);
   }
 
   if (!originCity && destinationCity && currentLocation) {
-    return {
-      origin: {
-        lat: currentLocation.lat,
-        lng: currentLocation.lng,
-      },
-      destination: {
-        lat: destinationCity.latitude,
-        lng: destinationCity.longitude,
-      },
-      originLabel: `Current location · ${formatCurrentLocationLabel(currentLocation)}`,
-      destinationLabel: getCityDisplayLabel(destinationCity),
-    };
+    return makeResult(
+      toCurrentLocationEndpoint(currentLocation),
+      toCityEndpoint(destinationCity),
+    );
   }
 
   if (originCity && !destinationCity && currentLocation) {
-    return {
-      origin: {
-        lat: originCity.latitude,
-        lng: originCity.longitude,
-      },
-      destination: {
-        lat: currentLocation.lat,
-        lng: currentLocation.lng,
-      },
-      originLabel: getCityDisplayLabel(originCity),
-      destinationLabel: `Current location · ${formatCurrentLocationLabel(currentLocation)}`,
-    };
+    return makeResult(
+      toCityEndpoint(originCity),
+      toCurrentLocationEndpoint(currentLocation),
+    );
+  }
+
+  if (hasSingleCity && promptLevelCheckpoint) {
+    const onlyCity = promptCities[0]?.city;
+    const checkpointEndpoint = toCheckpointEndpoint(promptLevelCheckpoint);
+    if (onlyCity && checkpointEndpoint) {
+      return hasDestinationCue
+        ? makeResult(checkpointEndpoint, toCityEndpoint(onlyCity))
+        : makeResult(toCityEndpoint(onlyCity), checkpointEndpoint);
+    }
+  }
+
+  if (currentLocation && destinationCheckpoint) {
+    const destinationEndpoint = toCheckpointEndpoint(destinationCheckpoint);
+    if (destinationEndpoint) {
+      return makeResult(toCurrentLocationEndpoint(currentLocation), destinationEndpoint);
+    }
+  }
+
+  if (currentLocation && originCheckpoint) {
+    const originEndpoint = toCheckpointEndpoint(originCheckpoint);
+    if (originEndpoint) {
+      return makeResult(originEndpoint, toCurrentLocationEndpoint(currentLocation));
+    }
   }
 
   return null;
@@ -486,7 +608,7 @@ async function resolveRouteExecution(
   parse: ParsedNaturalLanguageIntent,
   currentLocation: UserLocation | null,
 ): Promise<NaturalLanguageRouteExecution | NaturalLanguageExecution> {
-  const endpoints = resolveRouteEndpoints(prompt, parse, currentLocation);
+  const endpoints = await resolveRouteEndpoints(prompt, parse, currentLocation);
   if (!endpoints) {
     return {
       kind: "clarification",
@@ -516,8 +638,11 @@ async function resolveRouteExecution(
           origin: endpoints.origin,
           destination: endpoints.destination,
           depart_at: simulationDepartAt,
-          origin_city: parse.entities.originCity ?? undefined,
-          destination_city: parse.entities.destinationCity ?? undefined,
+          origin_city: endpoints.originCityName ?? parse.entities.originCity ?? undefined,
+          destination_city:
+            endpoints.destinationCityName ??
+            parse.entities.destinationCity ??
+            undefined,
           profile: "car",
         }).then((routes) => ({
           scenarioRole: getSimulationScenarioRole(index),
@@ -581,8 +706,11 @@ async function resolveRouteExecution(
     origin: endpoints.origin,
     destination: endpoints.destination,
     depart_at: departAt ?? undefined,
-    origin_city: parse.entities.originCity ?? undefined,
-    destination_city: parse.entities.destinationCity ?? undefined,
+    origin_city: endpoints.originCityName ?? parse.entities.originCity ?? undefined,
+    destination_city:
+      endpoints.destinationCityName ??
+      parse.entities.destinationCity ??
+      undefined,
     profile: "car",
   });
 
